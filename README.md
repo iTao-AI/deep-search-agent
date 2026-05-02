@@ -1,6 +1,6 @@
 # Deep Search Agent
 
-An autonomous planning agent built on DeepAgents SDK (LangChain ecosystem). Users ask open-ended questions in natural language, the agent autonomously plans, delegates to specialized sub-agents (network search, database query, knowledge base retrieval), synthesizes results, and generates reports in Markdown/PDF format.
+An autonomous planning agent built on LangGraph. Users ask open-ended questions in natural language; the main agent autonomously plans, delegates to specialized sub-agents (network search, database query, knowledge base retrieval), synthesizes results, and generates reports in Markdown/PDF format.
 
 ## Architecture
 
@@ -26,19 +26,18 @@ User Question
   Search      Data       Knowledge
 ```
 
-## Features
-
-- **Autonomous Task Planning**: Agent decides what to search, how many times, and when to stop
-- **Hierarchical Sub-Agent Delegation**: Three specialized sub-agents for different information sources
-- **File System Context Management**: Automatic workspace isolation per session, prevents context overflow
-- **Real-Time Reasoning Stream**: WebSocket-based live progress tracking of agent's thinking process
-- **Report Generation**: Auto-generates Markdown/PDF reports from gathered information
+**Data flow:**
+1. User submits a question via REST API or WebSocket
+2. Main Agent (LangGraph) analyzes the question and creates a task plan
+3. Sub-agents are dispatched via the `task` tool with isolated contexts
+4. Results are synthesized and written as Markdown/PDF reports
+5. Progress is streamed to the frontend via WebSocket in real time
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Agent Framework | DeepAgents SDK (LangChain ecosystem) |
+| Agent Framework | DeepAgents SDK (LangGraph ecosystem) |
 | LLM | Qwen-Max (DashScope, OpenAI-compatible API) |
 | Network Search | Tavily Search API |
 | Database | MySQL (mysql.connector) |
@@ -46,6 +45,89 @@ User Question
 | Web API | FastAPI + Uvicorn |
 | Real-Time Comm | WebSocket |
 | Frontend | Vue 3 + Vite |
+
+## Features
+
+- **Autonomous Task Planning**: Agent decides what to search, how many times, and when to stop
+- **Hierarchical Sub-Agent Delegation**: Three specialized sub-agents for different information sources
+- **File System Context Management**: Automatic workspace isolation per session via ContextVar, prevents concurrent request interference
+- **Real-Time Reasoning Stream**: WebSocket-based live progress tracking of agent's thinking process
+- **Report Generation**: Auto-generates Markdown/PDF reports from gathered information
+- **File Upload & Analysis**: Users can upload documents (PDF, Word, Excel) for the agent to analyze
+
+## Quick Start
+
+### Prerequisites
+
+- Python >= 3.11
+- Node.js >= 18
+- Tavily API key (https://app.tavily.com/)
+- DashScope API key (https://bailian.console.aliyun.com/)
+
+### 1. Install Backend Dependencies
+
+```bash
+cd deep-search-agent
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Configure Environment
+
+```bash
+cp .env.example .env
+vim .env
+```
+
+Fill in your API keys.
+
+### 3. Run
+
+```bash
+# Start the backend
+python api/server.py
+
+# In another terminal, start the frontend
+cd frontend
+npm install && npm run dev
+```
+
+The API provides:
+- **POST /api/task** — Start an agent task
+- **POST /api/upload** — Upload files for analysis
+- **GET /api/files** — List generated files
+- **GET /api/download** — Download generated files
+- **WebSocket /ws/{thread_id}** — Real-time reasoning stream
+
+## API Reference
+
+### POST /api/task
+
+Start an agent task. The agent runs asynchronously; progress is pushed via WebSocket.
+
+```json
+{
+  "query": "调研 AI 行业趋势并生成 PDF 报告",
+  "thread_id": "optional-uuid"
+}
+```
+
+Response:
+```json
+{
+  "status": "started",
+  "thread_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### WebSocket /ws/{thread_id}
+
+Connect with the `thread_id` returned from `/api/task`. Events include:
+- `session_created` — Workspace directory ready
+- `tool_start` — A tool is being executed
+- `assistant_call` — A sub-agent is being dispatched
+- `task_result` — Final answer available
+- `error` — Execution failed
 
 ## Project Structure
 
@@ -72,110 +154,11 @@ deep-search-agent/
 │   └── context.py           # ContextVar session isolation
 ├── utils/
 │   ├── path_utils.py        # Path resolution & virtual path cleaning
-│   └── word_converter.py    # Markdown to PDF via Word COM (Windows)
+│   └── word_converter.py    # Markdown to PDF via Word COM
 ├── prompt/
 │   └── prompts.yml          # Agent system prompts (YAML config)
-├── frontend/                # Vue 3 frontend (WebSocket real-time display)
-├── ragflow-deploy/          # RAGFlow Docker deployment guide + DB schema
-├── docs/                    # Architecture, API docs, interview notes
-├── requirements.txt
-└── README.md
+└── frontend/                # Vue 3 frontend (WebSocket real-time display)
 ```
-
-## Quick Start
-
-### Prerequisites
-
-- Python >= 3.11
-- Node.js >= 18
-- Tavily API key (https://app.tavily.com/)
-- DashScope API key (https://bailian.console.aliyun.com/)
-- MySQL database (optional, for database query agent)
-- RAGFlow instance (optional, for knowledge base agent)
-
-### 1. Install Backend Dependencies
-
-```bash
-cd deep-search-agent
-pip install -r requirements.txt
-```
-
-### 2. Install Frontend Dependencies
-
-```bash
-cd frontend
-npm install
-```
-
-### 3. Configure
-
-```bash
-cp .env.example .env
-vim .env
-```
-
-Fill in your API keys.
-
-### 4. Deploy RAGFlow (Optional)
-
-See `ragflow-deploy/01_RAGFlow安装可视化.md` for step-by-step Docker deployment guide.
-
-### 5. Initialize Database (Optional)
-
-```bash
-mysql -u root -p < ragflow-deploy/database-schema.sql
-```
-
-### 6. Run
-
-```bash
-# Start the backend server
-python api/server.py
-
-# In another terminal, start the frontend
-cd frontend
-npm run dev
-```
-
-The API provides:
-- **POST /api/task** — Start an agent task
-- **POST /api/upload** — Upload files for analysis
-- **GET /api/files** — List generated files
-- **GET /api/download** — Download generated files
-- **WebSocket /ws/{thread_id}** — Real-time reasoning stream
-
-## Documentation
-
-- **Architecture**: `docs/architecture.md` — Full project architecture and workflow
-- **API Reference**: `docs/api-docs.md` — API endpoint documentation
-- **Interview Notes**: `docs/interview-notes.txt` — How to present this project
-- **RAGFlow Deploy**: `ragflow-deploy/` — Docker deployment guide and assets
-- **DB Schema**: `ragflow-deploy/database-schema.sql` — MySQL initialization script
-
-## How It Works
-
-### 1. Task Reception
-
-User submits a natural language question. The system creates a unique `thread_id` and an isolated workspace directory.
-
-### 2. Autonomous Planning
-
-The Main Agent analyzes the question, creates a todo-list, and decides which sub-agents to invoke. It can:
-- Search the internet (Tavily) for public knowledge
-- Query MySQL for business data
-- Query RAGFlow for enterprise internal knowledge
-
-### 3. Sub-Agent Delegation
-
-Each sub-agent has its own system prompt and tools. The Main Agent delegates via the `task` tool, which creates an isolated context for the sub-agent — keeping the Main Agent's context clean.
-
-### 4. Report Generation
-
-After gathering information, the Main Agent generates a Markdown report and optionally converts it to PDF.
-
-### 5. Real-Time Streaming
-
-Every step (tool call, sub-agent delegation, final answer) is streamed to the frontend via WebSocket, so users can watch the agent's thinking process in real time.
 
 ## License
 
