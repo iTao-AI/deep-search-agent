@@ -1,3 +1,5 @@
+[English](./README.md) | [中文](./README_zh.md)
+
 # Deep Search Agent
 
 An autonomous planning agent built on LangGraph. Users ask open-ended questions in natural language; the main agent autonomously plans, delegates to specialized sub-agents (network search, database query, knowledge base retrieval), synthesizes results, and generates reports in Markdown/PDF format.

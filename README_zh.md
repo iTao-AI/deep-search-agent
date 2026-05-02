@@ -1,3 +1,5 @@
+[English](./README.md) | [中文](./README_zh.md)
+
 # Deep Search Agent
 
 一个基于 LangGraph 的自主规划智能体系统。用户用自然语言提问，主 Agent 自主规划并委派 3 个子 Agent（网络搜索、数据库查询、知识库检索）搜集信息，最终生成 Markdown/PDF 报告。
