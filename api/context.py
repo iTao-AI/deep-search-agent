@@ -5,8 +5,8 @@ from typing import Optional
 # Using a global variable or threading.local would cause data races
 # when multiple requests run concurrently in the same event loop.
 
-_session_dir_ctx: ContextVar[Optional[str]] = ContextVar(“session_dir”, default=None)
-_thread_id_ctx: ContextVar[Optional[str]] = ContextVar(“thread_id”, default=None)
+_session_dir_ctx: ContextVar[Optional[str]] = ContextVar("session_dir", default=None)
+_thread_id_ctx: ContextVar[Optional[str]] = ContextVar("thread_id", default=None)
 
 
 def set_session_context(path: str):
