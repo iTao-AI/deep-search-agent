@@ -3,8 +3,8 @@ import uuid
 import asyncio
 import uvicorn
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
@@ -17,6 +17,7 @@ if str(project_root) not in sys.path:
 
 from agent.main_agent import run_deep_agent
 from api.monitor import monitor, manager
+from api.upload_security import sanitize_filename, validate_filename
 
 app = FastAPI(title="DeepAgents API")
 
@@ -56,10 +57,21 @@ async def upload_files(files: List[UploadFile] = File(...), thread_id: str = For
 
     saved_files = []
     for file in files:
-        file_path = target_dir / file.filename
+        # 文件名校验
+        original_name = file.filename or ""
+        error = validate_filename(original_name)
+        if error:
+            return JSONResponse(status_code=400, content={"error": error})
+
+        # 文件名净化
+        safe_name = sanitize_filename(original_name)
+        if not safe_name or safe_name in (".", ".."):
+            return JSONResponse(status_code=400, content={"error": "无效的文件名"})
+
+        file_path = target_dir / safe_name
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        saved_files.append(file.filename)
+        saved_files.append(safe_name)
 
     return {"status": "uploaded", "files": saved_files}
 
