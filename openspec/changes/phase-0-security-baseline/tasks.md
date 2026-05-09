@@ -57,15 +57,20 @@
 ## Phase C: CORS 配置修复（~10 分钟）
 
 ### Task C.1: 限制 CORS 源
-- **文件**: `api/server.py`
+- **文件**: `api/server.py` → `api/cors_config.py`
 - **内容**:
-  - 添加 `FRONTEND_ORIGIN` 环境变量读取
-  - 将 `allow_origins` 从 `["*"]` 改为 `[os.getenv("FRONTEND_ORIGIN")]`
-- **验收**: 非前端源的预检请求被拒绝
+  - 提取 CORS 配置到独立模块
+  - 将 `allow_origins` 从 `["*"]` 改为 `get_allowed_origins()`
+  - 通过环境变量 `FRONTEND_ORIGIN` 配置前端地址
+- **验收**: 默认只允许 `http://localhost:5173`
+- **状态**: [x] ✓ 2026-05-09
 
 ### Task C.2: 更新 .env.example
 - **文件**: `.env.example`
 - **内容**: 添加 `FRONTEND_ORIGIN=http://localhost:5173`
+- **状态**: [x] ✓ 2026-05-09
+
+**Quality Gate:** PASSED
 
 ## Phase D: 异步任务错误处理（~10 分钟）
 
