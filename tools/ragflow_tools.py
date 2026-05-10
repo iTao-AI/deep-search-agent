@@ -61,6 +61,7 @@ def create_ask_delete(
         return "错误：RAGFlow 环境变量未配置（需设置 RAGFLOW_API_URL 与 RAGFLOW_API_KEY）"
 
     session = None
+    chat = None
     try:
         rag = RAGFlow(api_key=api_key, base_url=base_url)
         chats = rag.list_chats(name=assistant_name)
@@ -82,7 +83,7 @@ def create_ask_delete(
     except Exception as e:
         return f"提问过程失败：{str(e)}"
     finally:
-        if session and hasattr(session, "id"):
+        if session and hasattr(session, "id") and chat is not None:
             try:
                 chat.delete_sessions(ids=[session.id])
             except Exception as e:

@@ -16,7 +16,6 @@ load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent
-project_root = current_dir.parent
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
