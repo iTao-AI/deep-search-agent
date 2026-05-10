@@ -5,9 +5,6 @@ from langchain_core.tools import tool
 from api.monitor import monitor
 from tools.db_connection import MySQLConnectionManager
 
-from dotenv import load_dotenv
-load_dotenv()
-
 
 def get_db_config():
     """获取数据库配置文件"""

@@ -1,6 +1,8 @@
 """Phase E: 回归测试 - 验证模块加载正常"""
 import pytest
 import os
+import sys
+import subprocess
 from unittest.mock import patch, MagicMock
 
 
@@ -34,18 +36,28 @@ class TestModuleLoading:
         assert hasattr(task_tracker, 'get_active_task')
         assert hasattr(task_tracker, 'clear_active_tasks')
 
-    def test_server_app_creates(self):
-        """FastAPI app 应该能正常创建（需要 mock 依赖）"""
-        with patch.dict(os.environ, {
-            "TAVILY_API_KEY": "test",
-            "OPENAI_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            "OPENAI_API_KEY": "test",
-            "LLM_QWEN_MAX": "qwen-max",
-        }):
-            with patch('agent.main_agent.create_deep_agent', return_value=MagicMock()):
-                from api import server as server_module
-                assert server_module.app is not None
-                assert server_module.app.title == "DeepAgents API"
+    def test_server_app_creates_isolated(self):
+        """FastAPI app 应该能正常创建 — 用 subprocess 隔离避免模块污染"""
+        result = subprocess.run(
+            [sys.executable, "-c", """
+import os
+os.environ["TAVILY_API_KEY"] = "test"
+os.environ["OPENAI_BASE_URL"] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+os.environ["OPENAI_API_KEY"] = "test"
+os.environ["LLM_QWEN_MAX"] = "qwen-max"
+from unittest.mock import patch, MagicMock
+with patch('agent.main_agent.create_deep_agent', return_value=MagicMock()):
+    with patch('tavily.TavilyClient', return_value=MagicMock()):
+        with patch('ragflow_sdk.RAGFlow', return_value=MagicMock()):
+            from api import server
+            assert server.app is not None
+            assert server.app.title == "DeepAgents API"
+            print("OK")
+"""],
+            capture_output=True, text=True, cwd=os.getcwd(),
+        )
+        assert result.returncode == 0, f"server app failed to load:\n{result.stderr}"
+        assert "OK" in result.stdout
 
     def test_security_functions_integrated(self):
         """安全函数应该能在 server 中使用"""

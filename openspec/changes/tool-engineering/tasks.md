@@ -19,35 +19,35 @@
 
 ## Phase B: Tavily 工具重构
 
-- [ ] B.1 重构 `tools/tavily_tools.py`：改为返回错误字符串、增加重试（3次）和超时（10秒）
-- [ ] B.2 编写 `tools/tavily_tools.py` 单元测试（重试逻辑、超时、错误返回格式）
+- [x] B.1 重构 `tools/tavily_tools.py`：改为返回错误字符串、增加重试（3次）和超时（10秒） ✓ 2026-05-10
+- [x] B.2 编写 `tools/tavily_tools.py` 单元测试（重试逻辑、超时、错误返回格式） ✓ 2026-05-10
 
 **Quality Gate:**
-- [ ] pytest 单元测试通过
-- [ ] lint 检查通过
+- [x] pytest 单元测试通过
+- [x] lint 检查通过
 
 ---
 
 ## Phase C: RAGFlow 工具重构
 
-- [ ] C.1 重构 `tools/ragflow_tools.py`：RAGFlow client 封装，修复 session 泄漏
-- [ ] C.2 编写 `tools/ragflow_tools.py` 单元测试（session 清理、错误返回格式）
+- [x] C.1 重构 `tools/ragflow_tools.py`：RAGFlow client 封装，修复 session 泄漏 ✓ 2026-05-10
+- [x] C.2 编写 `tools/ragflow_tools.py` 单元测试（session 清理、错误返回格式） ✓ 2026-05-10
 
 **Quality Gate:**
-- [ ] pytest 单元测试通过
-- [ ] lint 检查通过
+- [x] pytest 单元测试通过
+- [x] lint 检查通过
 
 ---
 
 ## Phase D: env 加载集中化
 
-- [ ] D.1 在 `api/server.py` 启动时统一 `load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")`，锁定路径避免 CWD 问题
-- [ ] D.2 从所有工具文件中移除 `load_dotenv()` 调用
-- [ ] D.3 验证工具函数通过 `os.environ` 正常读取配置
+- [x] D.1 在 `api/server.py` 启动时统一 `load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")`，锁定路径避免 CWD 问题 ✓ 2026-05-10
+- [x] D.2 从所有工具文件中移除 `load_dotenv()` 调用 ✓ 2026-05-10
+- [x] D.3 验证工具函数通过 `os.environ` 正常读取配置 ✓ 2026-05-10
 
 **Quality Gate:**
-- [ ] 现有测试全部通过
-- [ ] 工具文件不再有 `load_dotenv` 调用
+- [x] 现有测试全部通过
+- [x] 工具文件不再有 `load_dotenv` 调用
 
 ---
 
