@@ -21,10 +21,16 @@ from api.context import set_session_context, reset_session_context, set_thread_c
 
 from langchain_core.messages import AIMessage
 
+def _resolve_subagent(agent):
+    """Agent 类实例或 dict 的适配转换"""
+    if hasattr(agent, "to_dict"):
+        return agent.to_dict()
+    return agent
+
 subagents_list = [
-    knowledge_base_agent,
-    database_query_agent,
-    network_search_agent
+    _resolve_subagent(knowledge_base_agent),
+    _resolve_subagent(database_query_agent),
+    _resolve_subagent(network_search_agent)
 ]
 
 main_agent = create_deep_agent(

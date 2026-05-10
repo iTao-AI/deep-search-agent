@@ -20,13 +20,14 @@
 
 ## Phase B: 子 Agent 重构（NetworkSearchAgent）
 
-- [ ] B.1 创建 `agent/sub_agents/network_search_agent.py` — NetworkSearchAgent 类，继承 BaseAgent
-- [ ] B.2 验证 `to_dict()` 输出与原始 dict 一致（字段、值、tools 列表）
-- [ ] B.3 编写 `tests/unit/test_network_search_agent.py` — 测试配置正确性和 to_dict 兼容性
+- [x] B.1 创建 `agent/sub_agents/network_search_agent.py` — NetworkSearchAgent 类，继承 BaseAgent ✓ 2026-05-10
+- [x] B.2 验证 `to_dict()` 输出与原始 dict 一致（字段、值、tools 列表） ✓ 2026-05-10
+- [x] B.3 编写 `tests/unit/test_network_search_agent.py` — 测试配置正确性和 to_dict 兼容性 ✓ 2026-05-10
+- [x] B.4 更新 `agent/main_agent.py` — 添加 `_resolve_subagent` 适配层 ✓ 2026-05-10
 
 **Quality Gate:**
-- [ ] 所有测试通过
-- [ ] NetworkSearchAgent 功能与原始 dict 一致
+- [x] 所有测试通过 (3/3) ✓
+- [x] NetworkSearchAgent 功能与原始 dict 一致 ✓
 
 ---
 
