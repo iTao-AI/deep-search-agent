@@ -6,15 +6,15 @@
 
 ## Phase A: 基础层（AgentContext + AgentConfig + BaseAgent）
 
-- [ ] A.1 创建 `agent/sub_agents/base.py`，定义 `AgentContext` dataclass（thread_id、workspace_dir、memory、metadata）
-- [ ] A.2 定义 `AgentConfig` TypedDict/dataclass（name、description、system_prompt、tools）
-- [ ] A.3 定义 `BaseAgent` 基类，提供 `to_dict()` 方法输出 deepagents 兼容格式
-- [ ] A.4 编写 `tests/unit/test_agent_context.py` — 测试 AgentContext 创建、状态读写、metadata 追踪
-- [ ] A.5 编写 `tests/unit/test_agent_config.py` — 测试 AgentConfig 创建和 to_dict 输出
+- [x] A.1 创建 `agent/sub_agents/base.py`，定义 `AgentContext` dataclass（thread_id、workspace_dir、memory、metadata） ✓ 2026-05-10
+- [x] A.2 定义 `AgentConfig` TypedDict/dataclass（name、description、system_prompt、tools） ✓ 2026-05-10
+- [x] A.3 定义 `BaseAgent` 基类，提供 `to_dict()` 方法输出 deepagents 兼容格式 ✓ 2026-05-10
+- [x] A.4 编写 `tests/unit/test_agent_context.py` — 测试 AgentContext 创建、状态读写、metadata 追踪 ✓ 2026-05-10
+- [x] A.5 编写 `tests/unit/test_agent_config.py` — 合并到 test_agent_context.py ✓ 2026-05-10
 
 **Quality Gate:**
-- [ ] pytest tests/unit/test_agent_context.py tests/unit/test_agent_config.py 通过
-- [ ] 类型检查通过（mypy 或 pyright）
+- [x] pytest tests/unit/test_agent_context.py 通过 (5/5) ✓
+- [x] 类型检查通过 ✓
 
 ---
 
