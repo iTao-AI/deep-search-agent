@@ -1,17 +1,23 @@
 """Phase C: DatabaseQueryAgent 重构测试"""
+import pytest
 import sys
 from unittest.mock import MagicMock
 
-# Mock mysql_tools before importing the agent
-_mock_mysql = MagicMock()
-sys.modules.setdefault("tools.mysql_tools", _mock_mysql)
+
+@pytest.fixture(autouse=True)
+def _mock_mysql_tools():
+    """Mock mysql_tools before importing the agent, clean up after"""
+    _mock_mysql = MagicMock()
+    sys.modules["tools.mysql_tools"] = _mock_mysql
+    yield
+    # Restore original module if it existed
+    sys.modules.pop("tools.mysql_tools", None)
 
 
 class TestDatabaseQueryAgent:
     """测试 DatabaseQueryAgent 配置正确性和 to_dict 兼容性"""
 
     def test_create_agent(self):
-        """DatabaseQueryAgent 应该可以正常创建"""
         from agent.sub_agents.database_query_agent import DatabaseQueryAgent
         from agent.sub_agents.base import BaseAgent
         from agent.prompts import sub_agents_config
@@ -21,7 +27,6 @@ class TestDatabaseQueryAgent:
         assert agent.config.name == sub_agents_config["db"].get("name", "")
 
     def test_to_dict_has_required_fields(self):
-        """to_dict() 输出应该包含 name, description, system_prompt, tools"""
         from agent.sub_agents.database_query_agent import DatabaseQueryAgent
 
         agent = DatabaseQueryAgent()
@@ -34,7 +39,6 @@ class TestDatabaseQueryAgent:
         assert isinstance(result["tools"], list)
 
     def test_to_dict_matches_original_format(self):
-        """to_dict() 输出应该与原始 dict 格式一致"""
         from agent.prompts import sub_agents_config
         from agent.sub_agents.database_query_agent import DatabaseQueryAgent
 

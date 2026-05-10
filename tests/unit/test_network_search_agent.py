@@ -1,19 +1,22 @@
 """Phase B: NetworkSearchAgent 重构测试"""
 import pytest
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 
-# Mock tavily_tools before importing the agent
-_mock_tavily = MagicMock()
-sys.modules.setdefault("tools.tavily_tools", _mock_tavily)
+@pytest.fixture(autouse=True)
+def _mock_tavily_tools():
+    """Mock tavily_tools before importing the agent, clean up after"""
+    _mock_tavily = MagicMock()
+    sys.modules["tools.tavily_tools"] = _mock_tavily
+    yield
+    sys.modules.pop("tools.tavily_tools", None)
 
 
 class TestNetworkSearchAgent:
     """测试 NetworkSearchAgent 配置正确性和 to_dict 兼容性"""
 
     def test_create_agent(self):
-        """NetworkSearchAgent 应该可以正常创建"""
         from agent.sub_agents.network_search_agent import NetworkSearchAgent
         from agent.sub_agents.base import BaseAgent
 
@@ -22,7 +25,6 @@ class TestNetworkSearchAgent:
         assert agent.config.name == "网络搜索助手"
 
     def test_to_dict_has_required_fields(self):
-        """to_dict() 输出应该包含 name, description, system_prompt, tools"""
         from agent.sub_agents.network_search_agent import NetworkSearchAgent
 
         agent = NetworkSearchAgent()
@@ -36,7 +38,6 @@ class TestNetworkSearchAgent:
         assert len(result["tools"]) > 0
 
     def test_to_dict_matches_original_format(self):
-        """to_dict() 输出应该与原始 dict 格式一致"""
         from agent.prompts import sub_agents_config
         from agent.sub_agents.network_search_agent import NetworkSearchAgent
 

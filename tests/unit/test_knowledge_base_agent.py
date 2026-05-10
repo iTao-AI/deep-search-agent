@@ -1,9 +1,16 @@
 """Phase D: KnowledgeBaseAgent 重构测试"""
+import pytest
 import sys
 from unittest.mock import MagicMock
 
-_mock_ragflow = MagicMock()
-sys.modules.setdefault("tools.ragflow_tools", _mock_ragflow)
+
+@pytest.fixture(autouse=True)
+def _mock_ragflow_tools():
+    """Mock ragflow_tools before importing the agent, clean up after"""
+    _mock_ragflow = MagicMock()
+    sys.modules["tools.ragflow_tools"] = _mock_ragflow
+    yield
+    sys.modules.pop("tools.ragflow_tools", None)
 
 
 class TestKnowledgeBaseAgent:
