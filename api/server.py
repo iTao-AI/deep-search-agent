@@ -3,12 +3,16 @@ import uuid
 import asyncio
 import uvicorn
 from pathlib import Path
+from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import shutil
+
+# Load env once at startup — tools read from os.environ
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent

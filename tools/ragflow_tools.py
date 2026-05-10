@@ -1,6 +1,5 @@
 import os
 import logging
-from dotenv import load_dotenv
 from langchain_core.tools import tool
 from ragflow_sdk import RAGFlow
 
@@ -11,19 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def _load_ragflow_env() -> Tuple[Optional[str], Optional[str]]:
-    """
-    加载RAGFlow的环境变量（API密钥和服务地址）
-    优先加载当前脚本目录下的.env文件，若不存在则加载系统环境变量
-
-    Returns:
-        Tuple[Optional[str], Optional[str]]:
-            - 第一个值：RAGFlow API密钥（RAGFLOW_API_KEY）
-            - 第二个值：RAGFlow服务地址（RAGFLOW_API_URL）
-            - 若未配置则返回None
-    """
-    load_dotenv()
-
-    # 从环境变量中读取配置
+    """加载 RAGFlow 环境变量（不再调用 load_dotenv）"""
     api_key = os.getenv("RAGFLOW_API_KEY")
     base_url = os.getenv("RAGFLOW_API_URL")
     return api_key, base_url
@@ -60,8 +47,8 @@ def get_assistant_list(
 
 @tool
 def create_ask_delete(
-        assistant_name:str,
-        question:str
+        assistant_name: str,
+        question: str
 ) -> str:
     """Ask a RAGFlow assistant a question (temporary session, deleted after use)."""
     monitor.report_tool(
@@ -70,6 +57,11 @@ def create_ask_delete(
     )
     api_key, base_url = _load_ragflow_env()
 
+    if not api_key or not base_url:
+        return "错误：RAGFlow 环境变量未配置（需设置 RAGFLOW_API_URL 与 RAGFLOW_API_KEY）"
+
+    session = None
+    chat = None
     try:
         rag = RAGFlow(api_key=api_key, base_url=base_url)
         chats = rag.list_chats(name=assistant_name)
@@ -87,8 +79,12 @@ def create_ask_delete(
             "RAGFlow助手回答记录",
             {"助手名称": assistant_name, "问题": question, "答案": full_answer}
         )
-        if session and hasattr(session, "id"):
-            chat.delete_sessions(ids=[session.id])
         return full_answer
     except Exception as e:
         return f"提问过程失败：{str(e)}"
+    finally:
+        if session and hasattr(session, "id") and chat is not None:
+            try:
+                chat.delete_sessions(ids=[session.id])
+            except Exception as e:
+                logger.warning(f"Failed to delete RAGFlow session: {e}")
