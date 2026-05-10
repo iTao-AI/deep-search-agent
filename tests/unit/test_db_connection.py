@@ -7,6 +7,10 @@ from unittest.mock import MagicMock, patch
 @pytest.fixture(autouse=True)
 def _mock_mysql_connector():
     """Mock mysql.connector before importing db_connection, clean up after"""
+    # Clear cached modules FIRST so lazy imports use our mocks
+    for mod in ["mysql.connector", "mysql", "tools.db_connection", "tools.mysql_tools"]:
+        sys.modules.pop(mod, None)
+
     mock_module = MagicMock()
     mock_pool = MagicMock()
     mock_module.pooling.MySQLConnectionPool = mock_pool
@@ -15,8 +19,8 @@ def _mock_mysql_connector():
     sys.modules["mysql.connector"] = mock_module
     sys.modules["mysql"] = MagicMock()
     yield
-    sys.modules.pop("mysql.connector", None)
-    sys.modules.pop("mysql", None)
+    for mod in ["mysql.connector", "mysql", "tools.db_connection", "tools.mysql_tools"]:
+        sys.modules.pop(mod, None)
 
 
 class TestMySQLConnectionManager:
