@@ -58,6 +58,27 @@
 **Status:** Implementation Complete
 **Completed:** 2026-05-11
 
+---
+
+## Archive Information
+
+**Archived:** 2026-05-11
+**Duration:** 1 day
+**Outcome:** Successfully implemented
+
+### Files Modified
+- `agent/shared_context.py` — SharedContext 类（发布/查询/去重/容量控制/清理）
+- `tools/shared_context_tools.py` — publish_fact/query_facts 工具
+- `agent/main_agent.py` — shared_context 初始化 + session 清理
+- `agent/sub_agents/network_search_agent.py` — 添加事实发布/查询工具
+- `agent/sub_agents/database_query_agent.py` — 添加事实发布/查询工具
+- `tests/unit/test_shared_context.py` — 18 单元测试
+- `tests/unit/test_shared_context_integration.py` — 2 集成测试
+- `tests/unit/test_sub_agent_shared_context.py` — 5 子 Agent 测试
+
+### Specs Updated
+- `openspec/specs/shared-context.md` — 新建，覆盖 7 个 requirements
+
 ## Risks & Mitigations
 
 | Risk | Probability | Impact | Mitigation |
