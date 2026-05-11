@@ -100,13 +100,39 @@ Vue 3 + TypeScript + Vite. Entry: `frontend/src/main.ts` → `frontend/src/App.v
 
 ### Apply 阶段规则
 
-1. 每完成一个 tasks.md 中的 Phase，停下来。
-2. 总结当前阶段的代码变更（改了什么文件、为什么这么改）。
-3. 等待用户 review 并确认后，再继续下一 Phase。
-4. 严禁一次性实现所有任务。
+每个 task 完成后：
+1. 自检（运行测试、验证 spec 对齐）
+2. 有问题直接修复直到通过
+3. 标记 `[x]`，commit
+4. 直接进入下一个 task
+
+严禁一次性实现所有任务，必须逐个 task 按 TDD 循环执行。
+
+### Task 完成自检
+
+每个 task 标记 `[x]` 前必须：
+1. 运行该 task 相关的所有测试，确认全部通过
+2. 验证实现与 delta spec 对齐
+3. 运行已有测试，确认无回归
+
+### 配置同步
+
+当变更引入新约定时（如新的错误处理模式、新的架构模式），需同步更新：
+- `openspec/config.yaml` — OpenSpec 工作流新约束
+- 本项目 `CLAUDE.md` — 项目级执行规则
+
+具体判断标准见 `~/.claude/skills/sdd-vibecoding/SKILL.md` 中的「配置维护指南」。
+
+### 归档流程
+
+PR 合并到 main 后，在 main 分支上执行 `/openspec-archive`。归档 commit 必须直接进入 main，禁止提前在 feature 分支上归档。
 
 ### Phase 4 强制门控（CRITICAL）
 
 - **进入 Phase 4 后，必须先调用 `Skill("openspec-apply")`，再调用 `Skill("test-driven-development")`**
 - **严禁跳过 skill 直接写代码或测试**
 - 如果 skill 无法调用，必须向用户报告并等待手动触发指令
+
+### PR Body 格式
+
+遵循 /sdd-vibecoding 中 Phase 7 的 PR Body 格式：Summary 按「问题 → 方案 → 价值」三段式编写。
