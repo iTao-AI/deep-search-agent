@@ -1,3 +1,4 @@
+from agent.shared_context import SharedContext
 from agent.sub_agents.knowledge_base_agent import knowledge_base_agent
 from agent.sub_agents.database_query_agent import database_query_agent
 from agent.sub_agents.network_search_agent import network_search_agent
@@ -32,6 +33,9 @@ subagents_list = [
     _resolve_subagent(database_query_agent),
     _resolve_subagent(network_search_agent)
 ]
+
+# 跨 Agent 事实共享上下文（每模块级单例，按 thread_id 隔离）
+shared_context = SharedContext()
 
 main_agent = create_deep_agent(
     model=model,
@@ -134,6 +138,7 @@ async def run_deep_agent(task_query: str, thread_id: str = None):
     finally:
         if 'session_token' in locals():
             reset_session_context(session_token, thread_token)
+        shared_context.clear_facts(thread_id)
 
 
 # ====================== 本地测试入口 ======================
