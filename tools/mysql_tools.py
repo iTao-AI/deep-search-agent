@@ -103,21 +103,27 @@ def list_sql_tables() -> str:
 
     error = _ensure_pool()
     if error:
+        monitor.report_end("数据库获取表名工具！", error=error)
         return error
 
     conn = None
     try:
         conn = _connection_manager.get_connection()
         if isinstance(conn, str):
+            monitor.report_end("数据库获取表名工具！", error=conn)
             return conn
         with conn.cursor() as cursor:
             cursor.execute("show tables;")
             tables = cursor.fetchall()
             if not tables:
+                monitor.report_end("数据库获取表名工具！", "数据库没有查询到任何表！")
                 return "数据库没有查询到任何表！"
             table_names = [table[0] for table in tables]
-            return f"可用数据表:{','.join(table_names)}"
+            result = f"可用数据表:{','.join(table_names)}"
+            monitor.report_end("数据库获取表名工具！", result)
+            return result
     except Exception as e:
+        monitor.report_end("数据库获取表名工具！", error=str(e))
         return f"查询可用表名失败:{e}"
     finally:
         if conn is not None and not isinstance(conn, str):
@@ -131,28 +137,35 @@ def get_table_data(table_name: str) -> str:
 
     error = _validate_table_name(table_name)
     if error:
+        monitor.report_end("数据库内容浏览工具", error=error)
         return error
 
     error = _ensure_pool()
     if error:
+        monitor.report_end("数据库内容浏览工具", error=error)
         return error
 
     conn = None
     try:
         conn = _connection_manager.get_connection()
         if isinstance(conn, str):
+            monitor.report_end("数据库内容浏览工具", error=conn)
             return conn
         with conn.cursor() as cursor:
             safe_table_name = table_name.replace("`", "").replace(";", "").split()[0]
             cursor.execute(f"select * from {safe_table_name} limit 100")
             if not cursor.description:
+                monitor.report_end("数据库内容浏览工具", f"数据表 {table_name}为空或者表名无效！")
                 return f"数据表 {table_name}为空或者表名无效！"
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
             result = [",".join(map(str, row)) for row in rows]
             header = ",".join(columns)
-            return f"{header}\n" + "\n".join(result)
+            output = f"{header}\n" + "\n".join(result)
+            monitor.report_end("数据库内容浏览工具", output)
+            return output
     except Exception as e:
+        monitor.report_end("数据库内容浏览工具", error=f"读取数据表：{table_name} 失败!{str(e)}")
         return f"读取数据表：{table_name} 失败!{str(e)}"
     finally:
         if conn is not None and not isinstance(conn, str):
@@ -166,29 +179,39 @@ def execute_sql_query(query: str) -> str:
 
     error = _validate_sql_type(query)
     if error:
+        monitor.report_end("数据库查询工具", error=error)
         return error
 
     error = _ensure_pool()
     if error:
+        monitor.report_end("数据库查询工具", error=error)
         return error
 
     conn = None
     try:
         conn = _connection_manager.get_connection()
         if isinstance(conn, str):
+            monitor.report_end("数据库查询工具", error=conn)
             return conn
         with conn.cursor() as cursor:
             cursor.execute(query)
             if not cursor.description:
-                return f"SQL 执行成功，受影响行数：{cursor.rowcount}"
+                result = f"SQL 执行成功，受影响行数：{cursor.rowcount}"
+                monitor.report_end("数据库查询工具", result)
+                return result
             columns = [desc[0] for desc in cursor.description]
             rows = cursor.fetchall()
             if not rows:
-                return f"查询执行成功，无数据返回。涉及列名：{', '.join(columns)}"
+                result = f"查询执行成功，无数据返回。涉及列名：{', '.join(columns)}"
+                monitor.report_end("数据库查询工具", result)
+                return result
             rows_t = [",".join(map(str, row)) for row in rows]
             header_str = ",".join(columns)
-            return f"{header_str}\n" + "\n".join(rows_t)
+            output = f"{header_str}\n" + "\n".join(rows_t)
+            monitor.report_end("数据库查询工具", output)
+            return output
     except Exception as e:
+        monitor.report_end("数据库查询工具", error=f"执行自定义语句{query}失败，错误!{str(e)}")
         return f"执行自定义语句{query}失败，错误!{str(e)}"
     finally:
         if conn is not None and not isinstance(conn, str):

@@ -38,6 +38,9 @@ def generate_markdown(
             parent_dir.mkdir(parents=True, exist_ok=True)
 
         file_path.write_text(content, encoding='utf-8')
-        return f"Markdown文件 '{file_path}' 已成功生成并保存。"
+        result = f"Markdown文件 '{file_path}' 已成功生成并保存。"
+        monitor.report_end("Markdown文档生成工具", result)
+        return result
     except Exception as e:
+        monitor.report_end("Markdown文档生成工具", error=str(e))
         return f"生成Markdown文件失败: {str(e)}"

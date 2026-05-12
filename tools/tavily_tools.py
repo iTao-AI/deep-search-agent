@@ -49,6 +49,8 @@ def internet_search(
             query, max_results, topic, include_raw_content,
             max_retries=3, timeout=10,
         )
+        monitor.report_end("网络搜索工具", results)
         return results
     except Exception as e:
+        monitor.report_end("网络搜索工具", error=str(e))
         return f"Error: internet search failed after retries — {e}"
