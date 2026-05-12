@@ -25,6 +25,7 @@ def get_assistant_list(
     api_key, base_url = _load_ragflow_env()
 
     if not api_key or not base_url:
+        monitor.report_end("RAGFlow助手列表查询", error="RAGFlow 环境变量未配置")
         return "错误：RAGFlow 环境变量未配置（需设置 RAGFLOW_API_URL 与 RAGFLOW_API_KEY）"
 
     result = ""
@@ -40,8 +41,10 @@ def get_assistant_list(
             kb_names_str = "、".join(kb_names) if kb_names else "无"
             result += f"助手名称：{assistant.name}； 功能介绍：{assistant.description}； 关联知识库：{kb_names_str}\n"
 
+        monitor.report_end("RAGFlow助手列表查询", result.rstrip("\n") if result else "未找到任何聊天助手")
         return result.rstrip("\n") if result else "未找到任何聊天助手"
     except Exception as e:
+        monitor.report_end("RAGFlow助手列表查询", error=str(e))
         return f"获取助手列表失败：{str(e)}"
 
 
@@ -58,6 +61,7 @@ def create_ask_delete(
     api_key, base_url = _load_ragflow_env()
 
     if not api_key or not base_url:
+        monitor.report_end("RAGFlow助手提问工具", error="RAGFlow 环境变量未配置")
         return "错误：RAGFlow 环境变量未配置（需设置 RAGFLOW_API_URL 与 RAGFLOW_API_KEY）"
 
     session = None
@@ -66,6 +70,7 @@ def create_ask_delete(
         rag = RAGFlow(api_key=api_key, base_url=base_url)
         chats = rag.list_chats(name=assistant_name)
         if not chats:
+            monitor.report_end("RAGFlow助手提问工具", error=f"未找到助手: {assistant_name}")
             return f"没有找到name:{assistant_name}的聊天助手！"
         chat = chats[0]
         session = chat.create_session(name="temp_session")
@@ -79,8 +84,10 @@ def create_ask_delete(
             "RAGFlow助手回答记录",
             {"助手名称": assistant_name, "问题": question, "答案": full_answer}
         )
+        monitor.report_end("RAGFlow助手提问工具", full_answer)
         return full_answer
     except Exception as e:
+        monitor.report_end("RAGFlow助手提问工具", error=str(e))
         return f"提问过程失败：{str(e)}"
     finally:
         if session and hasattr(session, "id") and chat is not None:

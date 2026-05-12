@@ -26,6 +26,7 @@ def convert_md_to_pdf(
         md_abs_path = Path(resolve_path(str(md_path), session_dir))
 
         if not md_abs_path.exists():
+            monitor.report_end("Markdown转PDF工具", error=f"文件不存在 {md_abs_path}")
             return f"错误：文件不存在 {md_abs_path}"
 
         if pdf_filename:
@@ -34,8 +35,11 @@ def convert_md_to_pdf(
         else:
             pdf_abs_path = md_abs_path.with_suffix('.pdf')
 
-        return convert_md_to_pdf_via_word(md_abs_path, pdf_abs_path)
+        result = convert_md_to_pdf_via_word(md_abs_path, pdf_abs_path)
+        monitor.report_end("Markdown转PDF工具", result)
+        return result
 
     except Exception as e:
         logging.error(f"转换失败: {e}", exc_info=True)
+        monitor.report_end("Markdown转PDF工具", error=str(e))
         return f"转换失败: {str(e)}"

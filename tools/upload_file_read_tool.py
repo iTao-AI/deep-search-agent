@@ -35,38 +35,48 @@ def read_file_content(
     file_path = Path(resolve_path(filename, session_dir))
 
     if not file_path.exists():
+        monitor.report_end("文件内容读取工具", error=f"文件 '{filename}' 不存在")
         return f"错误：文件 '{filename}' 不存在 (解析路径: {file_path})。"
 
     ext = file_path.suffix.lower()
 
     try:
         if ext in ['.md', '.txt']:
-            return file_path.read_text(encoding='utf-8')
+            result = file_path.read_text(encoding='utf-8')
+            monitor.report_end("文件内容读取工具", result)
+            return result
 
         elif ext == '.docx':
             if docx is None:
+                monitor.report_end("文件内容读取工具", error="未安装 python-docx")
                 return "错误：未安装 'python-docx' 库，无法读取 Word 文件。"
             doc = docx.Document(str(file_path))
             full_text = [para.text for para in doc.paragraphs]
-            return '\n'.join(full_text)
+            result = '\n'.join(full_text)
+            monitor.report_end("文件内容读取工具", result)
+            return result
 
         elif ext == '.pdf':
             if pypdf is None:
+                monitor.report_end("文件内容读取工具", error="未安装 pypdf")
                 return "错误：未安装 'pypdf' 库，无法读取 PDF 文件。"
             reader = pypdf.PdfReader(str(file_path))
             text = "\n".join([page.extract_text() or "" for page in reader.pages])
+            monitor.report_end("文件内容读取工具", text)
             return text
 
         elif ext in ['.xlsx', '.xls']:
             if pd is None:
+                monitor.report_end("文件内容读取工具", error="未安装 pandas")
                 return "错误：未安装 'pandas' 库，无法读取 Excel 文件。"
 
             try:
                 df = pd.read_excel(str(file_path))
             except Exception as e:
+                monitor.report_end("文件内容读取工具", error=str(e))
                 return f"读取 Excel 失败: {str(e)}"
 
-            result = [
+            result = "\n".join([
                 f"文件: {filename}",
                 f"行数: {len(df)}, 列数: {len(df.columns)}",
                 f"列名: {', '.join(df.columns.astype(str))}",
@@ -74,14 +84,19 @@ def read_file_content(
                 df.head().to_string(index=False),
                 "\n[统计描述]:",
                 df.describe().to_string()
-            ]
-            return "\n".join(result)
+            ])
+            monitor.report_end("文件内容读取工具", result)
+            return result
 
         else:
             try:
-                return file_path.read_text(encoding='utf-8')
+                result = file_path.read_text(encoding='utf-8')
+                monitor.report_end("文件内容读取工具", result)
+                return result
             except UnicodeDecodeError:
+                monitor.report_end("文件内容读取工具", error=f"不支持的格式 '{ext}'")
                 return f"错误：不支持的文件格式 '{ext}'，且无法作为文本读取。"
 
     except Exception as e:
+        monitor.report_end("文件内容读取工具", error=str(e))
         return f"读取文件出错: {str(e)}"

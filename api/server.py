@@ -20,6 +20,7 @@ if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 from agent.main_agent import run_deep_agent
+from agent.telemetry import collector, TelemetryRecord
 from api.monitor import monitor, manager
 from api.upload_security import sanitize_filename, validate_filename
 from api.cors_config import get_allowed_origins
@@ -133,6 +134,24 @@ async def list_files(path: str):
 
     files.sort(key=lambda x: x.get("mtime", 0), reverse=True)
     return {"files": files}
+
+
+@app.get("/api/telemetry/{thread_id}")
+async def get_telemetry(thread_id: str):
+    """Get telemetry records for a thread."""
+    records = collector.get_by_thread(thread_id)
+    return [
+        {
+            "thread_id": r.thread_id,
+            "agent_name": r.agent_name,
+            "tool_name": r.tool_name,
+            "duration_ms": r.duration_ms,
+            "status": r.status,
+            "error": r.error,
+            "timestamp": r.timestamp.isoformat(),
+        }
+        for r in records
+    ]
 
 
 @app.websocket("/ws/{thread_id}")
