@@ -72,4 +72,4 @@
 - [x] All phases complete
 - [x] All quality gates passed
 - [x] Documentation synced
-- [ ] Ready for `/openspec-archive-change`
+- [x] Ready for `/openspec-archive-change`
