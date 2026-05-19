@@ -143,5 +143,5 @@ async def run_deep_agent(task_query: str, thread_id: str = None):
 
 # ====================== 本地测试入口 ======================
 if __name__ == "__main__":
-    task = "查询数据库中的药品信息，生成一个pdf文件！"
+    task = "查询数据库中的信息，生成一个pdf文件！"
     asyncio.run(run_deep_agent(task))
