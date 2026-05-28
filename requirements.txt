@@ -27,6 +27,10 @@ pandas>=2.0.0               # Excel 数据处理
 openpyxl>=3.1.0             # Excel 读取引擎 (Pandas 依赖)
 aiofiles>=23.0.0            # 异步文件操作
 
+# --- PDF 生成 (跨平台, 替代 pywin32) ---
+markdown>=3.4.0             # Markdown → HTML 转换
+weasyprint>=60.0            # HTML → PDF 跨平台引擎
+
 # --- 外部工具集成 (Integrations) ---
 tavily-python>=0.3.0        # 联网搜索 API
 ragflow-sdk>=0.1.0          # 知识库 SDK
