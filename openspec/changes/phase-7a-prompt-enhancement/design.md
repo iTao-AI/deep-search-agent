@@ -72,10 +72,7 @@
 - 在现有 prompt 基础上，新增"【工作流程：四阶段门控】"章节
 - 保留现有所有功能描述（子 Agent 介绍、工具说明、路径指令等）
 - 新增内容追加到现有 prompt 末尾，不删除任何现有内容
-
-**新增 `prompt/report_outline.yml`（可选）或内嵌到 prompts.yml：**
-- 选择内嵌到 `prompts.yml` 的 `main_agent` 下作为 `report_outline` 字段
-- 保持单文件配置，减少加载复杂度
+- 报告大纲模板直接内嵌到阶段 4 的 system_prompt 文本中，不新增独立字段或额外 YAML 文件
 
 ## Risks / Trade-offs
 
