@@ -19,8 +19,12 @@ RUN for i in $(seq 1 3); do \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project source
-COPY . .
+# Copy project source — selective COPY to preserve pip install layer cache
+COPY agent/ agent/
+COPY api/ api/
+COPY prompt/ prompt/
+COPY tools/ tools/
+COPY utils/ utils/
 
 EXPOSE 8000
 
