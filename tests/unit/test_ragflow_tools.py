@@ -106,18 +106,27 @@ class TestRAGFlowTimeoutAndRetry:
     """测试超时和重试行为"""
 
     def test_timeout_returns_structured_error(self):
-        """超时后应返回结构化的超时错误字符串"""
-        mock_rag = MagicMock()
+        """超时后应返回结构化的超时错误字符串（不重试，直接返回）"""
+        from tools import ragflow_tools
 
-        def _hang(*args, **kwargs):
-            raise TimeoutError("connection timed out")
+        def _block():
+            time.sleep(10)
+            return "should not reach here"
 
-        mock_rag.list_chats.side_effect = _hang
+        # Patch TIMEOUTS so the test runs fast
+        old_val = ragflow_tools.TIMEOUTS["ragflow"]
+        ragflow_tools.TIMEOUTS["ragflow"] = 0.2
+        try:
+            start = time.monotonic()
+            result = ragflow_tools._retry_with_timeout(_block, service_name="test")
+            elapsed = time.monotonic() - start
+        finally:
+            ragflow_tools.TIMEOUTS["ragflow"] = old_val
 
-        with patch("tools.ragflow_tools.RAGFlow", return_value=mock_rag):
-            from tools.ragflow_tools import get_assistant_list
-            result = get_assistant_list.invoke({"dummy_arg": ""})
-            assert "timed out after retries" in result
+        # Should return immediately, not wait 10s
+        assert elapsed < 2.0, f"Waited {elapsed:.1f}s"
+        assert isinstance(result, str)
+        assert "timed out" in result.lower()
 
     def test_connection_error_returns_structured_error(self):
         """连接错误重试后应返回结构化错误字符串"""
@@ -131,25 +140,27 @@ class TestRAGFlowTimeoutAndRetry:
 
     def test_ask_timeout_returns_structured_error(self):
         """提问超时后应返回结构化的超时错误字符串"""
-        mock_rag = MagicMock()
-        mock_chat = MagicMock()
-        mock_chat.name = "TestBot"
-        mock_session = MagicMock()
-        mock_session.id = "sess_1"
-        mock_chat.create_session.return_value = mock_session
-        mock_session.ask.side_effect = TimeoutError("stream timed out")
-        mock_rag.list_chats.return_value = [mock_chat]
+        from tools import ragflow_tools
 
-        with patch("tools.ragflow_tools.RAGFlow", return_value=mock_rag):
-            from tools.ragflow_tools import create_ask_delete
-            result = create_ask_delete.invoke({
-                "assistant_name": "TestBot",
-                "question": "Hello",
-            })
-            assert "timed out after retries" in result
+        def _block():
+            time.sleep(10)
+            return "should not reach here"
+
+        old_val = ragflow_tools.TIMEOUTS["ragflow"]
+        ragflow_tools.TIMEOUTS["ragflow"] = 0.2
+        try:
+            start = time.monotonic()
+            result = ragflow_tools._retry_with_timeout(_block, service_name="ragflow-ask")
+            elapsed = time.monotonic() - start
+        finally:
+            ragflow_tools.TIMEOUTS["ragflow"] = old_val
+
+        # Should return immediately, not wait 10s
+        assert elapsed < 2.0, f"Waited {elapsed:.1f}s"
+        assert isinstance(result, str)
+        assert "timed out" in result.lower()
 
     def test_ask_connection_error_returns_structured_error(self):
-        """提问连接错误后应返回结构化错误字符串"""
         mock_rag = MagicMock()
         mock_chat = MagicMock()
         mock_chat.name = "TestBot"

@@ -42,11 +42,9 @@ def _run_with_timeout(func, timeout: float) -> any:
         future = executor.submit(func)
         return future.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
-        executor.shutdown(wait=False)  # Don't wait for blocked thread
         raise TimeoutError(f"operation timed out after {timeout}s")
-    except Exception:
+    finally:
         executor.shutdown(wait=False)
-        raise
 
 
 def _retry_with_timeout(func, max_retries: int = 3, service_name: str = "ragflow") -> any:
@@ -55,6 +53,10 @@ def _retry_with_timeout(func, max_retries: int = 3, service_name: str = "ragflow
     Unlike asyncio.wait_for + asyncio.run(), this uses a dedicated
     ThreadPoolExecutor with future.result(timeout=...) and shutdown(wait=False)
     which returns immediately on timeout without waiting for the executor thread.
+
+    Important: on TimeoutError we do NOT retry. Retrying after timeout would
+    leave behind blocked threads from each attempt (up to max_retries leaked
+    threads). Timeout is treated as a terminal failure.
     """
     timeout = TIMEOUTS["ragflow"]
     backoff_factor = 2
@@ -65,8 +67,8 @@ def _retry_with_timeout(func, max_retries: int = 3, service_name: str = "ragflow
         try:
             return _run_with_timeout(func, timeout)
         except TimeoutError:
-            last_error = TimeoutError(f"{service_name} timed out after {timeout}s")
-            logger.warning(f"[{service_name}] Attempt {attempt + 1}/{max_retries} timed out")
+            # Don't retry after timeout — each retry would leave a leaked thread.
+            return f"Error: {service_name} timed out after {timeout}s"
         except Exception as e:
             last_error = e
             if attempt < max_retries - 1:
