@@ -84,8 +84,8 @@ def internet_search(
         monitor.report_end("网络搜索工具", results)
         return results
     except (TimeoutError, asyncio.TimeoutError) as e:
-        monitor.report_end("网络搜索工具", error=f"Timeout: {e}")
-        return f"Error: internet search timed out — {e}"
+        monitor.report_end("网络搜索工具", error="internet search timed out after 3 retries")
+        return "Error: internet search timed out after 3 retries"
     except Exception as e:
         monitor.report_end("网络搜索工具", error=str(e))
         return f"Error: internet search failed after retries — {e}"
