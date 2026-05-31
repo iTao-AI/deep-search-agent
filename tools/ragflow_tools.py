@@ -1,20 +1,27 @@
 """RAGFlow knowledge base tools with timeout and retry resilience.
 
 All RAGFlow HTTP calls are wrapped with:
-- 60-second timeout via asyncio.wait_for
-- 3 retries with exponential backoff via retry_async
+- 60-second timeout via concurrent.futures (real thread-level timeout)
+- 3 retries with exponential backoff
 - Structured error strings for graceful degradation
+
+Note: RAGFlow SDK uses synchronous `requests` without timeout support.
+We use a dedicated ThreadPoolExecutor with explicit timeout to ensure
+the calling thread is never blocked indefinitely, even if the SDK hangs.
+Unlike asyncio.run() which waits for executor shutdown,
+concurrent.futures with timeout returns immediately on timeout.
 """
-import asyncio
+import concurrent.futures
 import logging
 import os
+import time
 from typing import Optional, Tuple
 
 from langchain_core.tools import tool
 from ragflow_sdk import RAGFlow
 
 from api.monitor import monitor
-from tools.retry_utils import TIMEOUTS, retry_async
+from tools.retry_utils import TIMEOUTS
 
 logger = logging.getLogger(__name__)
 
@@ -24,97 +31,36 @@ def _load_ragflow_env() -> Tuple[Optional[str], Optional[str]]:
     return os.getenv("RAGFLOW_API_KEY"), os.getenv("RAGFLOW_API_URL")
 
 
-# ---------------------------------------------------------------------------
-# Async helpers — each wraps sync RAGFlow SDK calls with timeout + retry
-# ---------------------------------------------------------------------------
+def _retry_with_timeout(func, max_retries: int = 3, service_name: str = "ragflow") -> any:
+    """Sync retry with real thread-level timeout via concurrent.futures.
 
-async def _ragflow_list_chats(api_key: str, base_url: str):
-    """List all RAGFlow chat assistants with timeout and retry."""
-    timeout = TIMEOUTS["ragflow"]
-
-    async def _do_list_with_timeout():
-        loop = asyncio.get_running_loop()
-        rag = RAGFlow(api_key=api_key, base_url=base_url)
-        return await asyncio.wait_for(
-            loop.run_in_executor(None, rag.list_chats),
-            timeout=timeout,
-        )
-
-    return await retry_async(_do_list_with_timeout, max_retries=3, service_name="ragflow-list")
-
-
-async def _ragflow_find_chat(assistant_name: str, api_key: str, base_url: str):
-    """Find a specific RAGFlow chat by name with timeout and retry."""
-    timeout = TIMEOUTS["ragflow"]
-
-    async def _do_find_with_timeout():
-        loop = asyncio.get_running_loop()
-        rag = RAGFlow(api_key=api_key, base_url=base_url)
-        chats = await asyncio.wait_for(
-            loop.run_in_executor(
-                None, lambda: rag.list_chats(name=assistant_name)
-            ),
-            timeout=timeout,
-        )
-        return chats[0] if chats else None
-
-    return await retry_async(_do_find_with_timeout, max_retries=3, service_name="ragflow-find-chat")
-
-
-async def _ragflow_create_session(chat, session_name: str = "temp_session"):
-    """Create a RAGFlow session with timeout and retry."""
-    timeout = TIMEOUTS["ragflow"]
-
-    async def _do_create_with_timeout():
-        loop = asyncio.get_running_loop()
-        return await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: chat.create_session(name=session_name)),
-            timeout=timeout,
-        )
-
-    return await retry_async(_do_create_with_timeout, max_retries=3, service_name="ragflow-create-session")
-
-
-async def _ragflow_ask(session, question: str) -> str:
-    """Ask a RAGFlow session a question with timeout and retry.
-
-    Note: RAGFlow SDK uses synchronous requests. The streaming call runs in
-    a thread pool executor with asyncio.wait_for. On timeout, the await returns
-    but the underlying thread may continue running (thread leak). This is a
-    known limitation of the RAGFlow SDK — proper fix requires SDK-level timeout
-    support or switching to an async HTTP client.
+    Unlike asyncio.wait_for + asyncio.run(), this uses a dedicated
+    ThreadPoolExecutor with future.result(timeout=...) which returns
+    immediately on timeout without waiting for the executor thread.
     """
     timeout = TIMEOUTS["ragflow"]
+    backoff_factor = 2
+    max_wait = 30
+    last_error = None
 
-    async def _do_ask_with_timeout():
-        loop = asyncio.get_running_loop()
+    for attempt in range(max_retries):
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(func)
+                return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            last_error = TimeoutError(f"{service_name} timed out after {timeout}s")
+            logger.warning(f"[{service_name}] Attempt {attempt + 1}/{max_retries} timed out")
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait_time = min((2 ** attempt) * backoff_factor, max_wait)
+                logger.warning(f"[{service_name}] Attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"[{service_name}] All {max_retries} attempts failed. Last error: {e}")
 
-        def _consume_stream():
-            response_stream = session.ask(question=question, stream=True)
-            full_answer = ''
-            for response in response_stream:
-                if hasattr(response, "content") and response.content:
-                    full_answer = response.content
-            return full_answer
-
-        return await asyncio.wait_for(
-            loop.run_in_executor(None, _consume_stream),
-            timeout=timeout,
-        )
-
-    return await retry_async(_do_ask_with_timeout, max_retries=3, service_name="ragflow-ask")
-
-
-async def _ragflow_delete_sessions(chat, session_ids: list):
-    """Delete RAGFlow sessions (best-effort, no retry)."""
-    try:
-        loop = asyncio.get_running_loop()
-        await asyncio.wait_for(
-            loop.run_in_executor(None, lambda: chat.delete_sessions(ids=session_ids)),
-            timeout=10,
-        )
-    except Exception as e:
-        logger.warning(f"Failed to delete RAGFlow session(s): {e}")
+    raise last_error
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +78,11 @@ def get_assistant_list(dummy_arg: str = "") -> str:
         return "错误：RAGFlow 环境变量未配置（需设置 RAGFLOW_API_URL 与 RAGFLOW_API_KEY）"
 
     try:
-        assistants = asyncio.run(_ragflow_list_chats(api_key, base_url))
+        def _do_list():
+            rag = RAGFlow(api_key=api_key, base_url=base_url)
+            return rag.list_chats()
+
+        assistants = _retry_with_timeout(_do_list, service_name="ragflow-list")
 
         result = ""
         for assistant in assistants:
@@ -148,10 +98,10 @@ def get_assistant_list(dummy_arg: str = "") -> str:
         monitor.report_end("RAGFlow助手列表查询", output)
         return output
 
-    except (TimeoutError, asyncio.TimeoutError):
+    except TimeoutError:
         monitor.report_end("RAGFlow助手列表查询", error="knowledge base query timed out after retries")
         return "Error: knowledge base query timed out after retries"
-    except ConnectionError as e:
+    except (ConnectionError, OSError) as e:
         monitor.report_end("RAGFlow助手列表查询", error="knowledge base service unavailable after retries")
         return f"Error: knowledge base service unavailable after retries"
     except Exception as e:
@@ -174,49 +124,57 @@ def create_ask_delete(assistant_name: str, question: str) -> str:
 
     session = None
     chat = None
-
-    async def _execute():
-        nonlocal session, chat
-
+    try:
         # Step 1: Find the chat
-        chat = await _ragflow_find_chat(assistant_name, api_key, base_url)
+        def _find_chat():
+            rag = RAGFlow(api_key=api_key, base_url=base_url)
+            chats = rag.list_chats(name=assistant_name)
+            return chats[0] if chats else None
+
+        chat = _retry_with_timeout(_find_chat, service_name="ragflow-find-chat")
         if chat is None:
-            return None, f"没有找到name:{assistant_name}的聊天助手！"
+            monitor.report_end("RAGFlow助手提问工具", error=f"未找到助手: {assistant_name}")
+            return f"没有找到name:{assistant_name}的聊天助手！"
 
         # Step 2: Create a temporary session
-        session = await _ragflow_create_session(chat)
+        def _create_session():
+            return chat.create_session(name="temp_session")
+
+        session = _retry_with_timeout(_create_session, service_name="ragflow-create-session")
 
         # Step 3: Ask the question
-        full_answer = await _ragflow_ask(session, question)
+        def _consume_stream():
+            response_stream = session.ask(question=question, stream=True)
+            full_answer = ''
+            for response in response_stream:
+                if hasattr(response, "content") and response.content:
+                    full_answer = response.content
+            return full_answer
+
+        full_answer = _retry_with_timeout(_consume_stream, service_name="ragflow-ask")
 
         monitor.report_tool(
             "RAGFlow助手回答记录",
             {"助手名称": assistant_name, "问题": question, "答案": full_answer}
         )
-        return full_answer, None
+        monitor.report_end("RAGFlow助手提问工具", full_answer)
+        return full_answer
 
-    try:
-        answer, error = asyncio.run(_execute())
-
-        if error:
-            monitor.report_end("RAGFlow助手提问工具", error=error)
-            return error
-
-        monitor.report_end("RAGFlow助手提问工具", answer)
-        return answer
-
-    except (TimeoutError, asyncio.TimeoutError) as e:
+    except TimeoutError:
         monitor.report_end("RAGFlow助手提问工具", error="knowledge base query timed out after retries")
         return "Error: knowledge base query timed out after retries"
-    except ConnectionError as e:
+    except (ConnectionError, OSError) as e:
         monitor.report_end("RAGFlow助手提问工具", error="knowledge base service unavailable after retries")
-        return "Error: knowledge base service unavailable after retries"
+        return f"Error: knowledge base service unavailable after retries"
     except Exception as e:
         monitor.report_end("RAGFlow助手提问工具", error=str(e))
         return f"提问过程失败：{str(e)}"
     finally:
         if session and hasattr(session, "id") and chat is not None:
             try:
-                asyncio.run(_ragflow_delete_sessions(chat, [session.id]))
+                # Best-effort cleanup with its own timeout
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(lambda: chat.delete_sessions(ids=[session.id]))
+                    future.result(timeout=10)
             except Exception as e:
                 logger.warning(f"Failed to delete RAGFlow session: {e}")
