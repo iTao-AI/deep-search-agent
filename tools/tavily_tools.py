@@ -48,7 +48,8 @@ async def _search_with_resilience(
 ) -> dict:
     """Resilient Tavily search with centralized retry and timeout."""
     timeout = TIMEOUTS["tavily"]
-    total_timeout = timeout * 3  # generous budget for all retries combined
+    # Total timeout accounts for: 3 per-call timeouts + 2 backoff waits (2s + 4s = 6s)
+    total_timeout = timeout * 3 + 15  # generous budget including backoff
     return await asyncio.wait_for(
         retry_async(
             _tavily_search,

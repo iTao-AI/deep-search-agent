@@ -18,6 +18,8 @@ def create_tracked_task(
 ) -> asyncio.Task:
     """创建并跟踪异步任务，带超时保护。
 
+    使用 asyncio.wait_for 包裹协程，超时后自动取消任务。
+
     Args:
         coroutine: 要执行的协程
         task_id: 任务标识
@@ -26,7 +28,14 @@ def create_tracked_task(
     Returns:
         asyncio.Task: 创建的任务对象
     """
-    task = asyncio.create_task(coroutine)
+    async def _with_timeout():
+        try:
+            return await asyncio.wait_for(coroutine, timeout=timeout_seconds)
+        except asyncio.TimeoutError:
+            logger.warning(f"Task {task_id} timed out after {timeout_seconds}s")
+            return f"Error: Agent task timed out after {timeout_seconds}s"
+
+    task = asyncio.create_task(_with_timeout())
     start_time = asyncio.get_event_loop().time()
     active_tasks[task_id] = (task, timeout_seconds, start_time)
     task.add_done_callback(lambda t: _on_task_done(t, task_id))

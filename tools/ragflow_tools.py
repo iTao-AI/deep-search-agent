@@ -78,8 +78,11 @@ async def _ragflow_create_session(chat, session_name: str = "temp_session"):
 async def _ragflow_ask(session, question: str) -> str:
     """Ask a RAGFlow session a question with timeout and retry.
 
-    Each individual HTTP call is wrapped with 60s timeout; retry_async
-    retries if the timeout fails (TimeoutError is retryable).
+    Note: RAGFlow SDK uses synchronous requests. The streaming call runs in
+    a thread pool executor with asyncio.wait_for. On timeout, the await returns
+    but the underlying thread may continue running (thread leak). This is a
+    known limitation of the RAGFlow SDK — proper fix requires SDK-level timeout
+    support or switching to an async HTTP client.
     """
     timeout = TIMEOUTS["ragflow"]
 

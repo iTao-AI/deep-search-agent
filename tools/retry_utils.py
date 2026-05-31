@@ -66,9 +66,6 @@ def retry_async(
         # Initial attempt (attempt 0)
         try:
             return await coro_factory(*args, **kwargs)
-        except asyncio.CancelledError:
-            # wait_for timeout cancelled the task — treat as TimeoutError
-            last_exception = TimeoutError("operation cancelled by timeout")
         except retryable_exceptions as e:
             last_exception = e
         except Exception:
@@ -87,8 +84,6 @@ def retry_async(
 
             try:
                 return await coro_factory(*args, **kwargs)
-            except asyncio.CancelledError:
-                last_exception = TimeoutError("operation cancelled by timeout")
             except retryable_exceptions as e:
                 last_exception = e
             except Exception:
