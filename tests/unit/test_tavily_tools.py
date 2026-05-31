@@ -1,7 +1,7 @@
 """Phase B: Tavily 工具重构测试 — 重试、超时、错误返回"""
 import pytest
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 
 @pytest.fixture(autouse=True)
@@ -34,10 +34,49 @@ class TestTavilyTools:
     def test_internet_search_returns_results(self):
         """正常搜索应返回结果"""
         from tools.tavily_tools import internet_search
-        with patch("tools.tavily_tools._search_with_retry") as mock_search:
+        with patch("tools.tavily_tools._tavily_search", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = [{"title": "Test", "url": "http://test.com"}]
             result = internet_search.invoke({"query": "test"})
             assert result == [{"title": "Test", "url": "http://test.com"}]
+
+    def test_search_timeout_passed_to_sdk(self):
+        """验证 timeout 参数被正确传递给 Tavily SDK"""
+        from tools.tavily_tools import _tavily_search
+        import asyncio
+
+        mock_client = MagicMock()
+        mock_client.search.return_value = [{"title": "Test", "url": "http://test.com"}]
+
+        with patch("tavily.TavilyClient", return_value=mock_client):
+            result = asyncio.run(_tavily_search(
+                query="test", max_results=5, topic="general",
+                include_raw_content=False, timeout=15,
+            ))
+            mock_client.search.assert_called_once()
+            call_args = mock_client.search.call_args
+            call_kwargs = call_args[1]
+            assert call_kwargs["timeout"] == 15
+            assert call_kwargs["max_results"] == 5
+            assert call_kwargs["topic"] == "general"
+            assert call_kwargs["include_raw_content"] is False
+            # query is passed as positional arg
+            assert call_args[0][0] == "test"
+            assert result == [{"title": "Test", "url": "http://test.com"}]
+
+    def test_search_retries_on_connection_error(self):
+        """连接错误应触发重试，重试耗尽后返回错误字符串"""
+        from tools.tavily_tools import internet_search
+        import asyncio
+
+        mock_client = MagicMock()
+        mock_client.search.side_effect = ConnectionError("Connection refused")
+
+        with patch("tavily.TavilyClient", return_value=mock_client):
+            result = internet_search.invoke({"query": "test"})
+            # Should have been called 3 times (max_retries=3)
+            assert mock_client.search.call_count == 3
+            assert isinstance(result, str)
+            assert "Error" in result
 
     def test_internet_search_no_api_key_returns_error(self):
         """无 API Key 应返回错误字符串"""
@@ -46,12 +85,3 @@ class TestTavilyTools:
         from tools.tavily_tools import internet_search
         result = internet_search.invoke({"query": "test"})
         assert "Error" in result or "error" in result.lower()
-
-    def test_search_retries_on_failure(self):
-        """搜索失败应重试，重试耗尽后返回错误字符串"""
-        from tools.tavily_tools import internet_search
-        with patch("tools.tavily_tools._search_with_retry") as mock_search:
-            mock_search.side_effect = Exception("API error")
-            result = internet_search.invoke({"query": "test"})
-            mock_search.assert_called_once()
-            assert isinstance(result, str)

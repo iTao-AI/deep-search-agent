@@ -27,12 +27,12 @@ _DEFAULT_RETRYABLE_EXCEPTIONS = (TimeoutError, ConnectionError)
 
 def retry_async(
     coro_factory: Callable,
+    *args,
     max_retries: int = 3,
     backoff_factor: float = 2,
     max_wait: float = 30,
     retryable_exceptions: Tuple[Type[Exception], ...] = _DEFAULT_RETRYABLE_EXCEPTIONS,
     service_name: str = "unknown",
-    *args,
     **kwargs,
 ):
     """Standalone async retry function with exponential backoff.
@@ -40,12 +40,12 @@ def retry_async(
     Args:
         coro_factory: Async callable to retry (can be a coroutine function or
             a callable that returns a coroutine when invoked with args/kwargs).
+        *args: Positional arguments passed to coro_factory.
         max_retries: Maximum number of retry attempts (default 3).
         backoff_factor: Multiplier for exponential backoff (default 2).
         max_wait: Maximum seconds to wait between retries (default 30).
         retryable_exceptions: Tuple of exception types that should trigger retry.
         service_name: Human-readable service name for monitor logging.
-        *args: Positional arguments passed to coro_factory.
         **kwargs: Keyword arguments passed to coro_factory.
 
     Returns:
