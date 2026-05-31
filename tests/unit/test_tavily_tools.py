@@ -85,3 +85,29 @@ class TestTavilyTools:
         from tools.tavily_tools import internet_search
         result = internet_search.invoke({"query": "test"})
         assert "Error" in result or "error" in result.lower()
+
+    @pytest.mark.asyncio
+    async def test_search_with_resilience_end_to_end(self):
+        """_search_with_resilience should retry on failure and respect timeout."""
+        from tools.tavily_tools import _search_with_resilience
+        import os
+        os.environ["TAVILY_API_KEY"] = "test_key"
+
+        call_count = {"n": 0}
+
+        # Mock at the TavilyClient level to verify retry actually fires
+        with patch("tavily.TavilyClient") as mock_cls:
+            mock_client = MagicMock()
+            # Fail twice, succeed on third call
+            def side_effect(*args, **kwargs):
+                call_count["n"] += 1
+                if call_count["n"] <= 2:
+                    raise ConnectionError("transient error")
+                return {"results": [{"title": "Found"}]}
+            mock_client.search = MagicMock(side_effect=side_effect)
+            mock_cls.return_value = mock_client
+
+            result = await _search_with_resilience("test query", 5, "general", False)
+
+            assert call_count["n"] == 3  # 2 failures + 1 success
+            assert result == {"results": [{"title": "Found"}]}

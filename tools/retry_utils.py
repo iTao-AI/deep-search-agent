@@ -7,7 +7,7 @@ Provides:
 """
 import asyncio
 import functools
-from typing import Callable, Optional, Tuple, Type, Union
+from typing import Callable, Optional, Tuple, Type
 
 from api.monitor import monitor
 
