@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 try:
@@ -10,6 +11,11 @@ from api.monitor import monitor
 from api.context import get_session_context
 from utils.path_utils import resolve_path
 from utils.word_converter import convert_md_to_pdf_via_word
+
+
+def _convert_sync(md_path: Path, pdf_path: Path) -> str:
+    """Sync PDF conversion (for run_in_executor)."""
+    return convert_md_to_pdf_via_word(md_path, pdf_path)
 
 
 @tool
@@ -35,7 +41,24 @@ def convert_md_to_pdf(
         else:
             pdf_abs_path = md_abs_path.with_suffix('.pdf')
 
-        result = convert_md_to_pdf_via_word(md_abs_path, pdf_abs_path)
+        # Wrap sync conversion with 60s timeout to prevent indefinite hangs
+        timeout = 60  # PDF 转换超时 60s
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    asyncio.wait_for(
+                        loop.run_in_executor(None, _convert_sync, md_abs_path, pdf_abs_path),
+                        timeout=timeout,
+                    )
+                )
+            finally:
+                loop.close()
+        except TimeoutError:
+            monitor.report_end("Markdown转PDF工具", error="PDF 转换超时")
+            return f"Error: PDF conversion timed out after {timeout}s"
+
         monitor.report_end("Markdown转PDF工具", result)
         return result
 
