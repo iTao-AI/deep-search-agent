@@ -1,6 +1,7 @@
 """Phase 7b: RAGFlow 工具重构测试 — 超时、重试和 session 清理"""
 import asyncio
 import os
+import time
 import pytest
 import sys
 from unittest.mock import MagicMock, patch, AsyncMock
@@ -184,3 +185,23 @@ class TestRAGFlowTimeoutAndRetry:
                 "question": "Hello",
             })
             mock_chat.delete_sessions.assert_called_once_with(ids=["sess_cleanup"])
+
+
+class TestRealBlockingTimeout:
+    """测试真实阻塞场景下的超时行为 — 不 mock TimeoutError"""
+
+    def test_run_with_timeout_returns_immediately_on_block(self):
+        """_run_with_timeout 应在超时后立即返回，不等待阻塞线程结束"""
+        from tools.ragflow_tools import _run_with_timeout
+
+        def _block_for_10_seconds():
+            time.sleep(10)
+            return "should not reach here"
+
+        start = time.monotonic()
+        with pytest.raises(TimeoutError, match="operation timed out after"):
+            _run_with_timeout(_block_for_10_seconds, timeout=0.2)
+        elapsed = time.monotonic() - start
+
+        # Should return within ~0.2s timeout, NOT wait for 10s sleep
+        assert elapsed < 2.0, f"Waited {elapsed:.1f}s instead of returning within timeout"

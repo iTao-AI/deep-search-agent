@@ -31,12 +31,30 @@ def _load_ragflow_env() -> Tuple[Optional[str], Optional[str]]:
     return os.getenv("RAGFLOW_API_KEY"), os.getenv("RAGFLOW_API_URL")
 
 
+def _run_with_timeout(func, timeout: float) -> any:
+    """Run a sync function with real thread-level timeout.
+
+    Uses ThreadPoolExecutor with shutdown(wait=False) so that on timeout,
+    the caller returns immediately without waiting for the blocked thread.
+    """
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = executor.submit(func)
+        return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        executor.shutdown(wait=False)  # Don't wait for blocked thread
+        raise TimeoutError(f"operation timed out after {timeout}s")
+    except Exception:
+        executor.shutdown(wait=False)
+        raise
+
+
 def _retry_with_timeout(func, max_retries: int = 3, service_name: str = "ragflow") -> any:
     """Sync retry with real thread-level timeout via concurrent.futures.
 
     Unlike asyncio.wait_for + asyncio.run(), this uses a dedicated
-    ThreadPoolExecutor with future.result(timeout=...) which returns
-    immediately on timeout without waiting for the executor thread.
+    ThreadPoolExecutor with future.result(timeout=...) and shutdown(wait=False)
+    which returns immediately on timeout without waiting for the executor thread.
     """
     timeout = TIMEOUTS["ragflow"]
     backoff_factor = 2
@@ -45,10 +63,8 @@ def _retry_with_timeout(func, max_retries: int = 3, service_name: str = "ragflow
 
     for attempt in range(max_retries):
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(func)
-                return future.result(timeout=timeout)
-        except concurrent.futures.TimeoutError:
+            return _run_with_timeout(func, timeout)
+        except TimeoutError:
             last_error = TimeoutError(f"{service_name} timed out after {timeout}s")
             logger.warning(f"[{service_name}] Attempt {attempt + 1}/{max_retries} timed out")
         except Exception as e:
@@ -173,8 +189,14 @@ def create_ask_delete(assistant_name: str, question: str) -> str:
         if session and hasattr(session, "id") and chat is not None:
             try:
                 # Best-effort cleanup with its own timeout
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                try:
                     future = executor.submit(lambda: chat.delete_sessions(ids=[session.id]))
                     future.result(timeout=10)
+                except concurrent.futures.TimeoutError:
+                    executor.shutdown(wait=False)
+                    logger.warning("RAGFlow session cleanup timed out")
+                finally:
+                    executor.shutdown(wait=False)
             except Exception as e:
                 logger.warning(f"Failed to delete RAGFlow session: {e}")
