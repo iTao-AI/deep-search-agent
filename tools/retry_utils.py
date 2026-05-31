@@ -22,7 +22,7 @@ TIMEOUTS = {
 }
 
 # Default retryable exceptions
-_DEFAULT_RETRYABLE_EXCEPTIONS = (TimeoutError, ConnectionError, OSError)
+_DEFAULT_RETRYABLE_EXCEPTIONS = (TimeoutError, ConnectionError)
 
 
 def retry_async(
@@ -72,8 +72,8 @@ def retry_async(
         except Exception:
             raise
 
-        # Retry loop
-        for attempt in range(max_retries):
+        # Retry loop (max_retries - 1 more attempts after initial = max_retries total)
+        for attempt in range(max_retries - 1):
             wait_time = min((2 ** attempt) * backoff_factor, max_wait)
             monitor.report_retry(
                 service_name,
@@ -130,7 +130,7 @@ def retry(
                 backoff_factor=backoff_factor,
                 max_wait=max_wait,
                 retryable_exceptions=retryable_exceptions,
-                service_name=service_name or func.__name__,
+                service_name=service_name,
                 *args,
                 **kwargs,
             )

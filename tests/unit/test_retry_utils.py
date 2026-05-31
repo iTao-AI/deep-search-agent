@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 # Ensure monitor is mocked before importing retry_utils
 mock_monitor = MagicMock()
-with patch.dict("sys.modules", {"api.monitor": MagicMock(), "api.monitor.monitor": mock_monitor}):
+fake_monitor_module = MagicMock()
+fake_monitor_module.monitor = mock_monitor
+with patch.dict("sys.modules", {"api.monitor": fake_monitor_module}):
     from tools.retry_utils import retry, retry_async, TIMEOUTS
 
 
@@ -74,6 +76,8 @@ class TestRetryDecorator:
         result = await successful_fn()
         assert result == "ok"
         assert call_count == 1
+        # No retries needed — monitor should record 0 retry events
+        assert mock_monitor.report_retry.call_count == 0
 
     @pytest.mark.asyncio
     async def test_retry_on_timeout(self):
@@ -91,6 +95,8 @@ class TestRetryDecorator:
         result = await flaky_fn()
         assert result == "recovered"
         assert call_count == 2
+        # 1 retry event recorded (attempt 1/3)
+        assert mock_monitor.report_retry.call_count == 1
 
     @pytest.mark.asyncio
     async def test_max_retries_exhausted(self):
@@ -106,8 +112,10 @@ class TestRetryDecorator:
         with pytest.raises(TimeoutError, match="always fails"):
             await always_failing()
 
-        # 1 initial + 3 retries = 4 total calls
-        assert call_count == 4
+        # 1 initial + 2 retries = 3 total calls (max_retries=3 means 3 total)
+        assert call_count == 3
+        # Monitor should record max_retries - 1 = 2 retry events
+        assert mock_monitor.report_retry.call_count == 2
 
     @pytest.mark.asyncio
     async def test_non_retryable_exception_raises_immediately(self):
@@ -141,6 +149,8 @@ class TestRetryDecorator:
         result = await custom_fn()
         assert result == "done"
         assert call_count == 5
+        # 4 retry events recorded (5 total calls - 1 initial = 4 retries = max_retries - 1)
+        assert mock_monitor.report_retry.call_count == 4
 
     @pytest.mark.asyncio
     async def test_custom_retryable_exceptions(self):
@@ -164,6 +174,8 @@ class TestRetryDecorator:
         result = await connection_fn()
         assert result == "connected"
         assert call_count == 2
+        # 1 retry event recorded
+        assert mock_monitor.report_retry.call_count == 1
 
     @pytest.mark.asyncio
     async def test_unlisted_exception_not_retried(self):
@@ -208,6 +220,7 @@ class TestRetryAsyncFunction:
         result = await retry_async(success_fn, max_retries=3, backoff_factor=0.001, max_wait=0.01)
         assert result == "ok"
         assert call_count == 1
+        assert mock_monitor.report_retry.call_count == 0
 
     @pytest.mark.asyncio
     async def test_retries_succeed(self):
@@ -224,6 +237,8 @@ class TestRetryAsyncFunction:
         result = await retry_async(flaky_fn, max_retries=3, backoff_factor=0.001, max_wait=0.01)
         assert result == "recovered"
         assert call_count == 3
+        # 2 retry events recorded (max_retries=3, 2 retries)
+        assert mock_monitor.report_retry.call_count == 2
 
     @pytest.mark.asyncio
     async def test_custom_exceptions(self):
@@ -246,6 +261,7 @@ class TestRetryAsyncFunction:
         )
         assert result == "ok"
         assert call_count == 2
+        assert mock_monitor.report_retry.call_count == 1
 
 
 # ============================================================
@@ -284,6 +300,8 @@ class TestRetryWithAsyncioWaitFor:
         )
         assert result == "done"
         assert call_count == 3
+        # 2 retry events (3rd call succeeds, so 2 retries)
+        assert mock_monitor.report_retry.call_count == 2
 
     @pytest.mark.asyncio
     async def test_wait_for_all_attempts_timeout(self):
@@ -306,8 +324,10 @@ class TestRetryWithAsyncioWaitFor:
                 max_wait=0.01,
             )
 
-        # Should have attempted initial + 2 retries = 3
-        assert call_count == 3
+        # Should have attempted initial + 1 retry = 2 total (max_retries=2 means 2 total)
+        assert call_count == 2
+        # 1 retry event recorded
+        assert mock_monitor.report_retry.call_count == 1
 
     @pytest.mark.asyncio
     async def test_fast_function_not_affected_by_wait_for(self):
