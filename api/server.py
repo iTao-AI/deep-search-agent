@@ -204,7 +204,7 @@ async def websocket_endpoint(websocket: WebSocket, thread_id: str):
     # Auth check for WebSocket connections
     api_secret = os.environ.get("API_SECRET", "")
     if api_secret:
-        client_key = websocket.headers.get("x-api-key", "")
+        client_key = websocket.headers.get("x-api-key", "") or websocket.query_params.get("api_key", "")
         if client_key != api_secret:
             await websocket.close(code=4001, reason="Unauthorized")
             return

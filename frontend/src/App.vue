@@ -3,6 +3,12 @@ import { ref, onMounted, nextTick, computed } from 'vue'
 import axios from 'axios'
 import { marked } from 'marked'
 
+// Set default X-API-Key header for all axios requests (from .env or empty)
+const API_SECRET = (import.meta as any).env?.VITE_API_SECRET || ''
+if (API_SECRET) {
+  axios.defaults.headers.common['X-API-Key'] = API_SECRET
+}
+
 // Types
 interface Message {
   role: 'user' | 'ai' | 'system'
@@ -68,7 +74,10 @@ const fetchFiles = async () => {
 
 // WebSocket Connection
 const connectWebSocket = () => {
-  const ws = new WebSocket(`ws://localhost:8000/ws/${currentThreadId.value}`)
+  const wsUrl = API_SECRET
+    ? `ws://localhost:8000/ws/${currentThreadId.value}?api_key=${encodeURIComponent(API_SECRET)}`
+    : `ws://localhost:8000/ws/${currentThreadId.value}`
+  const ws = new WebSocket(wsUrl)
 
   ws.onopen = () => {
     console.log('WebSocket Connected')
