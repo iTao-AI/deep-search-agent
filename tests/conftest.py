@@ -1,6 +1,7 @@
 """Shared fixtures for all tests (unit + integration)."""
 import os
 import platform
+import sys
 
 
 def _configure_weasyprint_library_path():
@@ -24,8 +25,6 @@ def weasyprint_available():
     except (OSError, ImportError):
         return False
 
-
-import sys
 
 # Stub heavy imports before any test module imports them.
 # This prevents LLM initialization during test collection.

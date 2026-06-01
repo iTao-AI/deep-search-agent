@@ -60,18 +60,24 @@ class TestConvertMdToPdf:
     def test_weasyprint_system_dep_missing(self, test_md_file, output_pdf_path):
         """weasyprint 系统依赖缺失时返回友好错误"""
         import builtins
+        import sys
 
         real_import = builtins.__import__
+        cached = sys.modules.pop("weasyprint", None)  # force fresh import attempt
 
         def fake_import(name, *args, **kwargs):
             if name == "weasyprint":
                 raise OSError("cannot load library libcairo")
             return real_import(name, *args, **kwargs)
 
-        with patch("builtins.__import__", side_effect=fake_import):
-            result = convert_md_to_pdf(test_md_file, output_pdf_path)
-            assert "转换失败" in result
-            assert "cairo" in result.lower() or "pango" in result.lower() or "系统依赖" in result
+        try:
+            with patch("builtins.__import__", side_effect=fake_import):
+                result = convert_md_to_pdf(test_md_file, output_pdf_path)
+                assert "转换失败" in result
+                assert "cairo" in result.lower() or "pango" in result.lower() or "系统依赖" in result
+        finally:
+            if cached is not None:
+                sys.modules["weasyprint"] = cached  # restore
 
     @pytest.mark.skipif(not weasyprint_available(), reason=WEASYPRINT_SKIP_REASON)
     def test_markdown_not_installed_error(self, test_md_file, output_pdf_path):
