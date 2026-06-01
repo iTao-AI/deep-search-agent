@@ -19,12 +19,16 @@
 - Local pytest run: 247 passed, 0 failed（`python -m pytest -q`）
 - Docker 部署: 本机验证通过（见 [QA 报告摘要](assets/qa-report-summary.md)）
 
-## E2E blocked with partial evidence
+## E2E Run #1
 
-- **阻塞原因**: `.env` 中 `OPENAI_API_KEY` 和 `TAVILY_API_KEY` 均为占位值（`your-*`），无法调用真实 LLM 和搜索服务
-- **已完成局部链路**:
-  - 后端测试全绿：247 passed, 0 failed（`python -m pytest -q`）
-  - 前端构建通过：`cd frontend && npm run build` 成功，built in 357ms
-  - Docker QA 验证通过（见 `assets/` 中的截图和 QA 摘要）
-  - API 端点响应正确（POST /api/task, GET /api/files, WebSocket）
-- **不能声称的指标**: 真实 token 用量、真实外部搜索结果、真实耗时、P95 延迟、子 Agent 调用次数
+- **日期**: 2026-06-01
+- **环境**: 本机 (macOS, Python 3.13, DeepSeek API)
+- **输入问题**: "2024年AI发展趋势"
+- **命令**: POST /api/task + WebSocket /ws/evidence-run-002
+- **总耗时**: 4 分 42 秒 (281.97s)
+- **子 Agent 调用**: 网络搜索助手 (2 次，分别搜索技术突破和行业动态)
+- **工具调用**: 网络搜索工具 (Tavily，多次搜索查询)
+- **WebSocket 事件**: 50 个 monitor_event (session_created → assistant_call → tool_start → task_result)
+- **Token 用量**: input: 446,542 / output: 12,723 / total: 459,265 / cost: $19.39 / calls: 21
+- **生成产物**: `output/session_evidence-run-002/2024年AI发展趋势报告.md` (12,142 bytes)
+- **备注**: WebSocket 180s 超时后断开，但报告文件已完整生成；未生成 PDF（需 WeasyPrint 系统依赖）
