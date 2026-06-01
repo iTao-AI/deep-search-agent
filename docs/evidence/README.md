@@ -6,7 +6,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| [run-log.md](run-log.md) | E2E blocked partial evidence: pytest/build/Docker QA/API smoke；真实 token/耗时/子 Agent 指标待补 |
+| [run-log.md](run-log.md) | E2E Run #1 真实任务数据：耗时 4分42秒 / Token 459K / 2 子Agent / 50 WebSocket events / 报告.md 12KB |
 | [technical-decisions.md](technical-decisions.md) | 关键技术决策说明与代码路径 |
 
 ## 已有截图

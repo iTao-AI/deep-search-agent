@@ -62,6 +62,7 @@
 | Local pytest run | 247 通过, 0 失败 | `pytest -q` |
 | Docker 部署 | 本机验证通过 | [QA 报告](docs/evidence/assets/qa-report-summary.md) |
 | 前端构建 | 通过 | `cd frontend && npm run build` |
+| E2E Run #1 | 282秒, 459K token, 2 子Agent, 报告.md 已生成 | [运行记录](docs/evidence/run-log.md) |
 | Token 追踪 | 已实现（Phase 7c） | `agent/token_tracking.py`, `GET /api/token-usage/{thread_id}` |
 | TTL 缓存 | 已实现（Phase 7c） | `tools/cache.py`, Tavily 300s TTL |
 
