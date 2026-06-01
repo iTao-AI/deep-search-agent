@@ -80,17 +80,12 @@ class TestConvertMdToPdf:
                 sys.modules["weasyprint"] = cached  # restore
 
     @pytest.mark.skipif(not weasyprint_available(), reason=WEASYPRINT_SKIP_REASON)
-    def test_markdown_not_installed_error(self, test_md_file, output_pdf_path):
+    def test_markdown_not_installed_error(self, test_md_file, output_pdf_path, monkeypatch):
         """markdown 库未安装时返回友好错误"""
         import utils.pdf_converter as converter_mod
-        original_markdown = getattr(converter_mod, 'markdown', None)
-        converter_mod.markdown = None
-        try:
-            result = convert_md_to_pdf(test_md_file, output_pdf_path)
-            assert "转换失败" in result or "缺少依赖" in result
-        finally:
-            if original_markdown is not None:
-                converter_mod.markdown = original_markdown
+        monkeypatch.setattr(converter_mod, 'markdown', None)
+        result = convert_md_to_pdf(test_md_file, output_pdf_path)
+        assert "转换失败" in result or "缺少依赖" in result
 
     @pytest.mark.skipif(not weasyprint_available(), reason=WEASYPRINT_SKIP_REASON)
     def test_chinese_content_rendering(self, tmp_path):

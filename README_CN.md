@@ -187,7 +187,7 @@ deep-search-agent/
 
 ## 已知边界
 
-- **WeasyPrint 依赖**: PDF 转换在缺少 WeasyPrint 系统库（cairo、pango、gobject）的机器上失败。Docker 环境已包含这些依赖；本机失败是缺系统库。
+- **WeasyPrint 依赖**: PDF 转换测试需要 WeasyPrint 系统库（cairo、pango、gobject）。依赖可用时真实运行；依赖缺失时相关转换测试 skip，并保留系统依赖缺失路径测试。Docker 环境已包含这些依赖。
 - **前端构建**: 已验证（`cd frontend && npm run build` 成功，built in 357ms）。
 - **无持久化任务状态**: 任务在内存中运行。服务器重启会丢失进行中的任务。
 - **无认证/鉴权**: 所有 API 端点开放。仅适合内部/可信网络部署。

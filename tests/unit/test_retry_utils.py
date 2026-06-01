@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from tools.retry_utils import retry, retry_async, TIMEOUTS
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _reset_monitor():
     """Patch monitor at the usage site so each test gets an isolated mock."""
     with patch("tools.retry_utils.monitor") as mock_monitor:

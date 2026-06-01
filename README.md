@@ -189,7 +189,7 @@ deep-search-agent/
 
 ## Known Boundaries
 
-- **WeasyPrint dependency**: PDF conversion tests fail on machines without WeasyPrint system libraries (cairo, pango, gobject). Docker 环境已包含这些依赖；本机失败是缺系统库。
+- **WeasyPrint dependency**: PDF conversion tests require WeasyPrint system libraries (cairo, pango, gobject). On machines with dependencies available, tests run for real. On machines without them, conversion tests are skipped via `pytest.mark.skipif`, and the missing-dependency error path is tested via import-stage `OSError` simulation. Docker 环境已包含这些依赖。
 - **Frontend build**: Verified (`cd frontend && npm run build` succeeded, built in 357ms).
 - **No persistent task state**: Tasks are in-memory. Server restart loses in-progress tasks.
 - **No authentication/authorization**: All API endpoints are open. Suitable for internal/trusted-network deployment only.
