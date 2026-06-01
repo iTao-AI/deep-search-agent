@@ -59,12 +59,16 @@
 
 | 指标 | 值 | 来源 |
 |------|-----|------|
-| Local pytest run | 247 通过, 0 失败 | `pytest -q` |
+| Local pytest run | 264 通过, 0 失败 | `pytest -q` |
 | Docker 部署 | 本机验证通过 | [QA 报告](docs/evidence/assets/qa-report-summary.md) |
 | 前端构建 | 通过 | `cd frontend && npm run build` |
 | E2E Run #1 | 282秒, 459K token, 2 子Agent, 报告.md 已生成 | [运行记录](docs/evidence/run-log.md) |
 | Token 追踪 | 已实现（Phase 7c） | `agent/token_tracking.py`, `GET /api/token-usage/{thread_id}` |
 | TTL 缓存 | 已实现（Phase 7c） | `tools/cache.py`, Tavily 300s TTL |
+| API Key 鉴权 | 已实现（Phase 8） | `api/server.py`, `APIKeyMiddleware` |
+| SQLite 持久化 | 已实现（Phase 8） | `api/persistence.py`, `GET /api/tasks/{thread_id}` |
+| 搜索去重 | 已实现（Phase 8） | `tools/tavily_tools.py`, `search_with_dedup` |
+| CI/CD | 已配置（Phase 8） | `.github/workflows/ci.yml` |
 
 > 以上数据均来自本机实际命令运行结果。Token/cost 基准测试数据和 P95 延迟待专项基准运行后补充。
 
@@ -101,7 +105,7 @@ Tavily 和 RAGFlow 调用包裹了超时策略和指数退避重试装饰器。M
 ### 前置条件
 
 - Python >= 3.11
-- Node.js >= 18
+- Node.js 20.19+ 或 22.12+
 - Tavily API 密钥
 - DashScope API 密钥
 
@@ -190,8 +194,11 @@ deep-search-agent/
 
 - **WeasyPrint 依赖**: PDF 转换测试需要 WeasyPrint 系统库（cairo、pango、gobject）。依赖可用时真实运行；依赖缺失时相关转换测试 skip，并保留系统依赖缺失路径测试。Docker 环境已包含这些依赖。
 - **前端构建**: 已验证（`cd frontend && npm run build` 成功，built in 357ms）。
-- **无持久化任务状态**: 任务在内存中运行。服务器重启会丢失进行中的任务。
-- **无认证/鉴权**: 所有 API 端点开放。仅适合内部/可信网络部署。
+- **API Key 鉴权**: 所有 `/api/*` 端点受 APIKeyMiddleware 保护。请求缺少 X-API-Key header 返回 401。在 .env 中设置 API_SECRET=your-key 启用；未设置时打印警告但放行所有请求（开发模式）。
+- **WebSocket 鉴权**: 浏览器端 WebSocket 通过 `api_key` query parameter 传递 key，因为原生 WebSocket 构造器不能设置自定义 header。生产环境日志应避免记录完整 WebSocket URL。
+- **任务状态持久化**: 通过 SQLite（data/tasks.db）持久化任务状态，重启服务器不丢失。查询 GET /api/tasks/{thread_id}。
+- **CI/CD**: GitHub Actions 在 push/PR 到 main 时自动运行 pytest + 前端构建。API keys 需在 GitHub Secrets 中配置。
+- **Benchmark 数据**: 待执行专项基准测试——Phase 8 spec 中定义了 5 个固定查询。由于重复 E2E 当前存在非确定性，token before/after 对比不作为 Phase 8 验收证据。
 
 ## License
 

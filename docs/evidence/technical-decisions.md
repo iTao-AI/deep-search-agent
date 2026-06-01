@@ -60,9 +60,27 @@ WebSocket 推送每个事件即时到达，前端只需按事件类型渲染。
 
 代码路径: [`api/upload_security.py`](../../api/upload_security.py), [`utils/path_utils.py`](../../utils/path_utils.py)
 
-## 如果重做，会补什么
+## 如果重做，会补什么（实施情况）
 
-1. **持久化任务状态** — 当前任务在内存中运行，服务器重启丢失进度。应引入 Redis 或数据库存储任务状态机。
-2. **评测集（Eval Harness）** — 用固定问题集跑基准测试，自动比较 prompt 变更或模型切换对输出质量的影响。
-3. **认证与权限** — 当前 API 完全开放。生产环境需要 API key 或 OAuth，以及文件访问的租户隔离。
+1. ~~**持久化任务状态** — 已实现（Phase 8）：SQLite + WAL 模式，`api/persistence.py`~~
+2. ~~**认证与权限** — 已实现（Phase 8）：APIKeyMiddleware，X-API-Key header~~
+3. **评测集（Eval Harness）** — 用固定问题集跑基准测试，自动比较 prompt 变更或模型切换对输出质量的影响。5 个 benchmark 问题已定义，待运行。
 4. **Agent 输出质量评估** — 自动检查生成报告的信息准确性、引用完整性和格式合规性。
+
+## Phase 8 新增决策
+
+### 为什么选 SQLite 而非 Redis
+- Python 标准库自带 sqlite3，零额外依赖
+- WAL 模式支持并发读写，单机部署足够
+- 将来迁移到 PostgreSQL 成本极低（都是 SQL）
+- Redis 需要在个人服务器上额外维护一个进程
+
+### 为什么选 API Key 而非 JWT
+- 个人部署不需要多用户、登录、注册流程
+- 5 行 middleware 代码 vs JWT 需要密钥管理、过期策略、refresh token
+- 这是明确的工程判断——选择简单方案而非过度设计
+
+### 搜索去重的设计选择
+- 使用 per-thread 内存 cache（`_search_cache: dict = {}`），而非 Redis/TTL
+- 同一 thread 内相同 query 直接返回缓存，跨 thread 隔离
+- 不引入额外依赖，cache 随任务结束可手动清理

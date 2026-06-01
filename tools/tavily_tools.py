@@ -5,6 +5,7 @@ from typing import Literal
 
 from langchain_core.tools import tool
 
+from api.context import get_thread_context
 from api.monitor import monitor
 from tools.retry_utils import TIMEOUTS, retry_async
 from tools.cache import cached_tool
@@ -79,6 +80,24 @@ def internet_search(
     include_raw_content: bool = False,
 ):
     """Search the internet for public information, news, or finance data."""
+    thread_id = get_thread_context() or "default"
+    return search_with_dedup(
+        query,
+        search_fn=_internet_search_impl,
+        thread_id=thread_id,
+        max_results=max_results,
+        topic=topic,
+        include_raw_content=include_raw_content,
+    )
+
+
+def _internet_search_impl(
+    query: str,
+    max_results: int = 5,
+    topic: Literal["general", "news", "finance"] = "general",
+    include_raw_content: bool = False,
+):
+    """Execute Tavily search without per-thread de-duplication."""
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key:
         return "Error: TAVILY_API_KEY is not configured."
@@ -96,3 +115,56 @@ def internet_search(
     except Exception as e:
         monitor.report_end("网络搜索工具", error=str(e))
         return f"Error: internet search failed after retries — {e}"
+
+
+# Per-thread search result cache for de-duplication within a task
+_search_cache: dict = {}
+
+
+def _dedup_key(query: str, kwargs: dict) -> tuple:
+    return (
+        query,
+        tuple(sorted((key, repr(value)) for key, value in kwargs.items())),
+    )
+
+
+def search_with_dedup(
+    query: str,
+    search_fn=None,
+    thread_id: str = "default",
+    **kwargs,
+):
+    """Search with deduplication — same query per thread returns cached result.
+
+    Args:
+        query: The search query string.
+        search_fn: The underlying search function (defaults to internet_search).
+        thread_id: Scopes the cache — different threads don't share results.
+        **kwargs: Additional arguments passed to the search function.
+
+    Returns:
+        Search results (cached or fresh).
+    """
+    if search_fn is None:
+        search_fn = _internet_search_impl
+
+    if thread_id not in _search_cache:
+        _search_cache[thread_id] = {}
+
+    cache = _search_cache[thread_id]
+    cache_key = _dedup_key(query, kwargs)
+    if cache_key in cache:
+        monitor.report_cache_hit("tavily_search_dedup", cached=True)
+        return cache[cache_key]
+
+    result = search_fn(query, **kwargs)
+    cache[cache_key] = result
+    return result
+
+
+def clear_search_cache(thread_id: str = None):
+    """Clear the search cache for a thread, or all threads if None."""
+    if thread_id:
+        _search_cache.pop(thread_id, None)
+    else:
+        _search_cache.clear()
