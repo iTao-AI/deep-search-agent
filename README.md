@@ -87,7 +87,7 @@ The agent execution produces many intermediate events (tool calls, sub-agent dis
 
 ### Retry, Timeout, Cache, Token Tracking
 
-Every external call (Tavily, RAGFlow, MySQL) is wrapped with timeout policies, retry decorators with exponential backoff, and TTL caching for search results. Token tracking via LangChain `BaseCallbackHandler` records input/output/total tokens per LLM call with cost estimation. These make the system observable and resilient to transient failures.
+Tavily and RAGFlow calls are wrapped with timeout policies and retry decorators with exponential backoff. MySQL connections use connect_timeout and read_timeout. Tavily search results use TTL caching (300s). Token tracking via LangChain `BaseCallbackHandler` records input/output/total tokens per LLM call with cost estimation. These make the system observable and resilient to transient failures.
 
 See: [`tools/cache.py`](tools/cache.py), [`agent/token_tracking.py`](agent/token_tracking.py), [`tools/retry_utils.py`](tools/retry_utils.py)
 
@@ -182,7 +182,7 @@ deep-search-agent/
 
 ## Evidence Pack & Technical Docs
 
-- [Evidence Pack](docs/evidence/) — Benchmark logs, screenshots, WebSocket events, sample reports
+- [Evidence Pack](docs/evidence/) — QA screenshots, run log, technical decisions
 - [Evidence Readiness Design](docs/superpowers/specs/2026-06-01-deep-search-agent-evidence-readiness-design.md) — Design spec for this documentation direction
 - [Architecture Spec](spec/architecture.md) — System architecture and data flow
 - [API Contract](spec/api-contract.md) — REST + WebSocket endpoint definitions

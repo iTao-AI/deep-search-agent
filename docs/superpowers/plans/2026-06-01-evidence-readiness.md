@@ -1,6 +1,6 @@
 # Deep Search Agent 证据化文档改造实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 将 README 从功能清单改造为作品集入口，建立 Evidence Pack 结构，补充技术决策说明，提升项目证据密度。
 
@@ -17,7 +17,7 @@
 **Files:**
 - 无需修改文件，仅执行命令采集数据
 
-- [ ] **Step 1: 运行后端测试，记录实际输出**
+- [x] **Step 1: 运行后端测试，记录实际输出**
 
 ```bash
 cd /Users/mac/Developer/Projects/Active/deep-search-agent
@@ -26,7 +26,7 @@ python -m pytest -q 2>&1 | tail -20
 
 Expected output: 记录 passed/failed 数量、失败测试名称。这些数据将填入 Evidence Pack，不声称全绿。
 
-- [ ] **Step 2: 检查前端构建状态**
+- [x] **Step 2: 检查前端构建状态**
 
 ```bash
 cd /Users/mac/Developer/Projects/Active/deep-search-agent/frontend
@@ -35,11 +35,11 @@ npm ls vue-tsc 2>&1 | head -5
 
 Expected output: 确认 vue-tsc 是否已安装或仍缺失，更新证据中的构建状态。
 
-- [ ] **Step 3: 读取已有 Docker QA 报告**
+- [x] **Step 3: 读取已有 Docker QA 报告**
 
 读取 `.gstack/qa-reports/qa-report-localhost-2026-05-30.md`，提取关键验证结论，作为部署证据引用。
 
-- [ ] **Step 4: 确认 .gstack 下截图和 QA 报告存在**
+- [x] **Step 4: 确认 .gstack 下截图和 QA 报告存在**
 
 确认 `.gstack/qa-reports/screenshots/` 下 3 张截图存在，QA 报告存在。这些将在 Task 4 中复制到 `docs/evidence/assets/`。
 
@@ -50,7 +50,7 @@ Expected output: 确认 vue-tsc 是否已安装或仍缺失，更新证据中的
 **Files:**
 - Modify: `README.md`（完全重写）
 
-- [ ] **Step 1: 写入新的 README.md 内容**
+- [x] **Step 1: 写入新的 README.md 内容**
 
 > 使用 Write 工具将以下内容直接写入 README.md。不要将内容包在代码块中，因为 README 自身包含 ``` 代码块会导致解析错误。
 
@@ -256,7 +256,7 @@ deep-search-agent/
 MIT
 ```
 
-- [ ] **Step 2: 验证 README.md 中的文件路径有效**
+- [x] **Step 2: 验证 README.md 中的文件路径有效**
 
 ```bash
 cd /Users/mac/Developer/Projects/Active/deep-search-agent
@@ -268,7 +268,7 @@ done
 
 Expected: 所有路径应存在。如有缺失，调整 README 中的引用路径。
 
-- [ ] **Step 3: 扫描无占位符和敏感措辞**
+- [x] **Step 3: 扫描无占位符和敏感措辞**
 
 ```bash
 # 扫描 README.md 中不应出现 TBD、TODO、求职包装等词
@@ -284,7 +284,7 @@ Expected: 无命中。
 **Files:**
 - Modify: `README_CN.md`（完全重写）
 
-- [ ] **Step 1: 写入新的 README_CN.md 内容**
+- [x] **Step 1: 写入新的 README_CN.md 内容**
 
 > 使用 Write 工具将以下内容直接写入 README_CN.md。与英文版结构一致，使用中文表述。不要将内容包在代码块中。
 
@@ -488,7 +488,7 @@ deep-search-agent/
 MIT
 ```
 
-- [ ] **Step 2: 验证 README_CN.md 中的文件路径有效**
+- [x] **Step 2: 验证 README_CN.md 中的文件路径有效**
 
 ```bash
 cd /Users/mac/Developer/Projects/Active/deep-search-agent
@@ -499,7 +499,7 @@ done
 
 Expected: 所有路径应存在。
 
-- [ ] **Step 3: 扫描无占位符和敏感措辞**
+- [x] **Step 3: 扫描无占位符和敏感措辞**
 
 ```bash
 grep -in 'TBD\|TODO\|求职包装\|面试话术\|洗稿\|虚构' README_CN.md || echo "No placeholders found"
@@ -516,7 +516,7 @@ Expected: 无命中。
 - Create: `docs/evidence/run-log.md` — 端到端运行记录模板
 - Create: `docs/evidence/technical-decisions.md` — 技术决策说明文档
 
-- [ ] **Step 1: 创建 Evidence Pack 索引**
+- [x] **Step 1: 创建 Evidence Pack 索引**
 
 ```markdown
 # Evidence Pack
@@ -543,7 +543,7 @@ Expected: 无命中。
 所有数字指标来自实际命令输出、日志或测试报告，不以推测数字占位。
 ```
 
-- [ ] **Step 2: 创建运行记录模板**
+- [x] **Step 2: 创建运行记录模板**
 
 ```markdown
 # Run Log
@@ -563,7 +563,7 @@ Expected: 无命中。
 - Docker 部署: 本机验证通过（见 [QA 报告摘要](assets/qa-report-summary.md)）
 ```
 
-- [ ] **Step 3: 创建技术决策说明文档**
+- [x] **Step 3: 创建技术决策说明文档**
 
 ```markdown
 # Technical Decisions
@@ -636,7 +636,7 @@ WebSocket 推送每个事件即时到达，前端只需按事件类型渲染。
 4. **Agent 输出质量评估** — 自动检查生成报告的信息准确性、引用完整性和格式合规性。
 ```
 
-- [ ] **Step 4: 复制已有截图和 QA 报告摘要到 docs/evidence/assets/**
+- [x] **Step 4: 复制已有截图和 QA 报告摘要到 docs/evidence/assets/**
 
 `.gstack/` 被 `.gitignore` 忽略，公开仓库无法引用。需复制要公开的材料到可提交的路径。
 
@@ -661,7 +661,7 @@ cat > docs/evidence/assets/qa-report-summary.md << 'EOF'
 EOF
 ```
 
-- [ ] **Step 5: 更新 docs/README.md 索引**
+- [x] **Step 5: 更新 docs/README.md 索引**
 
 在 `docs/README.md` 的 Superpowers 规划文档表格后新增 Evidence Pack 索引：
 
@@ -684,7 +684,7 @@ EOF
 **Files:**
 - 无需修改文件，仅执行验证命令
 
-- [ ] **Step 1: Markdown 链接检查**
+- [x] **Step 1: Markdown 链接检查**
 
 使用 Python 逐文件解析 Markdown 相对链接，避免 macOS grep 不支持 `-P` 和相对路径解析错误。
 
@@ -728,7 +728,7 @@ PYEOF
 
 Expected: 所有引用的文件路径应存在（允许 .gstack 路径和 spec/ 下已有的文件）。
 
-- [ ] **Step 2: 占位符和敏感措辞扫描**
+- [x] **Step 2: 占位符和敏感措辞扫描**
 
 ```bash
 grep -rni 'TBD\|TODO\|FIXME\|求职包装\|面试话术\|洗稿\|虚构\|interview\|resume\|job.*application' \
@@ -737,7 +737,7 @@ grep -rni 'TBD\|TODO\|FIXME\|求职包装\|面试话术\|洗稿\|虚构\|intervi
 
 Expected: 无命中。
 
-- [ ] **Step 3: 确认未修改 prd.md**
+- [x] **Step 3: 确认未修改 prd.md**
 
 ```bash
 git diff docs/prd.md
@@ -745,7 +745,7 @@ git diff docs/prd.md
 
 Expected: 输出为空（无变更）。
 
-- [ ] **Step 4: 确认未修改无关文件**
+- [x] **Step 4: 确认未修改无关文件**
 
 使用 `git status` 白名单检查：本次只应修改 README.md, README_CN.md, docs/*。其他路径不应出现在脏列表中。
 

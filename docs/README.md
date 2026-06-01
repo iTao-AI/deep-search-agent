@@ -14,7 +14,7 @@ Superpowers 文档用于沉淀设计输入和实施计划，供后续 writing pl
 | 文档 | 说明 |
 |------|------|
 | [Evidence Readiness Design](superpowers/specs/2026-06-01-deep-search-agent-evidence-readiness-design.md) | 证据化文档改造设计 — README 作品集化、Evidence Pack、技术决策说明和验证边界 |
-| [Phase 7a Prompt Enhancement Plan](superpowers/plans/2026-05-30-phase-7a-prompt-enhancement.md) | Prompt 层补强实施计划 — 四阶段门控和报告大纲模板 |
+| [Evidence Readiness Plan](superpowers/plans/2026-06-01-evidence-readiness.md) | 证据化文档改造实施计划 — README 重写、Evidence Pack 目录、验证 |
 | [Phase 7b Tool Resilience Plan](superpowers/plans/2026-05-31-phase-7b-tool-resilience.md) | 工具韧性增强实施计划 — 超时、重试、降级和任务级超时 |
 
 ## Evidence Pack
