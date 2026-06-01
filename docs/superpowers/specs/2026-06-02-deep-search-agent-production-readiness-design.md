@@ -18,7 +18,7 @@
 - 引入 GitHub Actions CI/CD，push 时自动跑测试和前端构建
 - 用 5 个固定问题跑 benchmark，采集耗时、token、子 Agent 调用和缓存命中率
 
-关键路径（P0 token + P2 鉴权）做生产级完整实现；P1 持久化 + P3 CI + P4 benchmark 做到可演示/可运行。
+关键路径 P0-P3 做生产级完整实现；P4 benchmark 做到可运行。
 
 ## Current Facts
 
@@ -115,10 +115,11 @@ CREATE TABLE IF NOT EXISTS tasks (
 **方案要点：**
 
 - `.env` 中新增 `API_SECRET` 环境变量
-- FastAPI middleware 检查请求头 `X-API-Key`，不匹配返回 401
+- `.env.example` 同步包含 `API_SECRET=your-secret-key` 模板
+- FastAPI middleware 检查请求头 `X-API-Key`，不匹配返回 401 + `{"detail": "请设置 API_SECRET（在 .env 中）并通过请求头 X-API-Key 传递"}`
+- 服务器启动时如果 `API_SECRET` 未设置，打印警告日志但不拒绝请求（向后兼容开发环境）
 - WebSocket `/ws/{thread_id}` 端点同样保护（在连接握手阶段检查）
 - 前端调用 API 时自动附加 API Key（`frontend/` 修改 1-2 处 fetch 调用）
-- 如果 `API_SECRET` 未设置，打印警告但不拒绝请求（向后兼容开发环境）
 
 **验收目标：**
 
@@ -206,7 +207,10 @@ jobs:
 - `docs/evidence/run-log.md` — benchmark 数据
 - `docs/evidence/README.md`, `docs/evidence/technical-decisions.md` — 文档同步
 - `README.md`, `README_CN.md` — 公开文档同步
-- `tests/` — 新增测试
+- `tests/unit/test_persistence.py` — 新建 SQLite 持久化测试
+- `tests/unit/test_auth_middleware.py` — 新建 API Key 鉴权测试
+- `tests/unit/test_search_dedup.py` — 新建搜索去重测试
+- `tests/integration/test_task_endpoint.py` — 新建任务端点集成测试
 - `frontend/src/` — API Key 传参
 
 ## Forbidden Files
@@ -218,11 +222,12 @@ jobs:
 
 ## Acceptance Criteria
 
-- `python -m pytest -q` 保持全绿
+- `python -m pytest -q` 保持全绿（新增 persistence / auth middleware / search dedup / task endpoint 测试）
 - `cd frontend && npm run build` 通过
 - before/after token 对比有可测量的改善
-- 不带 API Key → 401，带 Key → 正常
-- 任务完成后重启服务器，可通过 API 查询到已完成任务
+- 不带 API Key → 401 + 友好提示（"请设置 API_SECRET"），带 Key → 正常
+- 服务器启动时如果 API_SECRET 未设置，打印清晰警告
+- 任务完成后重启服务器，可通过 `GET /api/tasks/{thread_id}` 查询到已完成任务
 - CI 在 push 后自动通过
 - Benchmark 5 个问题全部执行，数据写入 run-log.md
 - 公开文档同步更新（Evidence 表格、Known Boundaries、技术决策）
