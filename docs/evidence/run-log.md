@@ -16,7 +16,7 @@
 
 **已有数据：**
 
-- Local pytest run: 260 passed, 0 failed（`python -m pytest -q`）
+- Local pytest run: 264 passed, 0 failed（`python -m pytest -q`）
 - Docker 部署: 本机验证通过（见 [QA 报告摘要](assets/qa-report-summary.md)）
 
 ## E2E Run #1
@@ -36,7 +36,7 @@
 ## Phase 8 Closure Notes
 
 - **状态**: DONE_WITH_CONCERNS
-- **已完成验证**: `python -m pytest -q` 为 260 passed；`cd frontend && npm run build` 成功。
+- **已完成验证**: `python -m pytest -q` 为 264 passed；`cd frontend && npm run build` 成功。
 - **E2E 结论**: E2E Run #1 是当前唯一稳定 completed 样例。后续多次同题 E2E 运行出现 459K 到 3M tokens 波动，且报告生成行为不稳定。
 - **调查结论**: 在未修改的原始代码上重跑同题 E2E 也出现无报告结果，说明 token/report 波动主要来自 DeepSeek 模型随机行为，不能作为本轮 token before/after benchmark 证据。
 - **后续跟进**: Task 6（token before/after 对比）和 Task 8（5 问 benchmark）应等固定 WebSocket 客户端脚本、重复运行策略和中位数统计方案确定后再执行。

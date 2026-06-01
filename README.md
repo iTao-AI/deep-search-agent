@@ -61,7 +61,7 @@ User: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
 
 | Metric | Value | Source |
 |--------|-------|--------|
-| Local pytest run | 260 passed, 0 failed | `pytest -q` |
+| Local pytest run | 264 passed, 0 failed | `pytest -q` |
 | Docker deployment | Verified on localhost | [QA Report](docs/evidence/assets/qa-report-summary.md) |
 | Frontend build | Passed | `cd frontend && npm run build` |
 | E2E Run #1 | 282s, 459K tokens, 2 sub-agents, report.md generated | [Run Log](docs/evidence/run-log.md) |
