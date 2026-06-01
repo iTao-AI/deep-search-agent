@@ -96,3 +96,47 @@ def internet_search(
     except Exception as e:
         monitor.report_end("网络搜索工具", error=str(e))
         return f"Error: internet search failed after retries — {e}"
+
+
+# Per-thread search result cache for de-duplication within a task
+_search_cache: dict = {}
+
+
+def search_with_dedup(
+    query: str,
+    search_fn=None,
+    thread_id: str = "default",
+    **kwargs,
+):
+    """Search with deduplication — same query per thread returns cached result.
+
+    Args:
+        query: The search query string.
+        search_fn: The underlying search function (defaults to internet_search).
+        thread_id: Scopes the cache — different threads don't share results.
+        **kwargs: Additional arguments passed to the search function.
+
+    Returns:
+        Search results (cached or fresh).
+    """
+    if search_fn is None:
+        search_fn = internet_search
+
+    if thread_id not in _search_cache:
+        _search_cache[thread_id] = {}
+
+    cache = _search_cache[thread_id]
+    if query in cache:
+        return cache[query]
+
+    result = search_fn(query, **kwargs)
+    cache[query] = result
+    return result
+
+
+def clear_search_cache(thread_id: str = None):
+    """Clear the search cache for a thread, or all threads if None."""
+    if thread_id:
+        _search_cache.pop(thread_id, None)
+    else:
+        _search_cache.clear()
