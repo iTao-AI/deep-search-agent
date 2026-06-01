@@ -6,7 +6,7 @@
 
 | 文件 | 说明 |
 |------|------|
-| [run-log.md](run-log.md) | E2E Run #1 真实任务数据：耗时 4分42秒 / Token 459K / 2 子Agent / 50 WebSocket events / 报告.md 12KB |
+| [run-log.md](run-log.md) | E2E Run #1 数据（282s / 459K tokens / 2 子Agent）+ 搜索去重 / Prompt 优化已实现 |
 | [technical-decisions.md](technical-decisions.md) | 关键技术决策说明与代码路径 |
 
 ## 已有截图

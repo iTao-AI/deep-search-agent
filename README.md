@@ -61,12 +61,16 @@ User: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
 
 | Metric | Value | Source |
 |--------|-------|--------|
-| Local pytest run | 247 passed, 0 failed | `pytest -q` |
+| Local pytest run | 260 passed, 0 failed | `pytest -q` |
 | Docker deployment | Verified on localhost | [QA Report](docs/evidence/assets/qa-report-summary.md) |
 | Frontend build | Passed | `cd frontend && npm run build` |
 | E2E Run #1 | 282s, 459K tokens, 2 sub-agents, report.md generated | [Run Log](docs/evidence/run-log.md) |
 | Token tracking | Implemented (Phase 7c) | `agent/token_tracking.py`, `GET /api/token-usage/{thread_id}` |
 | TTL caching | Implemented (Phase 7c) | `tools/cache.py`, Tavily 300s TTL |
+| API Key auth | Implemented (Phase 8) | `api/server.py`, `APIKeyMiddleware` |
+| SQLite persistence | Implemented (Phase 8) | `api/persistence.py`, `GET /api/tasks/{thread_id}` |
+| Search dedup | Implemented (Phase 8) | `tools/tavily_tools.py`, `search_with_dedup` |
+| CI/CD | Configured (Phase 8) | `.github/workflows/ci.yml` |
 
 > All metrics above are from actual command runs on this machine. Token/cost benchmark data and P95 latency are pending dedicated benchmark runs.
 
@@ -192,8 +196,10 @@ deep-search-agent/
 
 - **WeasyPrint dependency**: PDF conversion tests require WeasyPrint system libraries (cairo, pango, gobject). On machines with dependencies available, tests run for real. On machines without them, conversion tests are skipped via `pytest.mark.skipif`, and the missing-dependency error path is tested via import-stage `OSError` simulation. Docker 环境已包含这些依赖。
 - **Frontend build**: Verified (`cd frontend && npm run build` succeeded, built in 357ms).
-- **No persistent task state**: Tasks are in-memory. Server restart loses in-progress tasks.
-- **No authentication/authorization**: All API endpoints are open. Suitable for internal/trusted-network deployment only.
+- **API Key auth**: All `/api/*` endpoints are protected by `APIKeyMiddleware`. Requests without `X-API-Key` header get 401. Set `API_SECRET=your-key` in `.env` to enable; if unset, a warning is logged but all requests pass through (dev mode).
+- **Task state persistence**: Tasks are persisted to SQLite (`data/tasks.db`) through `api/persistence.py`. Server restart does not lose completed task records. Query by `GET /api/tasks/{thread_id}`.
+- **CI/CD**: GitHub Actions runs backend tests and frontend build on push/PR to `main`. API keys must be configured in GitHub Secrets.
+- **Benchmark data**: Pending dedicated benchmark run — 5 fixed queries defined in the Phase 8 spec.
 
 ## License
 
