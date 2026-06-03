@@ -13,7 +13,7 @@
     "total_cost": 34.26684,
     "call_count": 26
   },
-  "output_path": "/Users/mac/Developer/Projects/Active/deep-search-agent/output/session_evidence-003/PyTorch_vs_JAX_LLM训练性能对比报告.md",
+  "output_path": "output/session_evidence-003/PyTorch_vs_JAX_LLM训练性能对比报告.md",
   "report_size_bytes": 15427,
   "fallback_used": false
 }

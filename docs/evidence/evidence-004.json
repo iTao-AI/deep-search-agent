@@ -13,7 +13,7 @@
     "total_cost": 1.6642400000000002,
     "call_count": 7
   },
-  "output_path": "/Users/mac/Developer/Projects/Active/deep-search-agent/output/session_evidence-004/fallback_report.md",
+  "output_path": "output/session_evidence-004/fallback_report.md",
   "report_size_bytes": 1415,
   "fallback_used": true
 }
