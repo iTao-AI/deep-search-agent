@@ -59,7 +59,7 @@
 
 | 指标 | 值 | 来源 |
 |------|-----|------|
-| Local pytest run | 264 通过, 0 失败 | `pytest -q` |
+| Local pytest run | 282 通过, 0 失败 | `pytest -q` |
 | Docker 部署 | 本机验证通过 | [QA 报告](docs/evidence/assets/qa-report-summary.md) |
 | 前端构建 | 通过 | `cd frontend && npm run build` |
 | E2E Run #1 | 282秒, 459K token, 2 子Agent, 报告.md 已生成 | [运行记录](docs/evidence/run-log.md) |
@@ -69,6 +69,8 @@
 | SQLite 持久化 | 已实现（Phase 8） | `api/persistence.py`, `GET /api/tasks/{thread_id}` |
 | 搜索去重 | 已实现（Phase 8） | `tools/tavily_tools.py`, `search_with_dedup` |
 | CI/CD | 已配置（Phase 8） | `.github/workflows/ci.yml` |
+| 兜底报告 | 已实现（Phase 9） | `api/task_finalizer.py`，确定性终态 |
+| 任务超时处理 | 已实现（Phase 9） | `api/server.py`，`_mark_task_timeout` 回调 |
 
 > 以上数据均来自本机实际命令运行结果。Token/cost 基准测试数据和 P95 延迟待专项基准运行后补充。
 
@@ -155,6 +157,7 @@ deep-search-agent/
 │   ├── prompts.py                 # YAML 提示词加载器
 │   ├── token_tracking.py          # LangChain 回调 token 追踪
 │   ├── telemetry.py               # 遥测记录
+│   ├── run_result.py               # AgentRunAccumulator + 流处理（Phase 9）
 │   └── sub_agents/
 │       ├── network_search_agent.py
 │       ├── database_query_agent.py
@@ -170,7 +173,9 @@ deep-search-agent/
 ├── api/
 │   ├── server.py                  # FastAPI 服务（REST + WebSocket）
 │   ├── monitor.py                 # 实时进度监控器
-│   └── context.py                 # ContextVar 会话隔离
+│   ├── context.py                 # ContextVar 会话隔离
+│   ├── persistence.py              # SQLite 任务状态持久化（Phase 8）
+│   ├── task_finalizer.py           # 确定性任务终态处理（Phase 9）
 ├── utils/
 │   ├── path_utils.py              # 路径安全工具
 │   └── word_converter.py          # PDF 转换（weasyprint 引擎）
@@ -199,7 +204,7 @@ deep-search-agent/
 - **WebSocket 鉴权**: 浏览器端 WebSocket 通过 `api_key` query parameter 传递 key，因为原生 WebSocket 构造器不能设置自定义 header。生产环境日志应避免记录完整 WebSocket URL。
 - **任务状态持久化**: 通过 SQLite（data/tasks.db）持久化任务状态，重启服务器不丢失。查询 GET /api/tasks/{thread_id}。
 - **CI/CD**: GitHub Actions 在 push/PR 到 main 时自动运行 pytest + 前端构建。API keys 需在 GitHub Secrets 中配置。
-- **Benchmark 数据**: 待执行专项基准测试——Phase 8 spec 中定义了 5 个固定查询。由于重复 E2E 当前存在非确定性，token before/after 对比不作为 Phase 8 验收证据。
+- **Benchmark 数据**: 待执行专项基准测试——Phase 8 spec 中定义了 5 个固定查询。Phase 9 增加了确定性终态（`completed` / `completed_with_fallback` / `failed`），每次 E2E 运行都有明确结果，为可靠的数据采集奠定了基础。
 
 ## License
 
