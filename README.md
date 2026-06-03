@@ -177,7 +177,7 @@ deep-search-agent/
 │   ├── monitor.py                 # Real-time progress monitor
 │   ├── context.py                 # ContextVar session isolation
 │   ├── persistence.py              # SQLite task state persistence (Phase 8)
-│   ├── task_finalizer.py           # Deterministic task finalization (Phase 9)
+│   └── task_finalizer.py           # Deterministic task finalization (Phase 9)
 ├── utils/
 │   ├── path_utils.py              # Path security helpers
 │   └── word_converter.py          # PDF 转换（weasyprint 引擎）

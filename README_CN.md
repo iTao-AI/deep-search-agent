@@ -175,7 +175,7 @@ deep-search-agent/
 │   ├── monitor.py                 # 实时进度监控器
 │   ├── context.py                 # ContextVar 会话隔离
 │   ├── persistence.py              # SQLite 任务状态持久化（Phase 8）
-│   ├── task_finalizer.py           # 确定性任务终态处理（Phase 9）
+│   └── task_finalizer.py           # 确定性任务终态处理（Phase 9）
 ├── utils/
 │   ├── path_utils.py              # 路径安全工具
 │   └── word_converter.py          # PDF 转换（weasyprint 引擎）
