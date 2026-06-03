@@ -108,11 +108,24 @@ flowchart TB
 | 子代理类型 | 3 种 | Network Search / Database Query / Knowledge Base |
 | 会话隔离 | ContextVar | 并发请求零串扰 |
 | 终态确定性 | 3 种终态 | completed / completed_with_fallback / failed |
+| 5-Query Benchmark | 5/5 完成，0 失败 | 390s 总耗时，1.38M tokens |
+| Fallback 率 | 60%（3/5） | 含 2 个外部服务不可用的 graceful degradation |
+| 正式报告产出 | 2/5（evidence-002, 003） | 14-15 KB 英文/中文报告 |
 | 前端 | Vue 3 + TypeScript | Vite 构建 ~100ms |
 | CI/CD | GitHub Actions | push/PR → pytest + build |
 | Docker | 完整部署 | 含 WeasyPrint 系统依赖 |
 
-> E2E Benchmark 数据待当前运行完成后补充。（5 问 × deepseek-chat，预计 ~30 分钟）
+### Benchmark 详情（2026-06-03，deepseek-chat，单次快照）
+
+| Query | 状态 | 耗时 | Token | Fallback |
+|---|---|---|---|---|
+| 2024年AI三大技术突破 | completed_with_fallback | 55s | 133K | ✓ |
+| RAG systems challenges (EN) | completed | 111s | 248K | — |
+| PyTorch vs JAX LLM 性能对比 | completed | 117s | 822K | — |
+| 数据库查询（MySQL 不可用） | completed_with_fallback | 16s | 39K | ✓ |
+| 知识库检索（RAGFlow 不可用） | completed_with_fallback | 91s | 134K | ✓ |
+
+> 成本说明：token_tracking 使用 Qwen-Max 定价显示 $58，实际 deepseek-chat 定价约 $0.41。单次快照，非统计采样。
 
 ## 核心设计决策
 

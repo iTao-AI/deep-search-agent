@@ -54,3 +54,42 @@
 - **Fallback 报告内容**: 线程 ID、生成时间、原始查询、最后一个 agent 输出、诊断事件列表
 - **测试覆盖**: 282 passed, 0 failed（含 `test_task_finalizer.py`、`test_persistence.py`、`test_monitor_sanitization.py` 中 Phase 9 相关用例）
 - **非目标**: 本阶段未做 5 问 benchmark、prompt 调优、真实 LLM E2E 入 CI
+
+## Phase 9 5-Query Benchmark（2026-06-03）
+
+- **日期**: 2026-06-03
+- **环境**: macOS, Python 3.13, deepseek-chat, 127.0.0.1:8000
+- **方法**: 5 条固定 query，`scripts/e2e_runner.py` 串行执行，每条 timeout 900s
+- **说明**: 单次快照，非统计采样。DeepSeek 不暴露 seed 参数，不同 run 的 token 消耗可能差异显著。
+
+### 逐条数据
+
+| Thread ID | Query | 目标子代理 | 状态 | 耗时 | Token | 子代理调用 | 工具调用 | 报告大小 | Fallback |
+|---|---|---|---|---|---|---|---|---|---|
+| evidence-001 | 2024年人工智能三大重要技术突破 | network_search | completed_with_fallback | 55s | 133,562 | 2 | 8 | 8,606 bytes | ✓ |
+| evidence-002 | What are the key challenges in implementing RAG systems? | network_search | completed | 111s | 247,921 | 2 | 10 | 14,399 bytes | — |
+| evidence-003 | 对比 PyTorch 和 JAX 在 LLM 训练中的性能差异 | network_search | completed | 117s | 821,685 | 2 | 23 | 15,427 bytes | — |
+| evidence-004 | 查询项目数据库中最近一个月的数据 | database_query | completed_with_fallback | 16s | 38,804 | 1 | 1 | 1,415 bytes | ✓ |
+| evidence-005 | 检索知识库中关于 Agent 架构的文档并总结 | knowledge_base | completed_with_fallback | 91s | 134,011 | 2 | 13 | 3,100 bytes | ✓ |
+
+### 汇总
+
+| 指标 | 值 |
+|------|-----|
+| 总耗时 | 390s（6.5 分钟） |
+| 平均耗时 | 78s（中位数 91s） |
+| Token 总量 | 1,375,983 |
+| Token 中位数 | 134,011 |
+| 完成率 | 5/5（0 failed, 0 timeout） |
+| Fallback 率 | 3/5（60%） |
+| 报告大小范围 | 1,415 — 15,427 bytes |
+
+### 备注
+
+- **evidence-001**（AI 突破）：网络搜索子代理正常工作，但 agent 未调用 write_file 工具写报告，走 fallback 路径。fallback 报告含最后一次 agent 文本输出和诊断事件列表。
+- **evidence-002**（RAG 挑战）：唯一产生正式报告的英文 query，agent 调用了 write_file 输出完整 Markdown 报告。
+- **evidence-003**（PyTorch vs JAX）：token 消耗最大（822K），agent 进行了多次搜索和对比，生成了正式报告。Token 波动在 DeepSeek 正常范围内。
+- **evidence-004**（数据库查询）：外部 MySQL 不可用，子代理快速返回失败后走 fallback 路径。16s 耗时说明系统正确处理了 graceful degradation。
+- **evidence-005**（知识库检索）：RAGFlow 未配置或不可用，走 fallback 路径。13 次工具调用说明 agent 尝试了多次检索。
+- **成本说明**: token_tracking.py 的定价模型基于 Qwen-Max（$0.04/1K prompt, $0.12/1K completion），本次报告显示 $58.38。实际 deepseek-chat 定价（$0.27/1M input, $1.10/1M output）成本约 $0.41。成本数字请以 DeepSeek 账单为准。
+- **evidence-004/005**: 这两个 query 的可用性依赖外部服务，结果证明了系统的 graceful degradation 能力 —— 不可用时走 fallback 而非 crash。
