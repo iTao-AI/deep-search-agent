@@ -61,7 +61,7 @@ User: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
 
 | Metric | Value | Source |
 |--------|-------|--------|
-| Local pytest run | 264 passed, 0 failed | `pytest -q` |
+| Local pytest run | 282 passed, 0 failed | `pytest -q` |
 | Docker deployment | Verified on localhost | [QA Report](docs/evidence/assets/qa-report-summary.md) |
 | Frontend build | Passed | `cd frontend && npm run build` |
 | E2E Run #1 | 282s, 459K tokens, 2 sub-agents, report.md generated | [Run Log](docs/evidence/run-log.md) |
@@ -71,6 +71,8 @@ User: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
 | SQLite persistence | Implemented (Phase 8) | `api/persistence.py`, `GET /api/tasks/{thread_id}` |
 | Search dedup | Implemented (Phase 8) | `tools/tavily_tools.py`, `search_with_dedup` |
 | CI/CD | Configured (Phase 8) | `.github/workflows/ci.yml` |
+| Fallback reports | Implemented (Phase 9) | `api/task_finalizer.py`, deterministic terminal states |
+| Task timeout handling | Implemented (Phase 9) | `api/server.py`, `_mark_task_timeout` callback |
 
 > All metrics above are from actual command runs on this machine. Token/cost benchmark data and P95 latency are pending dedicated benchmark runs.
 
@@ -157,6 +159,7 @@ deep-search-agent/
 │   ├── prompts.py                 # YAML prompt config loader
 │   ├── token_tracking.py          # LangChain callback for token tracking
 │   ├── telemetry.py               # Telemetry recording
+│   ├── run_result.py               # AgentRunAccumulator + stream processing (Phase 9)
 │   └── sub_agents/
 │       ├── network_search_agent.py
 │       ├── database_query_agent.py
@@ -172,7 +175,9 @@ deep-search-agent/
 ├── api/
 │   ├── server.py                  # FastAPI server (REST + WebSocket)
 │   ├── monitor.py                 # Real-time progress monitor
-│   └── context.py                 # ContextVar session isolation
+│   ├── context.py                 # ContextVar session isolation
+│   ├── persistence.py              # SQLite task state persistence (Phase 8)
+│   ├── task_finalizer.py           # Deterministic task finalization (Phase 9)
 ├── utils/
 │   ├── path_utils.py              # Path security helpers
 │   └── word_converter.py          # PDF 转换（weasyprint 引擎）
@@ -201,7 +206,7 @@ deep-search-agent/
 - **WebSocket auth**: Browser clients pass the key via the `api_key` query parameter because native WebSocket constructors cannot set custom headers. Production logs should avoid recording full WebSocket URLs.
 - **Task state persistence**: Tasks are persisted to SQLite (`data/tasks.db`) through `api/persistence.py`. Server restart does not lose completed task records. Query by `GET /api/tasks/{thread_id}`.
 - **CI/CD**: GitHub Actions runs backend tests and frontend build on push/PR to `main`. API keys must be configured in GitHub Secrets.
-- **Benchmark data**: Pending dedicated benchmark run — 5 fixed queries defined in the Phase 8 spec. Token before/after comparison is not used as Phase 8 acceptance evidence because repeated E2E runs are currently nondeterministic.
+- **Benchmark data**: Pending dedicated benchmark run — 5 fixed queries defined in the Phase 8 spec. Phase 9 added deterministic terminal states (`completed` / `completed_with_fallback` / `failed`) so every E2E run has a definite outcome; this lays the foundation for reliable benchmark data collection.
 
 ## License
 
