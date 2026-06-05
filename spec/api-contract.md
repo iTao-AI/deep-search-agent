@@ -2,6 +2,18 @@
 
 ## REST API
 
+### GET /health
+
+轻量服务健康检查，供上层 Agent / 自动化脚本确认 API 进程可达。
+
+**响应：**
+```json
+{
+  "status": "ok",
+  "service": "deep-search-agent"
+}
+```
+
 ### POST /api/task
 
 启动一个异步 Agent 任务。

@@ -45,7 +45,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Skip auth for docs and health endpoints
-        if request.url.path in ("/docs", "/openapi.json", "/redoc"):
+        if request.url.path in ("/docs", "/openapi.json", "/redoc", "/health"):
             return await call_next(request)
 
         api_secret = os.environ.get("API_SECRET", "")
@@ -83,6 +83,12 @@ app.add_middleware(
 )
 
 app.add_middleware(APIKeyMiddleware)
+
+
+@app.get("/health")
+async def health():
+    """Lightweight service health endpoint for agent-tool integrations."""
+    return {"status": "ok", "service": "deep-search-agent"}
 
 
 class TaskRequest(BaseModel):
