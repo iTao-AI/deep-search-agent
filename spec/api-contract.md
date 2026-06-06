@@ -2,6 +2,18 @@
 
 ## REST API
 
+### GET /health
+
+轻量服务健康检查，供上层 Agent / 自动化脚本确认 API 进程可达。
+
+**响应：**
+```json
+{
+  "status": "ok",
+  "service": "deep-search-agent"
+}
+```
+
 ### POST /api/task
 
 启动一个异步 Agent 任务。
@@ -10,7 +22,7 @@
 ```json
 {
   "query": "用户的研究问题（自然语言）",
-  "upload_files": ["可选：上传的文件路径数组"]
+  "thread_id": "可选：1-128 位字母、数字、点、下划线或连字符"
 }
 ```
 
@@ -146,7 +158,9 @@ WebSocket events: `session_created`, `tool_start`, `assistant_call`, `task_resul
 
 ## 认证
 
-当前无认证。生产环境应添加 API Key 或 JWT 认证。
+除 `/health` 和 API 文档外，HTTP API 在配置 `API_SECRET` 后要求通过 `X-API-Key` 请求头传递密钥。工具客户端只从 `DEEP_SEARCH_AGENT_API_KEY` 环境变量读取密钥，不接受命令行密钥参数。
+
+所有调用方提供的 `thread_id` 必须为 1-128 位字母、数字、点、下划线或连字符；服务端会拒绝路径分隔符和路径穿越形式。
 
 ## 错误响应
 
