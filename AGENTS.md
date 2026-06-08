@@ -42,7 +42,7 @@ npm run build        # Type-check + production build
 
 ```
 agent/main_agent.py        — LangGraph agent creation + async entry point (run_deep_agent)
-agent/llm.py               — LLM initialization (Qwen-Max via DashScope)
+agent/llm.py               — LLM initialization (DeepSeek official API via OpenAI-compatible client)
 agent/prompts.py           — YAML prompt config loader (prompt/prompts.yml)
 agent/sub_agents/          — Three sub-agents: network_search, database_query, knowledge_base
 
@@ -74,7 +74,8 @@ api/context.py             — ContextVar-based session isolation (async-safe)
 
 Required in `.env` (copy from `.env.example`):
 
-- `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `LLM_QWEN_MAX` — DashScope LLM config
+- `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `LLM_MODEL`, `LLM_FALLBACK_MODEL`, `LLM_REASONING_EFFORT`, `LLM_THINKING_MODE` — DeepSeek official API config
+- `LLM_QWEN_MAX` — Legacy model variable, used only when `LLM_MODEL` is not set
 - `TAVILY_API_KEY` — Network search
 - `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_PORT` — Database
 - `RAGFLOW_API_URL`, `RAGFLOW_API_KEY` — Knowledge base

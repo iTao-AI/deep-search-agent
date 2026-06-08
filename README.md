@@ -112,7 +112,7 @@ See: [`api/upload_security.py`](api/upload_security.py), [`utils/path_utils.py`]
 - Python >= 3.11
 - Node.js 20.19+ or 22.12+
 - Tavily API key
-- DashScope API key
+- DeepSeek API key
 
 ### 1. Install Backend Dependencies
 

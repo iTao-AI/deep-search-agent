@@ -110,7 +110,7 @@ Tavily 和 RAGFlow 调用包裹了超时策略和指数退避重试装饰器。M
 - Python >= 3.11
 - Node.js 20.19+ 或 22.12+
 - Tavily API 密钥
-- DashScope API 密钥
+- DeepSeek API 密钥
 
 ### 1. 安装后端依赖
 
