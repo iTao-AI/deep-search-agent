@@ -17,6 +17,7 @@ from typing import Any
 _URL_RE = re.compile(r"https?://[^\s)>\]\"']+")
 _MAX_SNIPPET_LENGTH = 1000
 _MAX_EVIDENCE_PER_TOOL_MESSAGE = 10
+_URL_TRAILING_PUNCTUATION = ".,;:!?"
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,10 @@ def _url_from_mapping(item: dict[str, Any]) -> str | None:
     return None
 
 
+def _normalize_url(url: str) -> str:
+    return url.rstrip(_URL_TRAILING_PUNCTUATION)
+
+
 def _snippet_from_mapping(item: dict[str, Any]) -> str:
     for key in ("content", "snippet", "raw_content", "answer", "summary", "title"):
         value = item.get(key)
@@ -117,13 +122,16 @@ def extract_evidence_entries(
     for item in items:
         if not isinstance(item, dict):
             continue
+        source_url = _url_from_mapping(item)
+        if source_url is None:
+            continue
         entries.append(
             EvidenceEntry(
                 thread_id=thread_id,
                 query_text=query_text,
                 subagent_name=subagent_name,
                 tool_name=tool_name,
-                source_url=_url_from_mapping(item),
+                source_url=_normalize_url(source_url),
                 snippet=_snippet_from_mapping(item),
             )
         )
@@ -143,24 +151,20 @@ def extract_evidence_entries(
                     query_text=query_text,
                     subagent_name=subagent_name,
                     tool_name=tool_name,
-                    source_url=url,
+                    source_url=_normalize_url(url),
                     snippet=text,
                 )
             )
         return entries
 
-    if text:
-        return [
-            EvidenceEntry(
-                thread_id=thread_id,
-                query_text=query_text,
-                subagent_name=subagent_name,
-                tool_name=tool_name,
-                source_url=None,
-                snippet=text,
-            )
-        ]
     return []
+
+
+def _url_is_cited(source_url: str, report_text: str) -> bool:
+    for match in _URL_RE.finditer(report_text):
+        if _normalize_url(match.group(0)) == source_url:
+            return True
+    return False
 
 
 def mark_cited_evidence(
@@ -169,7 +173,7 @@ def mark_cited_evidence(
     """Mark evidence as cited when its source URL appears in the final report."""
     marked: list[EvidenceEntry] = []
     for entry in entries:
-        if entry.source_url and entry.source_url in report_text:
+        if entry.source_url and _url_is_cited(entry.source_url, report_text):
             marked.append(replace(entry, citation_status="cited"))
         else:
             marked.append(entry)

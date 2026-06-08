@@ -137,18 +137,18 @@ def finalize_task_run(run_result: AgentRunResult) -> TaskFinalization:
 
     output_path = str(report_path)
     token_usage = _token_usage(run_result.thread_id)
-    update_task(
-        thread_id=run_result.thread_id,
-        status=status,
-        output_path=output_path,
-        token_usage_json=_token_usage_json(token_usage),
-    )
     persist_research_run(
         run_result=run_result,
         status=status,
         output_path=output_path,
         fallback_used=fallback_used,
         token_usage=token_usage,
+    )
+    update_task(
+        thread_id=run_result.thread_id,
+        status=status,
+        output_path=output_path,
+        token_usage_json=_token_usage_json(token_usage),
     )
     monitor.report_task_finalized(
         thread_id=run_result.thread_id,

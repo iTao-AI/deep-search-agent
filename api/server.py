@@ -6,6 +6,7 @@ import logging
 import json
 import uvicorn
 from pathlib import Path
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
@@ -119,6 +120,34 @@ def _validated_thread_id(thread_id: str) -> str:
 
 async def _mark_task_timeout(thread_id: str, timeout_seconds: int) -> None:
     error_message = f"Agent task timed out after {timeout_seconds}s"
+    task = await asyncio.to_thread(get_task, thread_id=thread_id)
+    query = task["query"] if task and task.get("query") else ""
+    completed_at = datetime.now(timezone.utc).isoformat()
+    await asyncio.to_thread(
+        save_research_run,
+        thread_id=thread_id,
+        query=query,
+        status="failed",
+        completed_at=completed_at,
+        output_path=None,
+        fallback_used=False,
+        diagnostics_json=json.dumps([f"timeout:{timeout_seconds}s"], ensure_ascii=False),
+        token_usage_json="{}",
+        quality_report_json=json.dumps(
+            {
+                "status": "failed",
+                "issues": [
+                    {
+                        "code": "task_timeout",
+                        "severity": "error",
+                        "message": error_message,
+                    }
+                ],
+                "metrics": {"timeout_seconds": timeout_seconds},
+            },
+            ensure_ascii=False,
+        ),
+    )
     await asyncio.to_thread(
         update_task,
         thread_id=thread_id,

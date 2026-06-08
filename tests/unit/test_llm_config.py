@@ -7,6 +7,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.runnables import RunnableLambda
 
 
 class FakeChatModel(BaseChatModel):
@@ -23,6 +24,18 @@ class FakeChatModel(BaseChatModel):
 class FailingChatModel(FakeChatModel):
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         raise RuntimeError("primary failed")
+
+
+class ToolBindingChatModel(FakeChatModel):
+    fail_bound: bool = False
+
+    def bind_tools(self, tools, *, tool_choice=None, **kwargs):
+        def _run(_input):
+            if self.fail_bound:
+                raise RuntimeError(f"{self.model_name} bound failed")
+            return AIMessage(content=f"{self.model_name} bound")
+
+        return RunnableLambda(_run)
 
 
 def _reload_llm(monkeypatch, env: dict[str, str]):
@@ -137,3 +150,33 @@ def test_fallback_chat_model_invokes_fallback_after_primary_failure(monkeypatch)
     response = model.invoke("hello")
 
     assert response.content == "fallback"
+
+
+def test_fallback_chat_model_logs_primary_failure(monkeypatch, caplog):
+    llm, _ = _reload_llm(monkeypatch, {"OPENAI_API_KEY": "test-key"})
+    model = llm.FallbackChatModel(
+        primary=FailingChatModel(model_name="primary"),
+        fallback=FakeChatModel(model_name="fallback"),
+    )
+
+    with caplog.at_level("WARNING"):
+        response = model.invoke("hello")
+
+    assert response.content == "fallback"
+    assert "Primary LLM failed; falling back to fallback model" in caplog.text
+
+
+def test_bind_tools_preserves_logged_fallback_path(monkeypatch, caplog):
+    llm, _ = _reload_llm(monkeypatch, {"OPENAI_API_KEY": "test-key"})
+    model = llm.FallbackChatModel(
+        primary=ToolBindingChatModel(model_name="primary", fail_bound=True),
+        fallback=ToolBindingChatModel(model_name="fallback"),
+    )
+
+    bound = model.bind_tools([])
+
+    with caplog.at_level("WARNING"):
+        response = bound.invoke("hello")
+
+    assert response.content == "fallback bound"
+    assert "Primary LLM failed after tool binding; falling back to fallback model" in caplog.text

@@ -208,3 +208,35 @@ class TestTaskFinalizer:
         assert research_run["assistant_calls"] == 1
         assert research_run["tool_starts"] == 1
         assert research_run["evidence"][0]["citation_status"] == "cited"
+
+    def test_finalize_does_not_mark_task_completed_when_research_persistence_fails(
+        self, tmp_path, task_db, monkeypatch
+    ):
+        from api.persistence import get_task
+        import api.task_finalizer as task_finalizer
+
+        thread_id = "finalizer-persistence-failure"
+        session_dir = tmp_path / f"session_{thread_id}"
+        session_dir.mkdir()
+        report = session_dir / "report.md"
+        report.write_text("report", encoding="utf-8")
+        _save_task(thread_id, "query")
+
+        def fail_persist(*args, **kwargs):
+            raise RuntimeError("research persistence failed")
+
+        monkeypatch.setattr(task_finalizer, "persist_research_run", fail_persist)
+
+        result = AgentRunResult(
+            thread_id=thread_id,
+            query="query",
+            session_dir=session_dir,
+            last_agent_text="agent text",
+        )
+
+        with pytest.raises(RuntimeError, match="research persistence failed"):
+            task_finalizer.finalize_task_run(result)
+
+        task = get_task(thread_id=thread_id)
+        assert task["status"] == "running"
+        assert task["output_path"] is None

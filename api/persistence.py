@@ -97,7 +97,6 @@ def save_task(
            ON CONFLICT(thread_id) DO UPDATE SET
              query = excluded.query,
              status = excluded.status,
-             created_at = excluded.created_at,
              started_at = NULL,
              completed_at = NULL,
              output_path = NULL,
@@ -216,8 +215,7 @@ def save_research_run(
              tool_starts = excluded.tool_starts,
              diagnostics_json = excluded.diagnostics_json,
              token_usage_json = excluded.token_usage_json,
-             quality_report_json = excluded.quality_report_json,
-             created_at = excluded.created_at""",
+             quality_report_json = excluded.quality_report_json""",
         (
             thread_id,
             query,
@@ -245,30 +243,32 @@ def replace_evidence_entries(
     entries = entries or []
     path = _get_db_path(db_path)
     conn = init_db(path)
-    conn.execute("DELETE FROM evidence_entries WHERE thread_id = ?", (thread_id,))
-    conn.executemany(
-        """INSERT INTO evidence_entries (
-             thread_id, query_text, subagent_name, tool_name, source_url, snippet,
-             citation_status, verification_status, created_at
-           )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [
-            (
-                item.thread_id,
-                item.query_text,
-                item.subagent_name,
-                item.tool_name,
-                item.source_url,
-                item.snippet,
-                item.citation_status,
-                item.verification_status,
-                item.created_at,
+    try:
+        with conn:
+            conn.execute("DELETE FROM evidence_entries WHERE thread_id = ?", (thread_id,))
+            conn.executemany(
+                """INSERT INTO evidence_entries (
+                     thread_id, query_text, subagent_name, tool_name, source_url, snippet,
+                     citation_status, verification_status, created_at
+                   )
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                [
+                    (
+                        item.thread_id,
+                        item.query_text,
+                        item.subagent_name,
+                        item.tool_name,
+                        item.source_url,
+                        item.snippet,
+                        item.citation_status,
+                        item.verification_status,
+                        item.created_at,
+                    )
+                    for item in entries
+                ],
             )
-            for item in entries
-        ],
-    )
-    conn.commit()
-    conn.close()
+    finally:
+        conn.close()
 
 
 def _research_run_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:

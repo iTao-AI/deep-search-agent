@@ -1,4 +1,5 @@
 from dotenv import load_dotenv, find_dotenv
+import logging
 import os
 from typing import Any, Sequence
 
@@ -8,13 +9,39 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
+from langchain_core.runnables import Runnable
 
 load_dotenv(find_dotenv())
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_LLM_MODEL = "deepseek-v4-pro"
 DEFAULT_LLM_FALLBACK_MODEL = "deepseek-v4-flash"
 DEFAULT_REASONING_EFFORT = "max"
 DEFAULT_THINKING_MODE = "enabled"
+
+
+class FallbackRunnable(Runnable):
+    """Runnable fallback wrapper that logs primary failures."""
+
+    def __init__(self, primary: Runnable, fallback: Runnable, warning_message: str):
+        self.primary = primary
+        self.fallback = fallback
+        self.warning_message = warning_message
+
+    def invoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
+        try:
+            return self.primary.invoke(input, config=config, **kwargs)
+        except Exception:
+            logger.warning(self.warning_message, exc_info=True)
+            return self.fallback.invoke(input, config=config, **kwargs)
+
+    async def ainvoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
+        try:
+            return await self.primary.ainvoke(input, config=config, **kwargs)
+        except Exception:
+            logger.warning(self.warning_message, exc_info=True)
+            return await self.fallback.ainvoke(input, config=config, **kwargs)
 
 
 class FallbackChatModel(BaseChatModel):
@@ -44,6 +71,7 @@ class FallbackChatModel(BaseChatModel):
         try:
             return self.primary._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
         except Exception:
+            logger.warning("Primary LLM failed; falling back to fallback model", exc_info=True)
             return self.fallback._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
     async def _agenerate(
@@ -56,6 +84,7 @@ class FallbackChatModel(BaseChatModel):
         try:
             return await self.primary._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
         except Exception:
+            logger.warning("Primary LLM failed; falling back to fallback model", exc_info=True)
             return await self.fallback._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
     def bind_tools(
@@ -70,7 +99,13 @@ class FallbackChatModel(BaseChatModel):
             bind_kwargs["tool_choice"] = tool_choice
         primary = self.primary.bind_tools(tools, **bind_kwargs)
         fallback = self.fallback.bind_tools(tools, **bind_kwargs)
-        return primary.with_fallbacks([fallback])
+        return FallbackRunnable(
+            primary=primary,
+            fallback=fallback,
+            warning_message=(
+                "Primary LLM failed after tool binding; falling back to fallback model"
+            ),
+        )
 
 
 def _env_value(name: str) -> str | None:
