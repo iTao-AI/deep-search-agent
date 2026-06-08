@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from agent.run_result import AgentRunResult
+from agent.research import EvidenceEntry
 
 
 @pytest.fixture
@@ -163,3 +164,47 @@ class TestTaskFinalizer:
 
         assert captured_results
         assert isinstance(captured_results[0], str)
+
+    def test_persists_research_run_and_marks_cited_evidence(self, tmp_path, task_db):
+        from api.persistence import get_research_run_with_evidence
+        from api.task_finalizer import finalize_task_run
+
+        thread_id = "finalizer-research-run"
+        session_dir = tmp_path / f"session_{thread_id}"
+        session_dir.mkdir()
+        report = session_dir / "report.md"
+        report.write_text(
+            "The report cites https://example.com/source as evidence.",
+            encoding="utf-8",
+        )
+        _save_task(thread_id, "query")
+
+        result = AgentRunResult(
+            thread_id=thread_id,
+            query="query",
+            session_dir=session_dir,
+            last_agent_text="agent text",
+            assistant_calls=1,
+            tool_starts=1,
+            diagnostics=["tool:tavily_search"],
+            evidence_entries=[
+                EvidenceEntry(
+                    thread_id=thread_id,
+                    query_text="query",
+                    subagent_name="network_search",
+                    tool_name="tavily_search",
+                    source_url="https://example.com/source",
+                    snippet="source summary",
+                )
+            ],
+        )
+
+        finalize_task_run(result)
+        research_run = get_research_run_with_evidence(thread_id=thread_id)
+
+        assert research_run["thread_id"] == thread_id
+        assert research_run["status"] == "completed"
+        assert research_run["quality_report"]["status"] == "passed"
+        assert research_run["assistant_calls"] == 1
+        assert research_run["tool_starts"] == 1
+        assert research_run["evidence"][0]["citation_status"] == "cited"

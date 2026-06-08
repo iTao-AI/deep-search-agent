@@ -3,6 +3,7 @@ import os
 import uuid
 import asyncio
 import logging
+import json
 import uvicorn
 from pathlib import Path
 from dotenv import load_dotenv
@@ -29,7 +30,14 @@ from api.monitor import monitor, manager
 from api.upload_security import sanitize_filename, validate_filename
 from api.cors_config import get_allowed_origins
 from api.task_tracker import create_tracked_task
-from api.persistence import save_task, update_task, get_task
+from api.persistence import (
+    get_research_run_with_evidence,
+    get_task,
+    list_research_runs,
+    save_research_run,
+    save_task,
+    update_task,
+)
 from api.task_finalizer import finalize_task_run, TaskFinalization
 from api.thread_ids import safe_session_dir, validate_thread_id
 
@@ -143,6 +151,30 @@ async def _run_task_with_persistence(query: str, thread_id: str) -> TaskFinaliza
             status="failed",
             error_message=str(e),
         )
+        await asyncio.to_thread(
+            save_research_run,
+            thread_id=thread_id,
+            query=query,
+            status="failed",
+            completed_at=None,
+            output_path=None,
+            fallback_used=False,
+            diagnostics_json=json.dumps([f"error:{str(e)}"], ensure_ascii=False),
+            token_usage_json="{}",
+            quality_report_json=json.dumps(
+                {
+                    "status": "failed",
+                    "issues": [
+                        {
+                            "code": "agent_error",
+                            "severity": "error",
+                            "message": "Agent execution failed.",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+        )
         monitor.report_task_finalized(
             thread_id=thread_id,
             status="failed",
@@ -177,6 +209,23 @@ async def get_task_status(thread_id: str):
     if task is None:
         return JSONResponse(status_code=404, content={"detail": "任务不存在"})
     return task
+
+
+@app.get("/api/research/runs")
+async def get_research_runs(limit: int = 50):
+    """List recent auditable research runs."""
+    runs = await asyncio.to_thread(list_research_runs, limit=limit)
+    return {"runs": runs}
+
+
+@app.get("/api/research/runs/{thread_id}")
+async def get_research_run(thread_id: str):
+    """Get one ResearchRun with its EvidenceLedger entries."""
+    thread_id = _validated_thread_id(thread_id)
+    run = await asyncio.to_thread(get_research_run_with_evidence, thread_id=thread_id)
+    if run is None:
+        return JSONResponse(status_code=404, content={"detail": "ResearchRun 不存在"})
+    return run
 
 
 @app.post("/api/upload")
