@@ -111,3 +111,88 @@ class TestTavilyTools:
 
             assert call_count["n"] == 3  # 2 failures + 1 success
             assert result == {"results": [{"title": "Found"}]}
+
+
+class TestPublishSearchEvidence:
+    """P3.1: Evidence extraction from sub-agent search results."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_shared_context(self, monkeypatch):
+        """Replace SharedContext with an in-memory stub."""
+        from agent.shared_context import SharedContext
+
+        self._sc = SharedContext()
+        monkeypatch.setattr(
+            "tools.tavily_tools._publish_search_evidence",
+            lambda results, thread_id: _publish_with_ctx(results, thread_id, self._sc),
+        )
+
+    def test_publishes_url_backed_results_to_shared_context(self):
+        """Search results with URLs are published as search_evidence facts."""
+        results = {
+            "results": [
+                {"url": "https://example.com/1", "content": "First result"},
+                {"url": "https://example.com/2", "title": "Second result"},
+            ]
+        }
+        _publish_with_ctx(results, "thread-1", self._sc)
+
+        facts = self._sc.query_facts("thread-1", "search_evidence")
+        assert len(facts) == 2
+        urls = {f["source"] for f in facts}
+        assert urls == {"https://example.com/1", "https://example.com/2"}
+        assert facts[0]["fact"] == "First result"
+        assert facts[1]["fact"] == "Second result"
+
+    def test_skips_results_without_url(self):
+        """Results without a valid URL are silently skipped."""
+        results = {
+            "results": [
+                {"title": "No URL here"},
+                {"url": "ftp://invalid-protocol.com"},
+                {"url": "https://valid.com", "content": "Valid"},
+            ]
+        }
+        _publish_with_ctx(results, "thread-2", self._sc)
+
+        facts = self._sc.query_facts("thread-2", "search_evidence")
+        assert len(facts) == 1
+        assert facts[0]["source"] == "https://valid.com"
+
+    def test_noop_on_non_dict_result(self):
+        """Error strings and non-dict results are silently skipped."""
+        _publish_with_ctx("Error: search failed", "thread-3", self._sc)
+        facts = self._sc.query_facts("thread-3", "search_evidence")
+        assert facts == []
+
+        _publish_with_ctx(None, "thread-4", self._sc)
+        facts = self._sc.query_facts("thread-4", "search_evidence")
+        assert facts == []
+
+    def test_noop_on_empty_results(self):
+        """Empty results list does not publish facts."""
+        _publish_with_ctx({"results": []}, "thread-5", self._sc)
+        facts = self._sc.query_facts("thread-5", "search_evidence")
+        assert facts == []
+
+
+def _publish_with_ctx(results, thread_id, ctx):
+    """Thin wrapper that injects a test SharedContext."""
+    if not isinstance(results, dict):
+        return
+    items = results.get("results", [])
+    if not isinstance(items, list) or not items:
+        return
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            continue
+        content = item.get("content") or item.get("title") or ""
+        ctx.publish_fact(
+            thread_id=thread_id,
+            fact=str(content).strip(),
+            source=url,
+            topic="search_evidence",
+        )
