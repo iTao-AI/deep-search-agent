@@ -154,7 +154,10 @@ def test_profile_manifest_exposes_policy_without_runtime_secrets():
     assert response.status_code == 200
     manifest = response.json()
     assert manifest["profile"]["profile_id"] == "talent-hiring-signal"
-    assert manifest["harness_policy"]["allowed_tools"] == ["internet_search"]
+    assert manifest["harness_policy"]["allowed_tools"] == [
+        "internet_search",
+        "provided_aggregate",
+    ]
     assert "api_key" not in str(manifest).lower()
 
 

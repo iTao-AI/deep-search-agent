@@ -32,15 +32,15 @@ def talent_public_search(
                 "message": "No declared public source domains are available for this run.",
             },
         }
-    scoped_query = f"{query} ({' OR '.join(f'site:{domain}' for domain in allowed_domains)})"
     execution_id = get_run_context() or "default"
     result = search_with_dedup(
-        scoped_query,
+        query,
         search_fn=_internet_search_impl,
         thread_id=execution_id,
         max_results=max_results,
         topic=topic,
         include_raw_content=include_raw_content,
+        include_domains=allowed_domains,
     )
     if isinstance(result, str) and result.startswith("Error:"):
         return {

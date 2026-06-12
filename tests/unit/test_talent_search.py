@@ -45,7 +45,8 @@ def test_talent_public_search_scopes_query_and_filters_results(monkeypatch):
         _run_id_ctx.reset(run_token)
         _allowed_source_domains_ctx.reset(domains_token)
 
-    assert "site:jobs.example.com" in captured["query"]
+    assert captured["query"] == "AI agent engineer"
+    assert captured["include_domains"] == ("jobs.example.com",)
     assert result == {
         "status": "ok",
         "results": [

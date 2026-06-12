@@ -31,6 +31,7 @@ from api.context import (
     set_session_context,
     set_thread_context,
     set_allowed_source_domains_context,
+    set_allowed_aggregate_ids_context,
 )
 from api.thread_ids import safe_session_dir
 
@@ -116,6 +117,17 @@ def _allowed_source_domains(scope: dict | None) -> tuple[str, ...]:
     return tuple(sorted(domains))
 
 
+def _allowed_aggregate_ids(scope: dict | None) -> tuple[str, ...]:
+    aggregate_ids = {
+        sample["reference"]
+        for sample in (scope or {}).get("declared_samples", [])
+        if isinstance(sample, dict)
+        and sample.get("source_type") == "provided_aggregate"
+        and isinstance(sample.get("reference"), str)
+    }
+    return tuple(sorted(aggregate_ids))
+
+
 def _process_stream_chunk(chunk, accumulator: AgentRunAccumulator):
     """Process LangGraph stream output and report events to frontend."""
     process_stream_chunk(chunk, accumulator, monitor)
@@ -185,6 +197,11 @@ async def run_deep_agent(
     segment_token = set_segment_context(segment_id)
     allowed_source_domains_token = set_allowed_source_domains_context(
         _allowed_source_domains(scope)
+        if profile_id == "talent-hiring-signal"
+        else ()
+    )
+    allowed_aggregate_ids_token = set_allowed_aggregate_ids_context(
+        _allowed_aggregate_ids(scope)
         if profile_id == "talent-hiring-signal"
         else ()
     )
@@ -265,6 +282,7 @@ async def run_deep_agent(
                 run_token,
                 segment_token=segment_token,
                 allowed_source_domains_token=allowed_source_domains_token,
+                allowed_aggregate_ids_token=allowed_aggregate_ids_token,
             )
         shared_context.clear_facts(execution_id)
         clear_search_cache(execution_id)

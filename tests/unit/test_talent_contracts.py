@@ -61,6 +61,35 @@ def test_research_scope_rejects_non_url_public_job_posting_reference():
         ResearchScope.model_validate(payload)
 
 
+def test_research_scope_rejects_declared_source_type_outside_allowlist():
+    from agent.talent_contracts import ResearchScope
+
+    payload = _scope_payload()
+    payload["declared_samples"] = [{
+        "sample_id": "aggregate-1",
+        "source_type": "provided_aggregate",
+        "reference": "talent-hiring-signal-v1",
+    }]
+
+    with pytest.raises(ValidationError, match="allowed_source_types"):
+        ResearchScope.model_validate(payload)
+
+
+def test_research_scope_rejects_path_like_provided_aggregate_reference():
+    from agent.talent_contracts import ResearchScope
+
+    payload = _scope_payload()
+    payload["declared_samples"] = [{
+        "sample_id": "aggregate-1",
+        "source_type": "provided_aggregate",
+        "reference": "../secret",
+    }]
+    payload["allowed_source_types"] = ["provided_aggregate"]
+
+    with pytest.raises(ValidationError, match="versioned aggregate ID"):
+        ResearchScope.model_validate(payload)
+
+
 def test_deterministic_review_requires_claim_without_evidence():
     from agent.talent_contracts import Claim, EvidenceSnapshot
     from api.review_service import build_review_bundle

@@ -157,6 +157,23 @@ API endpoints:
 
 WebSocket events: `session_created`, `tool_start`, `assistant_call`, `task_result`, `task_finalized`, `run_timeout`, `error`
 
+### Talent Benchmark Fixtures
+
+Talent runs can read server-bundled `provided_aggregate` fixtures without
+receiving filesystem or upload access. The provider is disabled by default and
+only resolves aggregate IDs declared in a validated `ResearchScope`.
+
+```bash
+export DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES=true
+
+# Example fixture and matching scope:
+# benchmarks/fixtures/talent-hiring-signal-v1.json
+# benchmarks/talent-hiring-signal-v1/research-scope.json
+```
+
+The provider never accepts caller-controlled paths. Keep it disabled outside
+explicit benchmark or development runs.
+
 ## Project Structure
 
 ```

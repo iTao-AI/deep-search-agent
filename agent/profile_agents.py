@@ -9,6 +9,7 @@ from deepagents.backends import StateBackend
 from agent.profile_registry import AgentHarnessPolicy, ProfileSpec
 from agent.talent_contracts import ResearchPacket
 from tools.talent_search import talent_public_search
+from tools.provided_aggregate import provided_aggregate
 
 
 TALENT_COORDINATOR_PROMPT = """
@@ -20,7 +21,7 @@ Return only conclusions grounded in the researcher's structured packet.
 
 TALENT_RESEARCHER_PROMPT = """
 You are the bounded Hiring Signal Researcher.
-Use only internet_search and only for the declared public sample scope.
+Use only internet_search or provided_aggregate and only for the declared sample scope.
 Return a schema-valid ResearchPacket. Every claim must reference findings and evidence.
 State contradictions, evidence gaps, and limitations explicitly.
 Never request or infer personal candidate data.
@@ -61,7 +62,7 @@ def compile_profile_agent(
         "name": "general-purpose",
         "description": "Research the declared Talent Hiring Signal scope.",
         "system_prompt": TALENT_RESEARCHER_PROMPT,
-        "tools": [talent_public_search],
+        "tools": [talent_public_search, provided_aggregate],
         "skills": [],
         "permissions": permissions,
         "response_format": ResearchPacket,
