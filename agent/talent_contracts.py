@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import re
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
@@ -12,6 +13,7 @@ BoundedString = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
 ]
 SourceType = Literal["public_job_posting", "provided_aggregate"]
+_AGGREGATE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 class ContractModel(BaseModel):
@@ -43,6 +45,10 @@ class SampleRef(ContractModel):
             parsed = urlparse(self.reference)
             if parsed.scheme not in {"http", "https"} or not parsed.hostname:
                 raise ValueError("public_job_posting reference must be an http(s) URL")
+        if self.source_type == "provided_aggregate" and not _AGGREGATE_ID_RE.fullmatch(
+            self.reference
+        ):
+            raise ValueError("provided_aggregate reference must be a versioned aggregate ID")
         return self
 
 
@@ -54,6 +60,19 @@ class ResearchScope(ContractModel):
     allowed_source_types: list[SourceType] = Field(min_length=1, max_length=2)
     research_questions: list[BoundedString] = Field(min_length=1, max_length=20)
     requested_outputs: list[BoundedString] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_declared_source_types(self):
+        allowed = set(self.allowed_source_types)
+        undeclared = {
+            sample.source_type for sample in self.declared_samples
+            if sample.source_type not in allowed
+        }
+        if undeclared:
+            raise ValueError(
+                "declared sample source types must be included in allowed_source_types"
+            )
+        return self
 
 
 class Finding(ContractModel):

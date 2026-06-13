@@ -188,8 +188,12 @@ def test_talent_profile_does_not_copy_uploaded_files_into_run_workspace(tmp_path
 
         class FakeTalentAgent:
             async def astream(self, *args, **kwargs):
-                from api.context import get_allowed_source_domains_context
+                from api.context import (
+                    get_allowed_aggregate_ids_context,
+                    get_allowed_source_domains_context,
+                )
                 assert get_allowed_source_domains_context() == ("jobs.example.com",)
+                assert get_allowed_aggregate_ids_context() == ("aggregate-v1",)
                 if False:
                     yield None
 
@@ -212,6 +216,10 @@ def test_talent_profile_does_not_copy_uploaded_files_into_run_workspace(tmp_path
                         {{
                             "source_type": "public_job_posting",
                             "reference": "https://jobs.example.com/role",
+                        }},
+                        {{
+                            "source_type": "provided_aggregate",
+                            "reference": "aggregate-v1",
                         }}
                     ]
                 }},
@@ -219,8 +227,12 @@ def test_talent_profile_does_not_copy_uploaded_files_into_run_workspace(tmp_path
         )
 
         assert not (outcome.session_dir / "private.txt").exists()
-        from api.context import get_allowed_source_domains_context
+        from api.context import (
+            get_allowed_aggregate_ids_context,
+            get_allowed_source_domains_context,
+        )
         assert get_allowed_source_domains_context() == ()
+        assert get_allowed_aggregate_ids_context() == ()
         print("OK")
         """
     )

@@ -51,6 +51,7 @@ class TestTavilyTools:
             result = asyncio.run(_tavily_search(
                 query="test", max_results=5, topic="general",
                 include_raw_content=False, timeout=15,
+                include_domains=("jobs.example.com",),
             ))
             mock_client.search.assert_called_once()
             call_args = mock_client.search.call_args
@@ -59,6 +60,7 @@ class TestTavilyTools:
             assert call_kwargs["max_results"] == 5
             assert call_kwargs["topic"] == "general"
             assert call_kwargs["include_raw_content"] is False
+            assert call_kwargs["include_domains"] == ("jobs.example.com",)
             # query is passed as positional arg
             assert call_args[0][0] == "test"
             assert result == [{"title": "Test", "url": "http://test.com"}]

@@ -18,6 +18,7 @@ async def _tavily_search(
     topic: str,
     include_raw_content: bool,
     timeout: int,
+    include_domains: tuple[str, ...] = (),
 ) -> dict:
     """Async wrapper around the synchronous Tavily SDK search call.
 
@@ -36,6 +37,7 @@ async def _tavily_search(
             include_raw_content=include_raw_content,
             topic=topic,
             timeout=timeout,
+            include_domains=include_domains or None,
         ),
     )
     if result is None:
@@ -53,6 +55,7 @@ async def _cached_search_with_resilience(
     max_results: int,
     topic: str,
     include_raw_content: bool,
+    include_domains: tuple[str, ...] = (),
 ) -> dict:
     """Resilient Tavily search with centralized retry and timeout, cached."""
     timeout = TIMEOUTS["tavily"]
@@ -65,6 +68,7 @@ async def _cached_search_with_resilience(
             max_results,
             topic,
             include_raw_content,
+            include_domains=include_domains,
             timeout=timeout,
             max_retries=3,
             service_name="tavily",
@@ -135,6 +139,7 @@ def _internet_search_impl(
     max_results: int = 5,
     topic: Literal["general", "news", "finance"] = "general",
     include_raw_content: bool = False,
+    include_domains: tuple[str, ...] = (),
 ):
     """Execute Tavily search without per-thread de-duplication."""
     api_key = os.getenv("TAVILY_API_KEY")
@@ -144,7 +149,9 @@ def _internet_search_impl(
     monitor.report_tool("网络搜索工具", {"网络搜索工具": query})
     try:
         results = asyncio.run(
-            _cached_search_with_resilience(query, max_results, topic, include_raw_content)
+            _cached_search_with_resilience(
+                query, max_results, topic, include_raw_content, include_domains
+            )
         )
         monitor.report_end("网络搜索工具", results)
         return results

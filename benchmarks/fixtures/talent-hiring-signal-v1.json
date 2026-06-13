@@ -1,0 +1,30 @@
+{
+  "aggregate_id": "talent-hiring-signal-v1",
+  "samples": [
+    {
+      "sample_id": "sample-agent-platform",
+      "source_url": "https://www.zhipin.com/job_detail/057a5147148c816d0nZ82ty0EVpV.html",
+      "content": "智慧树 AI Agent 工程师快照：要求自主规划与工具调用、API 与外部系统集成、记忆与知识库、多 Agent 与人工接管、评测与可观测、安全与可靠性。"
+    },
+    {
+      "sample_id": "sample-enterprise-rag",
+      "source_url": "https://www.zhipin.com/job_detail/2d9f60c0a7ed59ba0nBy29i0EVBT.html",
+      "content": "森亿智能 AI Agent 开发工程师快照：要求企业与医疗业务落地、任务规划与工作流、RAG 与可追溯性、业务系统接入、安全边界、评测与监控。"
+    },
+    {
+      "sample_id": "sample-tob-delivery",
+      "source_url": "https://www.zhipin.com/job_detail/072c43369219d2380nd73N-6FVNV.html",
+      "content": "吉利控股集团 AI Agent 开发工程师快照：要求 ToB 全流程交付、规划记忆推理与工具调用、RAG 与 MCP、多 Agent 编排、容器化部署、监控稳定性与技术文档。"
+    },
+    {
+      "sample_id": "sample-auditable-service",
+      "source_url": "https://www.zhipin.com/job_detail/a0cd167dd80716e60ndy3N27FFBZ.html",
+      "content": "玖乾奕 AI Agent 应用开发工程师快照：要求可审计、可观测、可维护的 Agent 服务，多 Agent 与工具链路、文档解析与 RAG、评测与版本管理、权限与日志留痕。"
+    },
+    {
+      "sample_id": "sample-business-agent",
+      "source_url": "https://www.zhipin.com/job_detail/bdbb25f79e254c120ndy3966GFdX.html",
+      "content": "小红书 AI Agent 电商应用快照：要求业务场景核心功能、Agent 与 Multi-Agent、RAG 与 Planning、LLM 调优与 Prompt、多模态 AIGC、数据分析与业务效果。"
+    }
+  ]
+}

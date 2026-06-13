@@ -12,6 +12,9 @@ _segment_id_ctx: ContextVar[Optional[str]] = ContextVar("segment_id", default=No
 _allowed_source_domains_ctx: ContextVar[tuple[str, ...]] = ContextVar(
     "allowed_source_domains", default=()
 )
+_allowed_aggregate_ids_ctx: ContextVar[tuple[str, ...]] = ContextVar(
+    "allowed_aggregate_ids", default=()
+)
 
 
 def set_session_context(path: str):
@@ -67,14 +70,28 @@ def get_allowed_source_domains_context() -> tuple[str, ...]:
     """Get the public source allowlist for the current restricted research run."""
     return _allowed_source_domains_ctx.get()
 
+def set_allowed_aggregate_ids_context(aggregate_ids: tuple[str, ...]):
+    """Set server-validated aggregate IDs declared for a restricted run."""
+    return _allowed_aggregate_ids_ctx.set(aggregate_ids)
+
+def get_allowed_aggregate_ids_context() -> tuple[str, ...]:
+    """Get declared aggregate IDs for the current restricted run."""
+    return _allowed_aggregate_ids_ctx.get()
+
 def reset_execution_context(
-    run_token, thread_token=None, segment_token=None, allowed_source_domains_token=None
+    run_token,
+    thread_token=None,
+    segment_token=None,
+    allowed_source_domains_token=None,
+    allowed_aggregate_ids_token=None,
 ):
     """Reset run and thread identities after one execution."""
     if segment_token is not None:
         _segment_id_ctx.reset(segment_token)
     if allowed_source_domains_token is not None:
         _allowed_source_domains_ctx.reset(allowed_source_domains_token)
+    if allowed_aggregate_ids_token is not None:
+        _allowed_aggregate_ids_ctx.reset(allowed_aggregate_ids_token)
     _run_id_ctx.reset(run_token)
     if thread_token:
         _thread_id_ctx.reset(thread_token)

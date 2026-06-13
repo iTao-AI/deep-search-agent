@@ -1,0 +1,19 @@
+{
+  "target_roles": ["AI Agent 应用研发工程师"],
+  "target_companies": ["智慧树", "森亿智能", "吉利控股集团", "玖乾奕", "小红书"],
+  "time_window": {"start": "2026-06-06", "end": "2026-06-09"},
+  "declared_samples": [
+    {
+      "sample_id": "talent-hiring-signal-v1",
+      "source_type": "provided_aggregate",
+      "reference": "talent-hiring-signal-v1"
+    }
+  ],
+  "allowed_source_types": ["provided_aggregate"],
+  "research_questions": [
+    "五份声明样本中重复出现了哪些 AI Agent 工程能力？",
+    "哪些能力属于多数样本共同要求，哪些只在特定业务场景出现？",
+    "哪些结论因样本量、来源可访问性或岗位差异而不能外推？"
+  ],
+  "requested_outputs": ["decision_brief"]
+}

@@ -16,7 +16,10 @@ def test_talent_profile_manifest_has_restricted_general_purpose_override():
     assert manifest["harness_policy"]["backend"] == "state"
     assert manifest["harness_policy"]["skills"] == []
     assert manifest["harness_policy"]["subagents"] == ["general-purpose"]
-    assert manifest["harness_policy"]["allowed_tools"] == ["internet_search"]
+    assert manifest["harness_policy"]["allowed_tools"] == [
+        "internet_search",
+        "provided_aggregate",
+    ]
     assert "generate_markdown" not in manifest["harness_policy"]["allowed_tools"]
     assert "convert_md_to_pdf" not in manifest["harness_policy"]["allowed_tools"]
 
@@ -73,4 +76,7 @@ def test_talent_agent_compiler_enforces_restricted_harness(monkeypatch):
     researcher = captured["subagents"][0]
     assert researcher["name"] == "general-purpose"
     assert researcher["response_format"] is ResearchPacket
-    assert [tool.name for tool in researcher["tools"]] == ["internet_search"]
+    assert [tool.name for tool in researcher["tools"]] == [
+        "internet_search",
+        "provided_aggregate",
+    ]
