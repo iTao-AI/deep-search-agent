@@ -74,8 +74,9 @@ to the result.
   bundle.
 - Missing Talent `ResearchPacket` is a schema failure and keeps the benchmark
   incomplete.
-- Evidence URLs outside the fixture's declared URL set are counted as
-  out-of-scope evidence and keep the bundle incomplete.
+- Evidence URLs outside the fixture's declared URL set are counted by Profile
+  for the human scope-adherence score. They do not make a completed comparison
+  incomplete, because the violation is itself a benchmark result.
 - A partial or failed run never produces a passing value-gate claim.
 
 ## Files
@@ -95,8 +96,8 @@ are in scope.
 1. The runner proves both profiles receive the same input envelope hash.
 2. A mocked paired execution produces a deterministic, review-ready result
    bundle without secrets or filesystem paths.
-3. Failed, schema-invalid, or out-of-scope runs produce
-   `benchmark_status=incomplete`.
+3. Failed or schema-invalid runs produce `benchmark_status=incomplete`;
+   out-of-scope evidence remains visible for human scoring.
 4. The runner cannot emit `value_gate.passed=true`.
 5. Unit tests and the full backend suite pass.
 6. A real benchmark run is attempted only when explicitly configured with valid

@@ -69,8 +69,9 @@ Construct `ExecutionOutcome` fixtures and assert:
 - the serialized run contains final text, diagnostics, evidence, packets, and
   failure state;
 - it contains no `session_dir`;
-- an exception, missing Talent packet, or evidence URL outside the fixture set
-  yields `benchmark_status=incomplete`;
+- an exception or missing Talent packet yields `benchmark_status=incomplete`;
+- evidence URLs outside the fixture set are counted by Profile for human
+  scope-adherence scoring;
 - the value-gate object always has `passed=false` and empty human scores.
 
 - [ ] **Step 2: Run tests to verify RED**
