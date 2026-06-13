@@ -39,7 +39,7 @@ requests>=2.31.0            # HTTP 请求库
 # --- 基础工具 (Utilities) ---
 PyYAML>=6.0                 # [新增] YAML 配置文件解析 (prompts.py)
 pydantic>=2.0.0             # 数据校验
-python-dotenv>=1.0.0        # 环境变量管理
+python-dotenv>=1.2.2        # 环境变量管理
 typing-extensions>=4.5.0    # 类型兼容性支持
 
 # --- 测试依赖 (Test) ---
