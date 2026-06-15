@@ -371,3 +371,32 @@ def test_capability_adaptation_logs_only_allowlisted_fields(monkeypatch, caplog)
     assert "effective_thinking_mode=disabled" in caplog.text
     assert "sensitive tool schema" not in caplog.text
     assert "do-not-log" not in caplog.text
+
+
+def test_tool_choice_compatible_model_raises_when_model_copy_missing(monkeypatch):
+    """_tool_choice_compatible_model must raise TypeError when model lacks model_copy."""
+    llm, _ = _reload_llm(monkeypatch, {"OPENAI_API_KEY": "test-key"})
+    leaf = ToolBindingChatModel(
+        model_name="deepseek-v4-pro",
+        extra_body={"thinking": {"type": "enabled"}},
+    )
+    # Remove model_copy to simulate a model that doesn't support it
+    object.__setattr__(leaf, "model_copy", None)
+    model = llm.CapabilityAwareChatModel(wrapped=leaf, model_role="single")
+
+    with pytest.raises(TypeError, match="without model_copy support"):
+        model.bind_tools(["tool"], tool_choice="required")
+
+
+@pytest.mark.parametrize("tool_choice", [42, 3.14, [1, 2]])
+def test_unsupported_tool_choice_type_raises_typeerror(monkeypatch, tool_choice):
+    """Unsupported tool_choice types must raise TypeError, not silently bypass adaptation."""
+    llm, _ = _reload_llm(monkeypatch, {"OPENAI_API_KEY": "test-key"})
+    leaf = ToolBindingChatModel(
+        model_name="deepseek-v4-pro",
+        extra_body={"thinking": {"type": "enabled"}},
+    )
+    model = llm.CapabilityAwareChatModel(wrapped=leaf, model_role="single")
+
+    with pytest.raises(TypeError, match="Unsupported tool_choice type"):
+        model.bind_tools(["tool"], tool_choice=tool_choice)

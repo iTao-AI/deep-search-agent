@@ -21,6 +21,9 @@ DEFAULT_LLM_FALLBACK_MODEL = "deepseek-v4-flash"
 DEFAULT_REASONING_EFFORT = "max"
 DEFAULT_THINKING_MODE = "enabled"
 
+_DEEPSEEK_V4_PREFIX = "deepseek-v4-"
+_DEEPSEEK_V4_FAMILY = "deepseek-v4"
+
 
 def _model_name(model: BaseChatModel) -> str:
     value = getattr(model, "model_name", None) or getattr(model, "model", None)
@@ -41,7 +44,10 @@ def _tool_choice_kind(tool_choice: dict | str | bool | None) -> str | None:
         return "required"
     if isinstance(tool_choice, dict):
         return "tool_dict"
-    return None
+    raise TypeError(
+        f"Unsupported tool_choice type: {type(tool_choice).__name__}. "
+        "Expected dict, str, bool, or None."
+    )
 
 
 def _has_enabled_thinking(model: BaseChatModel) -> bool:
@@ -67,6 +73,10 @@ def _needs_tool_choice_compatibility(
 
 def _tool_choice_compatible_model(model: BaseChatModel) -> BaseChatModel:
     extra_body = getattr(model, "extra_body", None)
+    # Defensive guard: _has_enabled_thinking already verifies extra_body is a
+    # dict before this function is called, so this branch is unreachable via
+    # the current bind_tools() path.  Kept as a fail-closed gate in case this
+    # helper is ever called directly from outside the capability wrapper.
     if not isinstance(extra_body, dict):
         raise TypeError("Cannot build compatible model without dict extra_body")
 
@@ -80,6 +90,11 @@ def _tool_choice_compatible_model(model: BaseChatModel) -> BaseChatModel:
     model_copy = getattr(model, "model_copy", None)
     if not callable(model_copy):
         raise TypeError("Cannot build compatible model without model_copy support")
+    # deep=False intentionally shares runtime objects (HTTP client, callbacks)
+    # between the original and adapted model.  This is safe because bind_tools
+    # does not mutate shared state, and concurrent requests through the shared
+    # HTTP session are expected.  Do not mutate shared objects on the adapted
+    # model without reviewing this contract.
     return model_copy(update={"extra_body": compatible_extra_body}, deep=False)
 
 
@@ -88,10 +103,14 @@ class CapabilityAwareChatModel(BaseChatModel):
 
     wrapped: BaseChatModel
     model_role: str = "single"
+    # Test-visible only: the model instance used for the most recent
+    # bind_tools() call.  Never read in production code paths — do not
+    # reference in _generate / _agenerate or any runtime decision.
     last_bound_model: BaseChatModel | None = None
     profile: dict[str, Any] | None = None
 
     def __init__(self, **data: Any) -> None:
+        data = dict(data)  # defensive copy – avoid mutating caller's dict
         if data.get("profile") is None:
             wrapped_profile = getattr(data.get("wrapped"), "profile", None)
             if isinstance(wrapped_profile, dict):
@@ -145,7 +164,7 @@ class CapabilityAwareChatModel(BaseChatModel):
             logger.info(
                 "event=model_capability_adaptation "
                 "reason=thinking_forced_tool_choice_conflict "
-                "model_family=deepseek-v4 "
+                f"model_family={_DEEPSEEK_V4_FAMILY} "
                 "model_role=%s "
                 "tool_choice_kind=%s "
                 "configured_thinking_mode=enabled "
@@ -270,7 +289,7 @@ def _fallback_model_name(primary_model: str) -> str | None:
 
 
 def _is_deepseek_v4_model(model_name: str) -> bool:
-    return model_name.startswith("deepseek-v4-")
+    return model_name.startswith(_DEEPSEEK_V4_PREFIX)
 
 
 def _reasoning_effort(model_name: str) -> str | None:
