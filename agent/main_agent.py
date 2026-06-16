@@ -44,9 +44,8 @@ from agent.run_result import (
     OutcomeBox,
     process_stream_chunk,
 )
+from agent.talent_runtime import talent_recursion_limit
 from langgraph.errors import GraphRecursionError
-
-DEFAULT_TALENT_RECURSION_LIMIT = 80
 
 def _resolve_subagent(agent):
     """Agent 类实例或 dict 的适配转换"""
@@ -133,19 +132,6 @@ def _allowed_aggregate_ids(scope: dict | None) -> tuple[str, ...]:
     return tuple(sorted(aggregate_ids))
 
 
-def _talent_recursion_limit() -> int:
-    configured = os.getenv("DEEP_SEARCH_AGENT_TALENT_RECURSION_LIMIT")
-    if configured is None or not configured.strip():
-        return DEFAULT_TALENT_RECURSION_LIMIT
-    try:
-        limit = int(configured)
-    except ValueError:
-        return DEFAULT_TALENT_RECURSION_LIMIT
-    if limit < 1:
-        return DEFAULT_TALENT_RECURSION_LIMIT
-    return limit
-
-
 def _add_evidence_alias(
     accumulator: AgentRunAccumulator,
     alias: str,
@@ -205,6 +191,7 @@ async def _preload_declared_aggregate_evidence(
             sample_id = item.get("sample_id")
             if isinstance(sample_id, str) and sample_id:
                 _add_evidence_alias(accumulator, sample_id, evidence_id)
+                _add_evidence_alias(accumulator, f"E-{sample_id}", evidence_id)
             source_url = item.get("url")
             if isinstance(source_url, str) and source_url:
                 _add_evidence_alias(accumulator, source_url, evidence_id)
@@ -330,7 +317,7 @@ async def run_deep_agent(
         },
     }
     if profile_id == "talent-hiring-signal":
-        config["recursion_limit"] = _talent_recursion_limit()
+        config["recursion_limit"] = talent_recursion_limit()
 
     path_instruction = f"""
     【工作环境指令】

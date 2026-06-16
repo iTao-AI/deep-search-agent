@@ -610,6 +610,7 @@ def test_talent_preload_records_non_ok_and_malformed_result_diagnostics(tmp_path
         assert "provided_aggregate_prefetched:aggregate-v1" in accumulator.diagnostics
         assert accumulator.evidence_aliases["aggregate-v1"] == ("ev_run-preload_abc",)
         assert accumulator.evidence_aliases["sample-1"] == ("ev_run-preload_abc",)
+        assert accumulator.evidence_aliases["E-sample-1"] == ("ev_run-preload_abc",)
         assert "__declared_aggregate__" not in accumulator.evidence_aliases
         print("OK")
         """

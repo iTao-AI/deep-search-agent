@@ -174,11 +174,26 @@ def _resolve_talent_packets(
     ):
         resolved_failure_kind = (
             "invalid_research_packet"
-            if "invalid_research_packet" in diagnostics
+            if any(
+                diagnostic == "invalid_research_packet"
+                or diagnostic.startswith("invalid_research_packet:")
+                for diagnostic in diagnostics
+            )
             else "missing_research_packet"
         )
 
     return research_packets, resolved_failure_kind
+
+
+def _invalid_research_packet_diagnostic(exc: Exception) -> str:
+    if isinstance(exc, ValidationError):
+        errors = exc.errors()
+        if errors:
+            first = errors[0]
+            loc = ".".join(str(part) for part in first.get("loc", ())) or "root"
+            error_type = first.get("type", "validation_error")
+            return f"invalid_research_packet:ValidationError:{loc}:{error_type}"
+    return f"invalid_research_packet:{type(exc).__name__}"
 
 
 def _text_from_content(content: Any) -> str:
@@ -290,8 +305,10 @@ def process_stream_chunk(
                     accumulator.diagnostics.append(
                         f"research_packet:{packet.packet_id}"
                     )
-                except (ValidationError, ValueError, TypeError):
-                    accumulator.diagnostics.append("invalid_research_packet")
+                except (ValidationError, ValueError, TypeError) as exc:
+                    accumulator.diagnostics.append(
+                        _invalid_research_packet_diagnostic(exc)
+                    )
                 continue
             accumulator.evidence_entries.extend(
                 extract_evidence_entries(

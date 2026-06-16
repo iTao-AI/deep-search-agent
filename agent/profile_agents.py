@@ -10,6 +10,7 @@ from langchain.agents.structured_output import ToolStrategy
 
 from agent.profile_registry import AgentHarnessPolicy, ProfileSpec
 from agent.talent_contracts import ResearchPacket
+from agent.talent_runtime import talent_recursion_limit
 from tools.talent_search import talent_public_search
 from tools.provided_aggregate import provided_aggregate
 
@@ -32,6 +33,9 @@ If provided_aggregate is declared, call provided_aggregate with the declared agg
 before producing the packet. Use the exact evidence_id values returned by tools in
 every finding.evidence_refs and claim.evidence_refs; never invent placeholder IDs
 such as E-001.
+Never create a finding with empty evidence_refs. If a limitation, caveat, or
+evidence gap has no direct evidence_id, put it only in limitations instead of
+findings or candidate_claims.
 Your final response must be a ResearchPacket structured-output tool call, not Markdown
 and not a JSON wrapper. The top-level fields are exactly packet_id, scope_id, findings,
 candidate_claims, contradictions, and limitations.
@@ -80,7 +84,7 @@ def compile_profile_agent(
         system_prompt=TALENT_RESEARCHER_PROMPT,
         response_format=ToolStrategy(ResearchPacket),
         name="general-purpose",
-    )
+    ).with_config({"recursion_limit": talent_recursion_limit()})
     researcher = {
         "name": "general-purpose",
         "description": "Research the declared Talent Hiring Signal scope.",
