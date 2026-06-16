@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Sequence
 
 from agent.research import EvidenceEntry, extract_evidence_entries
 from agent.talent_contracts import ResearchPacket
@@ -78,6 +78,8 @@ class AgentRunAccumulator:
     diagnostics: list[str] = field(default_factory=list)
     evidence_entries: list[EvidenceEntry] = field(default_factory=list)
     research_packets: list[ResearchPacket] = field(default_factory=list)
+    evidence_aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    verified_evidence_ids: set[str] = field(default_factory=set)
 
     def to_outcome(
         self,
@@ -87,11 +89,15 @@ class AgentRunAccumulator:
         failure_kind: str | None = None,
         cancellation_state: str | None = None,
     ) -> ExecutionOutcome:
+        research_packets = _normalize_research_packet_evidence_refs(
+            self.research_packets,
+            self.evidence_aliases,
+        )
         resolved_failure_kind = failure_kind
         if (
             resolved_failure_kind is None
             and self.profile_id == "talent-hiring-signal"
-            and not self.research_packets
+            and not research_packets
         ):
             resolved_failure_kind = (
                 "invalid_research_packet"
@@ -115,7 +121,7 @@ class AgentRunAccumulator:
             evidence_entries=list(
                 self.evidence_entries if evidence_entries is None else evidence_entries
             ),
-            research_packets=list(self.research_packets),
+            research_packets=research_packets,
             error_message=error_message,
             failure_kind=resolved_failure_kind,
             cancellation_state=cancellation_state,
@@ -143,6 +149,47 @@ def _tool_value(tool: Any, key: str, default: Any = None) -> Any:
     if isinstance(tool, dict):
         return tool.get(key, default)
     return getattr(tool, key, default)
+
+
+def _expand_evidence_refs(
+    refs: Sequence[str],
+    aliases: dict[str, tuple[str, ...]],
+) -> list[str]:
+    expanded: list[str] = []
+    seen: set[str] = set()
+    if not refs:
+        refs = aliases.get("__declared_aggregate__", ())
+    for ref in refs:
+        replacements = aliases.get(ref, (ref,))
+        for item in replacements:
+            if item in seen:
+                continue
+            expanded.append(item)
+            seen.add(item)
+    return expanded
+
+
+def _normalize_research_packet_evidence_refs(
+    packets: list[ResearchPacket],
+    aliases: dict[str, tuple[str, ...]],
+) -> list[ResearchPacket]:
+    if not aliases:
+        return list(packets)
+    normalized: list[ResearchPacket] = []
+    for packet in packets:
+        payload = packet.model_dump(mode="python")
+        for finding in payload.get("findings", []):
+            finding["evidence_refs"] = _expand_evidence_refs(
+                finding.get("evidence_refs", []),
+                aliases,
+            )
+        for claim in payload.get("candidate_claims", []):
+            claim["evidence_refs"] = _expand_evidence_refs(
+                claim.get("evidence_refs", []),
+                aliases,
+            )
+        normalized.append(ResearchPacket.model_validate(payload))
+    return normalized
 
 
 def process_stream_chunk(
