@@ -348,6 +348,102 @@ class TestAgentRunAccumulator:
             "ev_missing"
         ]
 
+    def test_talent_outcome_uses_latest_research_packet_when_subagent_retries(
+        self, tmp_path
+    ):
+        import json
+
+        from agent.run_result import AgentRunAccumulator, process_stream_chunk
+
+        monitor = CapturingMonitor()
+        accumulator = AgentRunAccumulator(
+            thread_id="thread-talent",
+            query="研究招聘信号",
+            session_dir=tmp_path,
+            profile_id="talent-hiring-signal",
+        )
+        first_packet = {
+            "packet_id": "packet-stale",
+            "scope_id": "scope-1",
+            "findings": [
+                {
+                    "finding_id": "finding-stale",
+                    "research_question_id": "question-1",
+                    "statement": "Stale packet reported an access failure.",
+                    "evidence_refs": [],
+                    "sample_scope": "declared samples",
+                    "confidence": 0.8,
+                }
+            ],
+            "candidate_claims": [
+                {
+                    "claim_id": "claim-stale",
+                    "text": "Stale packet should not pollute final artifacts.",
+                    "claim_type": "methodological_observation",
+                    "finding_refs": ["finding-stale"],
+                    "evidence_refs": [],
+                    "confidence": 0.8,
+                    "citation_status": "uncited",
+                    "verification_status": "unverified",
+                    "review_status": "required",
+                    "conflict_status": "none",
+                }
+            ],
+        }
+        final_packet = {
+            "packet_id": "packet-final",
+            "scope_id": "scope-1",
+            "findings": [
+                {
+                    "finding_id": "finding-final",
+                    "research_question_id": "question-1",
+                    "statement": "Final packet cites declared evidence.",
+                    "evidence_refs": ["sample-1"],
+                    "sample_scope": "declared samples",
+                    "confidence": 0.9,
+                }
+            ],
+            "candidate_claims": [
+                {
+                    "claim_id": "claim-final",
+                    "text": "Final packet should drive review artifacts.",
+                    "claim_type": "hiring_signal",
+                    "finding_refs": ["finding-final"],
+                    "evidence_refs": ["sample-1"],
+                    "confidence": 0.9,
+                    "citation_status": "cited",
+                    "verification_status": "unverified",
+                    "review_status": "pending",
+                    "conflict_status": "none",
+                }
+            ],
+        }
+
+        for packet in (first_packet, final_packet):
+            process_stream_chunk(
+                {
+                    "tools": {
+                        "messages": [
+                            ToolMessage(
+                                content=json.dumps(packet),
+                                tool_call_id=f"call-{packet['packet_id']}",
+                                name="task",
+                            )
+                        ]
+                    }
+                },
+                accumulator,
+                monitor,
+            )
+        accumulator.evidence_aliases = {"sample-1": ("ev_run_abc",)}
+        outcome = accumulator.to_outcome()
+
+        assert [packet.packet_id for packet in outcome.research_packets] == [
+            "packet-final"
+        ]
+        assert outcome.research_packets[0].findings[0].evidence_refs == ["ev_run_abc"]
+        assert "research_packet_superseded:1" in outcome.diagnostics
+
     def test_talent_outcome_freezes_when_evidence_ref_normalization_fails(
         self, tmp_path, monkeypatch
     ):

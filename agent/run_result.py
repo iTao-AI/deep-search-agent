@@ -102,6 +102,10 @@ class AgentRunAccumulator:
             research_packets = list(self.research_packets)
             if self.profile_id == "talent-hiring-signal":
                 resolved_failure_kind = resolved_failure_kind or "invalid_research_packet"
+        if self.profile_id == "talent-hiring-signal" and len(research_packets) > 1:
+            superseded_count = len(research_packets) - 1
+            self.diagnostics.append(f"research_packet_superseded:{superseded_count}")
+            research_packets = [research_packets[-1]]
         if (
             resolved_failure_kind is None
             and self.profile_id == "talent-hiring-signal"
