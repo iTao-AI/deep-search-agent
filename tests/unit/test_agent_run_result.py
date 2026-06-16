@@ -442,7 +442,7 @@ class TestAgentRunAccumulator:
             "packet-final"
         ]
         assert outcome.research_packets[0].findings[0].evidence_refs == ["ev_run_abc"]
-        assert "research_packet_superseded:1" in outcome.diagnostics
+        assert "research_packet_superseded:1:packet-stale" in outcome.diagnostics
 
     def test_talent_outcome_freezes_when_evidence_ref_normalization_fails(
         self, tmp_path, monkeypatch
@@ -468,6 +468,93 @@ class TestAgentRunAccumulator:
 
         assert outcome.failure_kind == "invalid_research_packet"
         assert "evidence_ref_normalization_failed:RuntimeError" in outcome.diagnostics
+
+    def test_talent_outcome_supersedes_packets_when_normalization_fails(
+        self, tmp_path, monkeypatch
+    ):
+        import agent.run_result as run_result
+        from agent.talent_contracts import Claim, Finding, ResearchPacket
+
+        accumulator = run_result.AgentRunAccumulator(
+            thread_id="thread-talent",
+            query="研究招聘信号",
+            session_dir=tmp_path,
+            profile_id="talent-hiring-signal",
+        )
+        stale_packet = ResearchPacket(
+            packet_id="packet-stale",
+            scope_id="scope-1",
+            findings=[
+                Finding(
+                    finding_id="finding-stale",
+                    research_question_id="question-1",
+                    statement="Stale packet should be discarded.",
+                    evidence_refs=["sample-stale"],
+                    sample_scope="declared samples",
+                    confidence=0.5,
+                )
+            ],
+            candidate_claims=[
+                Claim(
+                    claim_id="claim-stale",
+                    text="Stale packet should not drive artifacts.",
+                    claim_type="hiring_signal",
+                    finding_refs=["finding-stale"],
+                    evidence_refs=["sample-stale"],
+                    confidence=0.5,
+                    citation_status="cited",
+                    verification_status="unverified",
+                    review_status="pending",
+                    conflict_status="none",
+                )
+            ],
+        )
+        final_packet = ResearchPacket(
+            packet_id="packet-final",
+            scope_id="scope-1",
+            findings=[
+                Finding(
+                    finding_id="finding-final",
+                    research_question_id="question-1",
+                    statement="Final packet should be retained.",
+                    evidence_refs=["sample-final"],
+                    sample_scope="declared samples",
+                    confidence=0.9,
+                )
+            ],
+            candidate_claims=[
+                Claim(
+                    claim_id="claim-final",
+                    text="Final packet should drive artifacts.",
+                    claim_type="hiring_signal",
+                    finding_refs=["finding-final"],
+                    evidence_refs=["sample-final"],
+                    confidence=0.9,
+                    citation_status="cited",
+                    verification_status="unverified",
+                    review_status="pending",
+                    conflict_status="none",
+                )
+            ],
+        )
+        accumulator.research_packets.extend([stale_packet, final_packet])
+
+        def broken_normalize(*args, **kwargs):
+            raise RuntimeError("broken")
+
+        monkeypatch.setattr(
+            run_result,
+            "_normalize_research_packet_evidence_refs",
+            broken_normalize,
+        )
+        outcome = accumulator.to_outcome()
+
+        assert outcome.failure_kind == "invalid_research_packet"
+        assert [packet.packet_id for packet in outcome.research_packets] == [
+            "packet-final"
+        ]
+        assert "evidence_ref_normalization_failed:RuntimeError" in outcome.diagnostics
+        assert "research_packet_superseded:1:packet-stale" in outcome.diagnostics
 
     def test_talent_invalid_task_message_fails_closed_in_outcome(self, tmp_path):
         from agent.run_result import AgentRunAccumulator, process_stream_chunk
