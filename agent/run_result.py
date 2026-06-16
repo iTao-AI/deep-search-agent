@@ -14,6 +14,8 @@ from agent.talent_contracts import ResearchPacket
 from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import ValidationError
 
+_TALENT_PROFILE_ID = "talent-hiring-signal"
+
 
 @dataclass(frozen=True)
 class ExecutionOutcome:
@@ -89,29 +91,13 @@ class AgentRunAccumulator:
         failure_kind: str | None = None,
         cancellation_state: str | None = None,
     ) -> ExecutionOutcome:
-        resolved_failure_kind = failure_kind
-        try:
-            research_packets = _normalize_research_packet_evidence_refs(
-                self.research_packets,
-                self.evidence_aliases,
-            )
-        except Exception as exc:
-            self.diagnostics.append(
-                f"evidence_ref_normalization_failed:{type(exc).__name__}"
-            )
-            research_packets = list(self.research_packets)
-            if self.profile_id == "talent-hiring-signal":
-                resolved_failure_kind = resolved_failure_kind or "invalid_research_packet"
-        if (
-            resolved_failure_kind is None
-            and self.profile_id == "talent-hiring-signal"
-            and not research_packets
-        ):
-            resolved_failure_kind = (
-                "invalid_research_packet"
-                if "invalid_research_packet" in self.diagnostics
-                else "missing_research_packet"
-            )
+        research_packets, resolved_failure_kind = _resolve_talent_packets(
+            profile_id=self.profile_id,
+            packets=self.research_packets,
+            aliases=self.evidence_aliases,
+            diagnostics=self.diagnostics,
+            failure_kind=failure_kind,
+        )
         return ExecutionOutcome(
             thread_id=self.thread_id,
             query=self.query,
@@ -137,6 +123,62 @@ class AgentRunAccumulator:
 
     def to_result(self, error_message: str | None = None) -> AgentRunResult:
         return self.to_outcome(error_message=error_message)
+
+
+def _resolve_talent_packets(
+    *,
+    profile_id: str,
+    packets: list[ResearchPacket],
+    aliases: dict[str, tuple[str, ...]],
+    diagnostics: list[str],
+    failure_kind: str | None,
+) -> tuple[list[ResearchPacket], str | None]:
+    """Normalize, supersede, and validate research packets for outcome assembly.
+
+    For the Talent profile (``talent-hiring-signal``):
+    1. Attempt evidence-ref normalization via aliases.
+    2. If multiple packets exist, keep only the last one and record superseded
+       packet IDs in diagnostics as ``research_packet_superseded:<count>:<ids>``.
+    3. If no packets remain, derive ``failure_kind`` from the presence of an
+       ``invalid_research_packet`` diagnostic.
+
+    For non-Talent profiles, packets pass through unchanged after normalization.
+
+    Returns:
+        A ``(research_packets, resolved_failure_kind)`` tuple.
+    """
+    resolved_failure_kind = failure_kind
+    try:
+        research_packets = _normalize_research_packet_evidence_refs(
+            packets,
+            aliases,
+        )
+    except Exception as exc:
+        diagnostics.append(f"evidence_ref_normalization_failed:{type(exc).__name__}")
+        research_packets = list(packets)
+        if profile_id == _TALENT_PROFILE_ID:
+            resolved_failure_kind = resolved_failure_kind or "invalid_research_packet"
+
+    if profile_id == _TALENT_PROFILE_ID and len(research_packets) > 1:
+        superseded_count = len(research_packets) - 1
+        superseded_ids = ",".join(p.packet_id for p in research_packets[:-1])
+        diagnostics.append(
+            f"research_packet_superseded:{superseded_count}:{superseded_ids}"
+        )
+        research_packets = [research_packets[-1]]
+
+    if (
+        resolved_failure_kind is None
+        and profile_id == _TALENT_PROFILE_ID
+        and not research_packets
+    ):
+        resolved_failure_kind = (
+            "invalid_research_packet"
+            if "invalid_research_packet" in diagnostics
+            else "missing_research_packet"
+        )
+
+    return research_packets, resolved_failure_kind
 
 
 def _text_from_content(content: Any) -> str:
@@ -235,7 +277,7 @@ def process_stream_chunk(
             tool_name = getattr(last_msg, "name", None) or node_name
             accumulator.diagnostics.append(f"tool:{tool_name}")
             if (
-                accumulator.profile_id == "talent-hiring-signal"
+                accumulator.profile_id == _TALENT_PROFILE_ID
                 and tool_name == "task"
             ):
                 try:
