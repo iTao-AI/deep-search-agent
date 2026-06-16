@@ -41,7 +41,7 @@ from api.persistence import (
     update_task,
 )
 from api.task_finalizer import finalize_task_run, persist_research_run, TaskFinalization
-from api.thread_ids import safe_session_dir, validate_thread_id
+from api.thread_ids import safe_child_path, safe_output_path, safe_session_dir, validate_thread_id
 from api.run_repository import (
     create_run,
     finalize_run_transaction,
@@ -661,7 +661,7 @@ async def upload_files(files: List[UploadFile] = File(...), thread_id: str = For
         if not safe_name or safe_name in (".", ".."):
             return JSONResponse(status_code=400, content={"error": "无效的文件名"})
 
-        file_path = target_dir / safe_name
+        file_path = safe_child_path(target_dir, safe_name)
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         saved_files.append(safe_name)
@@ -673,12 +673,10 @@ async def upload_files(files: List[UploadFile] = File(...), thread_id: str = For
 async def download_file(path: str):
     """Download a file from the output directory."""
     try:
-        abs_path = Path(path).resolve()
-        output_abs = output_dir.resolve()
-
-        if not abs_path.is_relative_to(output_abs):
+        abs_path = safe_output_path(output_dir, path)
+    except ValueError as exc:
+        if "outside" in str(exc) or "outside root" in str(exc):
             return {"error": "拒绝访问: 只能下载输出目录下的文件"}
-    except Exception:
         return {"error": "无效的路径参数"}
 
     if not abs_path.exists():
@@ -691,14 +689,11 @@ async def download_file(path: str):
 async def list_files(path: str):
     """List files in a directory under output."""
     try:
-        abs_path = Path(path).resolve()
-        output_abs = output_dir.resolve()
-
-        if not abs_path.is_relative_to(output_abs):
+        abs_path = safe_output_path(output_dir, path)
+    except ValueError as exc:
+        if "outside" in str(exc) or "outside root" in str(exc):
             return {"error": "拒绝访问: 只能访问输出目录下的文件"}
-
-    except Exception as e:
-        return {"error": f"路径无效: {e}"}
+        return {"error": "无效的路径参数"}
 
     if not abs_path.exists():
         return {"error": "目录不存在"}
@@ -715,8 +710,8 @@ async def list_files(path: str):
                     "size": stat.st_size,
                     "mtime": stat.st_mtime
                 })
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        return {"error": "文件列表读取失败"}
 
     files.sort(key=lambda x: x.get("mtime", 0), reverse=True)
     return {"files": files}

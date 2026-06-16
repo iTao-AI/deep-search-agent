@@ -180,6 +180,35 @@ class TestUploadEndpoint:
         assert response.status_code == 400
 
 
+class TestFileEndpoints:
+    """GET /api/files and /api/download path safety tests."""
+
+    @pytest.mark.asyncio
+    async def test_list_files_does_not_expose_invalid_path_exception(
+        self, tmp_path, monkeypatch
+    ):
+        import api.server as server
+
+        monkeypatch.setattr(server, "output_dir", tmp_path)
+
+        response = await server.list_files("\x00")
+
+        assert response == {"error": "无效的路径参数"}
+
+    @pytest.mark.asyncio
+    async def test_download_rejects_absolute_path_outside_output(
+        self, tmp_path, monkeypatch
+    ):
+        import api.server as server
+
+        outside = tmp_path.parent / "outside.md"
+        monkeypatch.setattr(server, "output_dir", tmp_path)
+
+        response = await server.download_file(str(outside))
+
+        assert response == {"error": "拒绝访问: 只能下载输出目录下的文件"}
+
+
 class TestTaskEndpoint:
     """POST /api/task integration tests."""
 

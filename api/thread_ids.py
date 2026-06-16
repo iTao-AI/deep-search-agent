@@ -1,3 +1,4 @@
+import os
 import re
 from pathlib import Path
 
@@ -13,8 +14,59 @@ def validate_thread_id(thread_id: str) -> str:
 
 def safe_session_dir(root: Path, thread_id: str) -> Path:
     validated = validate_thread_id(thread_id)
-    resolved_root = root.resolve()
-    session_dir = (resolved_root / f"session_{validated}").resolve()
-    if not session_dir.is_relative_to(resolved_root):
+    resolved_root = os.path.realpath(root)
+    safe_name = Path(validated).name
+    if safe_name != validated:
         raise ValueError("thread_id resolves outside session root")
-    return session_dir
+    session_dir = os.path.realpath(os.path.join(resolved_root, f"session_{safe_name}"))
+    if os.path.commonpath([resolved_root, session_dir]) != resolved_root:
+        raise ValueError("thread_id resolves outside session root")
+    return Path(session_dir)
+
+
+def _safe_relative_parts(path_value: str) -> tuple[str, ...]:
+    normalized = path_value.replace("\\", "/").strip()
+    if "\x00" in normalized:
+        raise ValueError("path contains invalid characters")
+    if not normalized:
+        return ()
+
+    parts = tuple(part for part in normalized.split("/") if part)
+    for part in parts:
+        if part in (".", "..") or Path(part).name != part:
+            raise ValueError("path resolves outside root")
+    return parts
+
+
+def safe_child_path(root: Path, relative_path: str) -> Path:
+    resolved_root = os.path.realpath(root)
+    parts = _safe_relative_parts(relative_path)
+    child = os.path.realpath(os.path.join(resolved_root, *parts))
+    if os.path.commonpath([resolved_root, child]) != resolved_root:
+        raise ValueError("path resolves outside root")
+    return Path(child)
+
+
+def safe_output_path(root: Path, requested_path: str) -> Path:
+    resolved_root = root.resolve()
+    requested = requested_path.replace("\\", "/").strip()
+    root_text = resolved_root.as_posix()
+
+    if requested == root_text:
+        relative = ""
+    elif requested.startswith(f"{root_text}/"):
+        relative = requested[len(root_text) + 1:]
+    elif requested.startswith("/"):
+        raise ValueError("path resolves outside root")
+    elif requested == "output":
+        relative = ""
+    elif requested.startswith("output/"):
+        relative = requested[len("output/"):]
+    elif requested == resolved_root.name:
+        relative = ""
+    elif requested.startswith(f"{resolved_root.name}/"):
+        relative = requested[len(resolved_root.name) + 1:]
+    else:
+        relative = requested
+
+    return safe_child_path(resolved_root, relative)
