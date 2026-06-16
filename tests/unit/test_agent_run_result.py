@@ -218,6 +218,7 @@ class TestAgentRunAccumulator:
         )
         accumulator.evidence_aliases = {
             "sample-1": ("ev_run_abc",),
+            "E-sample-1": ("ev_run_abc",),
             "aggregate-v1": ("ev_run_abc", "ev_run_def"),
         }
         packet = {
@@ -228,7 +229,7 @@ class TestAgentRunAccumulator:
                     "finding_id": "finding-1",
                     "research_question_id": "question-1",
                     "statement": "Agent evaluation appears in the declared sample.",
-                    "evidence_refs": ["sample-1"],
+                    "evidence_refs": ["E-sample-1"],
                     "sample_scope": "declared samples",
                     "confidence": 0.8,
                 },
@@ -280,6 +281,38 @@ class TestAgentRunAccumulator:
             "ev_run_abc",
             "ev_run_def",
         ]
+
+    def test_talent_invalid_research_packet_records_validation_reason(self, tmp_path):
+        from agent.run_result import AgentRunAccumulator, process_stream_chunk
+
+        monitor = CapturingMonitor()
+        accumulator = AgentRunAccumulator(
+            thread_id="thread-talent",
+            query="研究招聘信号",
+            session_dir=tmp_path,
+            profile_id="talent-hiring-signal",
+        )
+
+        process_stream_chunk(
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content='{"packet_id":"packet-1"}',
+                            tool_call_id="call-task",
+                            name="task",
+                        )
+                    ]
+                }
+            },
+            accumulator,
+            monitor,
+        )
+
+        assert any(
+            diagnostic.startswith("invalid_research_packet:ValidationError:")
+            for diagnostic in accumulator.diagnostics
+        )
 
     def test_talent_outcome_preserves_unknown_evidence_refs(self, tmp_path):
         import json

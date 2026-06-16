@@ -55,9 +55,13 @@ def test_talent_agent_compiler_enforces_restricted_harness(monkeypatch):
         captured.update(kwargs)
         return object()
 
+    class FakeResearcher:
+        def with_config(self, config):
+            return {"compiled": "researcher", "bound_config": config}
+
     def capture_create_agent(**kwargs):
         captured_researcher.update(kwargs)
-        return {"compiled": "researcher"}
+        return FakeResearcher()
 
     monkeypatch.setattr(profile_agents, "create_deep_agent", capture_create_deep_agent)
     monkeypatch.setattr(profile_agents, "create_agent", capture_create_agent)
@@ -82,7 +86,8 @@ def test_talent_agent_compiler_enforces_restricted_harness(monkeypatch):
     assert len(captured["subagents"]) == 1
     researcher = captured["subagents"][0]
     assert researcher["name"] == "general-purpose"
-    assert researcher["runnable"] == {"compiled": "researcher"}
+    assert researcher["runnable"]["compiled"] == "researcher"
+    assert researcher["runnable"]["bound_config"]["recursion_limit"] == 160
     assert captured_researcher["name"] == "general-purpose"
     assert isinstance(captured_researcher["response_format"], ToolStrategy)
     assert captured_researcher["response_format"].schema is ResearchPacket
@@ -90,3 +95,44 @@ def test_talent_agent_compiler_enforces_restricted_harness(monkeypatch):
         "internet_search",
         "provided_aggregate",
     ]
+
+
+def test_talent_compiled_researcher_binds_recursion_budget(monkeypatch):
+    import agent.profile_agents as profile_agents
+    from agent.profile_registry import profile_registry
+
+    captured = {}
+
+    class FakeResearcher:
+        def with_config(self, config):
+            return {"compiled": "researcher", "bound_config": config}
+
+    def capture_create_deep_agent(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    def capture_create_agent(**kwargs):
+        return FakeResearcher()
+
+    monkeypatch.setenv("DEEP_SEARCH_AGENT_TALENT_RECURSION_LIMIT", "37")
+    monkeypatch.setattr(profile_agents, "create_deep_agent", capture_create_deep_agent)
+    monkeypatch.setattr(profile_agents, "create_agent", capture_create_agent)
+    profile = profile_registry.get("talent-hiring-signal")
+    policy = profile_registry.policy_for("talent-hiring-signal")
+
+    profile_agents.compile_profile_agent(
+        profile,
+        policy,
+        model=object(),
+        generic_agent=object(),
+    )
+
+    researcher = captured["subagents"][0]
+    assert researcher["runnable"]["bound_config"]["recursion_limit"] == 37
+
+
+def test_talent_researcher_prompt_forbids_uncited_findings():
+    from agent.profile_agents import TALENT_RESEARCHER_PROMPT
+
+    assert "Never create a finding with empty evidence_refs" in TALENT_RESEARCHER_PROMPT
+    assert "put it only in limitations" in TALENT_RESEARCHER_PROMPT
