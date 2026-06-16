@@ -21,7 +21,6 @@ from dataclasses import replace
 import json
 import os
 import uuid
-import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -35,7 +34,7 @@ from api.context import (
     set_allowed_source_domains_context,
     set_allowed_aggregate_ids_context,
 )
-from api.thread_ids import safe_session_dir
+from api.thread_ids import copy_session_files, ensure_session_dir
 
 from agent.research import evidence_from_shared_context_snapshot, merge_evidence_entries
 from agent.run_result import (
@@ -84,23 +83,22 @@ print(f"----------------project_root-----------------: {project_root}")
 
 def _prepare_session_environment(thread_id: str, *, include_uploads: bool = True):
     """Initialize session workspace (directory, file migration, path context)."""
-    session_dir = safe_session_dir(project_root / "output", thread_id)
-    session_dir.mkdir(parents=True, exist_ok=True)
+    session_dir = ensure_session_dir(project_root / "output", thread_id)
 
     session_dir_str = str(session_dir).replace("\\", "/")
 
     relative_session_dir = str(session_dir.relative_to(project_root)).replace("\\", "/")
 
-    upload_dir = safe_session_dir(project_root / "updated", thread_id)
     uploaded_info = ""
 
-    if include_uploads and upload_dir.exists():
-        files = [f.name for f in upload_dir.iterdir() if f.is_file()]
+    if include_uploads:
+        files = copy_session_files(
+            source_root=project_root / "updated",
+            destination_root=project_root / "output",
+            thread_id=thread_id,
+        )
 
         if files:
-            for f in files:
-                shutil.copy2(upload_dir / f, session_dir / f)
-
             uploaded_info = (f"\n    [已上传文件] 已加载到工作目录:\n" +
                              "\n".join([f"    - {f}" for f in files]) +
                              "\n    请优先使用工具读取并参考这些文件。")

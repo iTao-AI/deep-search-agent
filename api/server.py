@@ -14,7 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from typing import List
-import shutil
 from threading import Lock
 
 # Load env once at startup — tools read from os.environ
@@ -41,7 +40,7 @@ from api.persistence import (
     update_task,
 )
 from api.task_finalizer import finalize_task_run, persist_research_run, TaskFinalization
-from api.thread_ids import safe_child_path, safe_output_path, safe_session_dir, validate_thread_id
+from api.thread_ids import safe_output_path, save_session_file, validate_thread_id
 from api.run_repository import (
     create_run,
     finalize_run_transaction,
@@ -645,8 +644,6 @@ async def get_research_run(thread_id: str):
 async def upload_files(files: List[UploadFile] = File(...), thread_id: str = Form(...)):
     """Upload files for a session."""
     thread_id = _validated_thread_id(thread_id)
-    target_dir = safe_session_dir(updated_dir, thread_id)
-    target_dir.mkdir(parents=True, exist_ok=True)
 
     saved_files = []
     for file in files:
@@ -661,10 +658,9 @@ async def upload_files(files: List[UploadFile] = File(...), thread_id: str = For
         if not safe_name or safe_name in (".", ".."):
             return JSONResponse(status_code=400, content={"error": "无效的文件名"})
 
-        file_path = safe_child_path(target_dir, safe_name)
-        with file_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        saved_files.append(safe_name)
+        saved_files.append(
+            save_session_file(updated_dir, thread_id, safe_name, file.file)
+        )
 
     return {"status": "uploaded", "files": saved_files}
 
