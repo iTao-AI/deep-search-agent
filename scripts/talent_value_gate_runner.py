@@ -35,6 +35,7 @@ _DISALLOWED_TALENT_TOOL_DIAGNOSTICS = frozenset(
         "tool:ls",
         "tool:read_file",
         "tool:read_file_content",
+        "tool:write_todos",
         "tool:write_file",
     }
 )
@@ -124,6 +125,13 @@ def build_prompt_envelope(inputs: BenchmarkInputs) -> tuple[str, str]:
     """Return byte-stable shared prompt text and its SHA-256 hash."""
     payload = {
         "aggregate_id": inputs.aggregate_id,
+        "allowed_evidence_refs": [
+            {
+                "sample_id": sample["sample_id"],
+                "source_url": sample["source_url"],
+            }
+            for sample in inputs.samples
+        ],
         "research_questions": list(inputs.scope.research_questions),
         "source_snapshots": list(inputs.samples),
     }
@@ -136,7 +144,10 @@ def build_prompt_envelope(inputs: BenchmarkInputs) -> tuple[str, str]:
     prompt = (
         "Analyze only the bounded source snapshot below. Do not use or infer "
         "sources outside this envelope. Distinguish repeated signals from "
-        "sample-specific signals and state limitations explicitly.\n"
+        "sample-specific signals and state limitations explicitly. Every "
+        "finding.evidence_refs and claim.evidence_refs entry must be copied "
+        "verbatim from allowed_evidence_refs.sample_id or "
+        "allowed_evidence_refs.source_url; any other evidence label is invalid.\n"
         f"{encoded}"
     )
     return prompt, hashlib.sha256(prompt.encode("utf-8")).hexdigest()

@@ -260,6 +260,11 @@ def test_talent_run_prefetches_declared_aggregate_evidence_and_normalizes_refs(t
               "sample_id": "sample-1",
               "source_url": "https://jobs.example.com/role",
               "content": "AI Agent role requires evaluation and observability."
+            },
+            {
+              "sample_id": "sample-2",
+              "source_url": "https://jobs.example.com/role-2",
+              "content": "AI Agent role requires RAG and tool integration."
             }
           ]
         }
@@ -296,7 +301,7 @@ def test_talent_run_prefetches_declared_aggregate_evidence_and_normalizes_refs(t
                         "finding_id": "finding-1",
                         "research_question_id": "question-1",
                         "statement": "Evaluation appears in the declared sample.",
-                        "evidence_refs": ["sample-1"],
+                        "evidence_refs": ["S1", "sample-snapshot-2", "sample_id:job-2"],
                         "sample_scope": "declared samples",
                         "confidence": 0.8,
                     }}],
@@ -305,7 +310,7 @@ def test_talent_run_prefetches_declared_aggregate_evidence_and_normalizes_refs(t
                         "text": "Evaluation is a hiring signal.",
                         "claim_type": "signal",
                         "finding_refs": ["finding-1"],
-                        "evidence_refs": ["aggregate-v1"],
+                        "evidence_refs": ["sample-001", "aggregate-v1"],
                         "confidence": 0.8,
                         "citation_status": "cited",
                         "verification_status": "unverified",
@@ -346,11 +351,17 @@ def test_talent_run_prefetches_declared_aggregate_evidence_and_normalizes_refs(t
             )
         )
 
-        assert outcome.evidence_entries[0].source_url == "https://jobs.example.com/role"
-        assert outcome.evidence_entries[0].verification_status == "verified"
-        evidence_id = "ev_run-talent_" + outcome.evidence_entries[0].evidence_fingerprint
-        assert outcome.research_packets[0].findings[0].evidence_refs == [evidence_id]
-        assert outcome.research_packets[0].candidate_claims[0].evidence_refs == [evidence_id]
+        assert [entry.source_url for entry in outcome.evidence_entries] == [
+            "https://jobs.example.com/role",
+            "https://jobs.example.com/role-2",
+        ]
+        assert all(entry.verification_status == "verified" for entry in outcome.evidence_entries)
+        evidence_ids = [
+            "ev_run-talent_" + entry.evidence_fingerprint
+            for entry in outcome.evidence_entries
+        ]
+        assert outcome.research_packets[0].findings[0].evidence_refs == evidence_ids
+        assert outcome.research_packets[0].candidate_claims[0].evidence_refs == evidence_ids
         assert main_agent.shared_context.query_facts("run-talent", "search_evidence") == []
         print("OK")
         """

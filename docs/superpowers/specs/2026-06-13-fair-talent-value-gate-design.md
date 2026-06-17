@@ -23,6 +23,9 @@ The comparison must isolate profile behavior from source accessibility:
 - The runner invokes `run_deep_agent()` directly. It does not use legacy
   `/api/task`, change API contracts, or grant `generic` access to
   `provided_aggregate`.
+- The Talent profile preloads declared aggregate evidence on the service side
+  and then asks the model for a structured `ResearchPacket` without runtime
+  search or fixture-reading tools.
 - The bundled fixture remains disabled for normal service execution.
 
 This design measures the profiles' ability to produce bounded, reviewable

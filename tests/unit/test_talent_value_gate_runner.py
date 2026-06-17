@@ -48,6 +48,8 @@ def test_load_benchmark_inputs_builds_byte_stable_shared_envelope():
     assert len(first_hash) == 64
     assert all(sample["content"] in first_prompt for sample in inputs.samples)
     assert all(sample["source_url"] in first_prompt for sample in inputs.samples)
+    assert "allowed_evidence_refs" in first_prompt
+    assert "any other evidence label is invalid" in first_prompt
 
 
 def test_load_benchmark_inputs_rejects_mismatched_aggregate_id(tmp_path):
@@ -80,7 +82,7 @@ def test_load_benchmark_inputs_rejects_invalid_sample(
 
 
 def _packet(evidence_refs: list[str] | None = None) -> ResearchPacket:
-    evidence_refs = list(evidence_refs or [])
+    evidence_refs = list(evidence_refs) if evidence_refs is not None else ["ev_default"]
     return ResearchPacket.model_validate(
         {
             "packet_id": "packet-1",
@@ -150,7 +152,7 @@ def _outcome(
         last_agent_text="final answer",
         diagnostics=["tool:provided_aggregate"],
         evidence_entries=evidence,
-        research_packets=[_packet(evidence_refs)]
+        research_packets=[_packet(evidence_refs or None)]
         if profile_id == "talent-hiring-signal" and include_packet
         else [],
         error_message="failed" if failed else None,
@@ -464,6 +466,22 @@ def test_build_benchmark_bundle_rejects_talent_filesystem_tool_diagnostics():
     inputs = runner.load_benchmark_inputs(SCOPE_PATH, FIXTURE_PATH)
     pairs = _paired_results(inputs)
     pairs[0]["runs"]["talent-hiring-signal"]["diagnostics"].append("tool:write_file")
+
+    bundle = runner.build_benchmark_bundle(
+        inputs=inputs,
+        repetitions=1,
+        paired_results=pairs,
+        generated_at=datetime(2026, 6, 13, tzinfo=timezone.utc),
+    )
+
+    assert bundle["benchmark_status"] == "incomplete"
+    assert bundle["completion"]["disallowed_tool_failure_count"] == 1
+
+
+def test_build_benchmark_bundle_rejects_talent_todo_tool_diagnostics():
+    inputs = runner.load_benchmark_inputs(SCOPE_PATH, FIXTURE_PATH)
+    pairs = _paired_results(inputs)
+    pairs[0]["runs"]["talent-hiring-signal"]["diagnostics"].append("tool:write_todos")
 
     bundle = runner.build_benchmark_bundle(
         inputs=inputs,

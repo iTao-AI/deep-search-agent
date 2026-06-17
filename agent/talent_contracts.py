@@ -79,7 +79,7 @@ class Finding(ContractModel):
     finding_id: BoundedString
     research_question_id: BoundedString
     statement: BoundedString
-    evidence_refs: list[BoundedString]
+    evidence_refs: list[BoundedString] = Field(min_length=1)
     observed_at: datetime | None = None
     sample_scope: BoundedString
     confidence: float = Field(ge=0, le=1)
@@ -92,8 +92,8 @@ class Claim(ContractModel):
     claim_id: BoundedString
     text: BoundedString
     claim_type: BoundedString
-    finding_refs: list[BoundedString]
-    evidence_refs: list[BoundedString]
+    finding_refs: list[BoundedString] = Field(min_length=1)
+    evidence_refs: list[BoundedString] = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)
     citation_status: Literal["cited", "uncited"]
     verification_status: Literal["verified", "unverified"]
