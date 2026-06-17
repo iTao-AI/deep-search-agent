@@ -8,18 +8,15 @@ def test_unknown_profile_fails_closed():
         profile_registry.get("unknown")
 
 
-def test_talent_profile_manifest_has_restricted_general_purpose_override():
+def test_talent_profile_manifest_has_restricted_direct_researcher_policy():
     from agent.profile_registry import profile_registry
 
     manifest = profile_registry.manifest("talent-hiring-signal")
 
     assert manifest["harness_policy"]["backend"] == "state"
     assert manifest["harness_policy"]["skills"] == []
-    assert manifest["harness_policy"]["subagents"] == ["general-purpose"]
-    assert manifest["harness_policy"]["allowed_tools"] == [
-        "internet_search",
-        "provided_aggregate",
-    ]
+    assert manifest["harness_policy"]["subagents"] == []
+    assert manifest["harness_policy"]["allowed_tools"] == []
     assert "generate_markdown" not in manifest["harness_policy"]["allowed_tools"]
     assert "convert_md_to_pdf" not in manifest["harness_policy"]["allowed_tools"]
 
@@ -48,12 +45,7 @@ def test_talent_agent_compiler_enforces_restricted_harness(monkeypatch):
     from agent.profile_registry import profile_registry
     from agent.talent_contracts import ResearchPacket
 
-    captured = {}
     captured_researcher = {}
-
-    def capture_create_deep_agent(**kwargs):
-        captured.update(kwargs)
-        return object()
 
     class FakeResearcher:
         def with_config(self, config):
@@ -63,7 +55,6 @@ def test_talent_agent_compiler_enforces_restricted_harness(monkeypatch):
         captured_researcher.update(kwargs)
         return FakeResearcher()
 
-    monkeypatch.setattr(profile_agents, "create_deep_agent", capture_create_deep_agent)
     monkeypatch.setattr(profile_agents, "create_agent", capture_create_agent)
     profile = profile_registry.get("talent-hiring-signal")
     policy = profile_registry.policy_for("talent-hiring-signal")
@@ -75,60 +66,36 @@ def test_talent_agent_compiler_enforces_restricted_harness(monkeypatch):
         generic_agent=object(),
     )
 
-    assert captured["tools"] == []
-    assert captured["skills"] == []
-    assert captured["response_format"] is None
-    assert captured["backend"].__class__.__name__ == "StateBackend"
-    assert [(rule.operations, rule.paths, rule.mode) for rule in captured["permissions"]] == [
-        (["write"], ["/**"], "deny"),
-        (["read"], ["/**"], "deny"),
-    ]
-    assert len(captured["subagents"]) == 1
-    researcher = captured["subagents"][0]
-    assert researcher["name"] == "general-purpose"
-    assert researcher["runnable"]["compiled"] == "researcher"
-    assert researcher["runnable"]["bound_config"]["recursion_limit"] == 160
-    assert captured_researcher["name"] == "general-purpose"
+    assert captured_researcher["name"] == "talent-hiring-signal-researcher"
     assert isinstance(captured_researcher["response_format"], ToolStrategy)
     assert captured_researcher["response_format"].schema is ResearchPacket
-    assert [tool.name for tool in captured_researcher["tools"]] == [
-        "internet_search",
-        "provided_aggregate",
-    ]
+    assert captured_researcher["tools"] == []
 
 
 def test_talent_compiled_researcher_binds_recursion_budget(monkeypatch):
     import agent.profile_agents as profile_agents
     from agent.profile_registry import profile_registry
 
-    captured = {}
-
     class FakeResearcher:
         def with_config(self, config):
             return {"compiled": "researcher", "bound_config": config}
-
-    def capture_create_deep_agent(**kwargs):
-        captured.update(kwargs)
-        return object()
 
     def capture_create_agent(**kwargs):
         return FakeResearcher()
 
     monkeypatch.setenv("DEEP_SEARCH_AGENT_TALENT_RECURSION_LIMIT", "37")
-    monkeypatch.setattr(profile_agents, "create_deep_agent", capture_create_deep_agent)
     monkeypatch.setattr(profile_agents, "create_agent", capture_create_agent)
     profile = profile_registry.get("talent-hiring-signal")
     policy = profile_registry.policy_for("talent-hiring-signal")
 
-    profile_agents.compile_profile_agent(
+    compiled = profile_agents.compile_profile_agent(
         profile,
         policy,
         model=object(),
         generic_agent=object(),
     )
 
-    researcher = captured["subagents"][0]
-    assert researcher["runnable"]["bound_config"]["recursion_limit"] == 37
+    assert compiled["bound_config"]["recursion_limit"] == 37
 
 
 def test_talent_researcher_prompt_forbids_uncited_findings():
@@ -136,3 +103,12 @@ def test_talent_researcher_prompt_forbids_uncited_findings():
 
     assert "Never create a finding with empty evidence_refs" in TALENT_RESEARCHER_PROMPT
     assert "put it only in limitations" in TALENT_RESEARCHER_PROMPT
+    assert "Do not invent evidence IDs" in TALENT_RESEARCHER_PROMPT
+    assert "E-TC-001" in TALENT_RESEARCHER_PROMPT
+
+
+def test_talent_researcher_prompt_uses_preloaded_evidence_not_runtime_tools():
+    from agent.profile_agents import TALENT_RESEARCHER_PROMPT
+
+    assert "Do not call provided_aggregate" in TALENT_RESEARCHER_PROMPT
+    assert "Use declared sample_id or source URL values" in TALENT_RESEARCHER_PROMPT

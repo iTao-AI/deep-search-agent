@@ -40,8 +40,8 @@ GENERIC_POLICY = AgentHarnessPolicy(
 TALENT_POLICY = AgentHarnessPolicy(
     policy_id="talent-restricted-v1",
     backend="state",
-    allowed_tools=("internet_search", "provided_aggregate"),
-    subagents=("general-purpose",),
+    allowed_tools=(),
+    subagents=(),
     skills=(),
     filesystem_permissions=("deny:write:/**", "deny:read:/**"),
 )

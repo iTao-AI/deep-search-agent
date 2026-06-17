@@ -159,9 +159,10 @@ WebSocket events: `session_created`, `tool_start`, `assistant_call`, `task_resul
 
 ### Talent Benchmark Fixtures
 
-Talent runs can read server-bundled `provided_aggregate` fixtures without
-receiving filesystem or upload access. The provider is disabled by default and
-only resolves aggregate IDs declared in a validated `ResearchScope`.
+Talent runs can preload server-bundled `provided_aggregate` fixtures without
+giving the model filesystem, upload, or runtime search-tool access. The provider
+is disabled by default and only resolves aggregate IDs declared in a validated
+`ResearchScope`.
 
 ```bash
 export DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES=true
@@ -172,7 +173,9 @@ export DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES=true
 ```
 
 The provider never accepts caller-controlled paths. Keep it disabled outside
-explicit benchmark or development runs.
+explicit benchmark or development runs. The Talent model cites declared sample
+IDs or source URLs; the service normalizes those aliases to run-scoped evidence
+IDs before review.
 
 ## Project Structure
 

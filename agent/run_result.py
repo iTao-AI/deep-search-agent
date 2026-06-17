@@ -95,6 +95,7 @@ class AgentRunAccumulator:
             profile_id=self.profile_id,
             packets=self.research_packets,
             aliases=self.evidence_aliases,
+            verified_evidence_ids=self.verified_evidence_ids,
             diagnostics=self.diagnostics,
             failure_kind=failure_kind,
         )
@@ -130,6 +131,7 @@ def _resolve_talent_packets(
     profile_id: str,
     packets: list[ResearchPacket],
     aliases: dict[str, tuple[str, ...]],
+    verified_evidence_ids: set[str] | None = None,
     diagnostics: list[str],
     failure_kind: str | None,
 ) -> tuple[list[ResearchPacket], str | None]:
@@ -137,8 +139,10 @@ def _resolve_talent_packets(
 
     For the Talent profile (``talent-hiring-signal``):
     1. Attempt evidence-ref normalization via aliases.
-    2. If multiple packets exist, keep only the last one and record superseded
-       packet IDs in diagnostics as ``research_packet_superseded:<count>:<ids>``.
+    2. If multiple packets exist, keep the latest packet whose evidence refs
+       resolve to known evidence IDs. If none resolves, keep the last packet so
+       downstream readiness gates fail closed. Record dropped packet IDs in
+       diagnostics as ``research_packet_superseded:<count>:<ids>``.
     3. If no packets remain, derive ``failure_kind`` from the presence of an
        ``invalid_research_packet`` diagnostic.
 
@@ -160,12 +164,31 @@ def _resolve_talent_packets(
             resolved_failure_kind = resolved_failure_kind or "invalid_research_packet"
 
     if profile_id == _TALENT_PROFILE_ID and len(research_packets) > 1:
-        superseded_count = len(research_packets) - 1
-        superseded_ids = ",".join(p.packet_id for p in research_packets[:-1])
+        selected_index = len(research_packets) - 1
+        known_evidence_ids = _known_evidence_ids(
+            aliases,
+            verified_evidence_ids or set(),
+        )
+        if known_evidence_ids:
+            for index in range(len(research_packets) - 1, -1, -1):
+                if not _packet_has_unresolved_evidence_refs(
+                    research_packets[index],
+                    known_evidence_ids,
+                ):
+                    selected_index = index
+                    break
+
+        superseded_packets = [
+            packet
+            for index, packet in enumerate(research_packets)
+            if index != selected_index
+        ]
+        superseded_count = len(superseded_packets)
+        superseded_ids = ",".join(p.packet_id for p in superseded_packets)
         diagnostics.append(
             f"research_packet_superseded:{superseded_count}:{superseded_ids}"
         )
-        research_packets = [research_packets[-1]]
+        research_packets = [research_packets[selected_index]]
 
     if (
         resolved_failure_kind is None
@@ -232,6 +255,29 @@ def _expand_evidence_refs(
     return expanded
 
 
+def _known_evidence_ids(
+    aliases: dict[str, tuple[str, ...]],
+    verified_evidence_ids: set[str],
+) -> set[str]:
+    known = set(verified_evidence_ids)
+    for values in aliases.values():
+        known.update(values)
+    return known
+
+
+def _packet_has_unresolved_evidence_refs(
+    packet: ResearchPacket,
+    known_evidence_ids: set[str],
+) -> bool:
+    for finding in packet.findings:
+        if any(ref not in known_evidence_ids for ref in finding.evidence_refs):
+            return True
+    for claim in packet.candidate_claims:
+        if any(ref not in known_evidence_ids for ref in claim.evidence_refs):
+            return True
+    return False
+
+
 def _normalize_research_packet_evidence_refs(
     packets: list[ResearchPacket],
     aliases: dict[str, tuple[str, ...]],
@@ -260,7 +306,23 @@ def process_stream_chunk(
 ) -> None:
     """Process LangGraph stream output and report events to frontend."""
     for node_name, state in chunk.items():
-        if not state or "messages" not in state:
+        if not state:
+            continue
+
+        if (
+            accumulator.profile_id == _TALENT_PROFILE_ID
+            and "structured_response" in state
+        ):
+            try:
+                packet = ResearchPacket.model_validate(state["structured_response"])
+                accumulator.research_packets.append(packet)
+                accumulator.diagnostics.append(f"research_packet:{packet.packet_id}")
+            except (ValidationError, ValueError, TypeError) as exc:
+                accumulator.diagnostics.append(
+                    _invalid_research_packet_diagnostic(exc)
+                )
+
+        if "messages" not in state:
             continue
 
         messages = state["messages"]

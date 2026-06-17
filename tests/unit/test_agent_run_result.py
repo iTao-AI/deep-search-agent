@@ -204,6 +204,57 @@ class TestAgentRunAccumulator:
         assert [item.packet_id for item in accumulator.research_packets] == ["packet-1"]
         assert accumulator.evidence_entries == []
 
+    def test_talent_structured_response_collects_research_packet(self, tmp_path):
+        from agent.run_result import AgentRunAccumulator, process_stream_chunk
+        from agent.talent_contracts import ResearchPacket
+
+        monitor = CapturingMonitor()
+        accumulator = AgentRunAccumulator(
+            thread_id="thread-talent",
+            query="研究招聘信号",
+            session_dir=tmp_path,
+            profile_id="talent-hiring-signal",
+        )
+        packet = ResearchPacket.model_validate(
+            {
+                "packet_id": "packet-structured",
+                "scope_id": "scope-1",
+                "findings": [
+                    {
+                        "finding_id": "finding-1",
+                        "research_question_id": "question-1",
+                        "statement": "Declared sample contains a signal.",
+                        "evidence_refs": ["sample-1"],
+                        "sample_scope": "declared samples",
+                        "confidence": 0.8,
+                    }
+                ],
+                "candidate_claims": [
+                    {
+                        "claim_id": "claim-1",
+                        "text": "Declared sample contains a signal.",
+                        "claim_type": "hiring_signal",
+                        "finding_refs": ["finding-1"],
+                        "evidence_refs": ["sample-1"],
+                        "confidence": 0.8,
+                        "citation_status": "cited",
+                        "verification_status": "unverified",
+                        "review_status": "pending",
+                        "conflict_status": "none",
+                    }
+                ],
+            }
+        )
+
+        process_stream_chunk(
+            {"agent": {"messages": [], "structured_response": packet}},
+            accumulator,
+            monitor,
+        )
+
+        assert accumulator.research_packets == [packet]
+        assert "research_packet:packet-structured" in accumulator.diagnostics
+
     def test_talent_outcome_normalizes_declared_evidence_alias_refs(self, tmp_path):
         import json
 
@@ -237,7 +288,7 @@ class TestAgentRunAccumulator:
                     "finding_id": "finding-2",
                     "research_question_id": "question-1",
                     "statement": "Aggregate-level limitation applies.",
-                    "evidence_refs": [],
+                    "evidence_refs": ["ev_missing"],
                     "sample_scope": "declared aggregate",
                     "confidence": 0.7,
                 }
@@ -276,7 +327,9 @@ class TestAgentRunAccumulator:
         outcome = accumulator.to_outcome()
 
         assert outcome.research_packets[0].findings[0].evidence_refs == ["ev_run_abc"]
-        assert outcome.research_packets[0].findings[1].evidence_refs == []
+        assert outcome.research_packets[0].findings[1].evidence_refs == [
+            "ev_missing"
+        ]
         assert outcome.research_packets[0].candidate_claims[0].evidence_refs == [
             "ev_run_abc",
             "ev_run_def",
@@ -403,7 +456,7 @@ class TestAgentRunAccumulator:
                     "finding_id": "finding-stale",
                     "research_question_id": "question-1",
                     "statement": "Stale packet reported an access failure.",
-                    "evidence_refs": [],
+                    "evidence_refs": ["sample-stale"],
                     "sample_scope": "declared samples",
                     "confidence": 0.8,
                 }
@@ -414,9 +467,9 @@ class TestAgentRunAccumulator:
                     "text": "Stale packet should not pollute final artifacts.",
                     "claim_type": "methodological_observation",
                     "finding_refs": ["finding-stale"],
-                    "evidence_refs": [],
+                    "evidence_refs": ["sample-stale"],
                     "confidence": 0.8,
-                    "citation_status": "uncited",
+                    "citation_status": "cited",
                     "verification_status": "unverified",
                     "review_status": "required",
                     "conflict_status": "none",
@@ -588,6 +641,85 @@ class TestAgentRunAccumulator:
         ]
         assert "evidence_ref_normalization_failed:RuntimeError" in outcome.diagnostics
         assert "research_packet_superseded:1:packet-stale" in outcome.diagnostics
+
+    def test_talent_outcome_prefers_latest_packet_with_resolved_evidence_refs(
+        self, tmp_path
+    ):
+        from agent.run_result import AgentRunAccumulator
+        from agent.talent_contracts import Claim, Finding, ResearchPacket
+
+        accumulator = AgentRunAccumulator(
+            thread_id="thread-talent",
+            query="研究招聘信号",
+            session_dir=tmp_path,
+            profile_id="talent-hiring-signal",
+        )
+        resolved_packet = ResearchPacket(
+            packet_id="packet-resolved",
+            scope_id="scope-1",
+            findings=[
+                Finding(
+                    finding_id="finding-resolved",
+                    research_question_id="question-1",
+                    statement="Resolved packet cites declared evidence.",
+                    evidence_refs=["sample-1"],
+                    sample_scope="declared samples",
+                    confidence=0.9,
+                )
+            ],
+            candidate_claims=[
+                Claim(
+                    claim_id="claim-resolved",
+                    text="Resolved packet should drive artifacts.",
+                    claim_type="hiring_signal",
+                    finding_refs=["finding-resolved"],
+                    evidence_refs=["sample-1"],
+                    confidence=0.9,
+                    citation_status="cited",
+                    verification_status="unverified",
+                    review_status="pending",
+                    conflict_status="none",
+                )
+            ],
+        )
+        unresolved_packet = ResearchPacket(
+            packet_id="packet-unresolved",
+            scope_id="scope-1",
+            findings=[
+                Finding(
+                    finding_id="finding-unresolved",
+                    research_question_id="question-1",
+                    statement="Unresolved packet invents evidence.",
+                    evidence_refs=["d1-f5e4c3"],
+                    sample_scope="declared samples",
+                    confidence=0.9,
+                )
+            ],
+            candidate_claims=[
+                Claim(
+                    claim_id="claim-unresolved",
+                    text="Unresolved packet should not replace resolved evidence.",
+                    claim_type="hiring_signal",
+                    finding_refs=["finding-unresolved"],
+                    evidence_refs=["d1-f5e4c3"],
+                    confidence=0.9,
+                    citation_status="cited",
+                    verification_status="unverified",
+                    review_status="pending",
+                    conflict_status="none",
+                )
+            ],
+        )
+        accumulator.research_packets.extend([resolved_packet, unresolved_packet])
+        accumulator.evidence_aliases = {"sample-1": ("ev_run_abc",)}
+
+        outcome = accumulator.to_outcome()
+
+        assert [packet.packet_id for packet in outcome.research_packets] == [
+            "packet-resolved"
+        ]
+        assert outcome.research_packets[0].findings[0].evidence_refs == ["ev_run_abc"]
+        assert "research_packet_superseded:1:packet-unresolved" in outcome.diagnostics
 
     def test_talent_invalid_task_message_fails_closed_in_outcome(self, tmp_path):
         from agent.run_result import AgentRunAccumulator, process_stream_chunk

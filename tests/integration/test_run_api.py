@@ -154,10 +154,7 @@ def test_profile_manifest_exposes_policy_without_runtime_secrets():
     assert response.status_code == 200
     manifest = response.json()
     assert manifest["profile"]["profile_id"] == "talent-hiring-signal"
-    assert manifest["harness_policy"]["allowed_tools"] == [
-        "internet_search",
-        "provided_aggregate",
-    ]
+    assert manifest["harness_policy"]["allowed_tools"] == []
     assert "api_key" not in str(manifest).lower()
 
 
@@ -279,7 +276,7 @@ async def test_talent_run_persists_review_and_canonical_artifacts(tmp_path, monk
             "finding_id": "finding-1",
             "research_question_id": "question-1",
             "statement": "Signal",
-            "evidence_refs": [],
+            "evidence_refs": ["ev_missing"],
             "sample_scope": "declared",
             "confidence": 0.8,
         }],
@@ -288,9 +285,9 @@ async def test_talent_run_persists_review_and_canonical_artifacts(tmp_path, monk
             "text": "Claim requiring review",
             "claim_type": "signal",
             "finding_refs": ["finding-1"],
-            "evidence_refs": [],
+            "evidence_refs": ["ev_missing"],
             "confidence": 0.8,
-            "citation_status": "uncited",
+            "citation_status": "cited",
             "verification_status": "unverified",
             "review_status": "pending",
             "conflict_status": "none",

@@ -58,34 +58,36 @@ def test_talent_artifacts_are_deterministic_and_require_review_for_unknown_evide
 
 
 def test_talent_artifacts_require_review_for_findings_and_claims_without_evidence():
-    from agent.talent_contracts import ResearchPacket
+    from agent.talent_contracts import Claim, Finding, ResearchPacket
     from api.talent_artifacts import build_talent_artifacts
 
-    packet = ResearchPacket.model_validate(
-        {
-            "packet_id": "packet-1",
-            "scope_id": "scope-1",
-            "findings": [{
-                "finding_id": "finding-1",
-                "research_question_id": "question-1",
-                "statement": "Signal",
-                "evidence_refs": [],
-                "sample_scope": "declared",
-                "confidence": 0.8,
-            }],
-            "candidate_claims": [{
-                "claim_id": "claim-1",
-                "text": "Claim",
-                "claim_type": "signal",
-                "finding_refs": ["finding-1"],
-                "evidence_refs": [],
-                "confidence": 0.8,
-                "citation_status": "uncited",
-                "verification_status": "unverified",
-                "review_status": "pending",
-                "conflict_status": "none",
-            }],
-        }
+    packet = ResearchPacket.model_construct(
+        packet_id="packet-1",
+        scope_id="scope-1",
+        findings=[
+            Finding.model_construct(
+                finding_id="finding-1",
+                research_question_id="question-1",
+                statement="Signal",
+                evidence_refs=[],
+                sample_scope="declared",
+                confidence=0.8,
+            )
+        ],
+        candidate_claims=[
+            Claim.model_construct(
+                claim_id="claim-1",
+                text="Claim",
+                claim_type="signal",
+                finding_refs=["finding-1"],
+                evidence_refs=[],
+                confidence=0.8,
+                citation_status="uncited",
+                verification_status="unverified",
+                review_status="pending",
+                conflict_status="none",
+            )
+        ],
     )
     scope = {
         "target_roles": ["AI Agent Engineer"],

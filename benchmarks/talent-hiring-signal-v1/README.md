@@ -11,7 +11,10 @@ same byte-stable prompt envelope. It measures profile behavior on identical
 snapshot input; it does not measure live-search quality.
 
 The runner does not add `provided_aggregate` to the Generic profile, change any
-service API, or expand production permissions.
+service API, or expand production permissions. For the Talent profile, declared
+aggregate evidence is preloaded by the service before the model produces its
+structured `ResearchPacket`; the model does not receive runtime search or
+fixture-reading tools.
 
 Run from the repository root with valid model configuration:
 
@@ -48,9 +51,12 @@ increment both `schema_failure_count` and `artifact_failure_count`.
 
 - Set `DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES=true`.
 - Submit `research-scope.json` with `profile_id=talent-hiring-signal`.
-- The `provided_aggregate` tool can resolve only the aggregate ID declared in
-  that validated scope.
+- The service-side `provided_aggregate` fixture provider can resolve only the
+  aggregate ID declared in that validated scope.
 - The fixture provider is disabled by default and never accepts file paths.
+- The Talent model should cite declared `sample_id`, source URL, or bounded
+  ordinal aliases; the service normalizes those aliases to run-scoped
+  `evidence_id` values before review.
 
 These settings apply to service-level Talent smoke tests. They are not required
 by the offline fair-comparison runner. The runner enables the bounded fixture

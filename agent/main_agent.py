@@ -176,7 +176,7 @@ async def _preload_declared_aggregate_evidence(
             continue
 
         processed = 0
-        for item in result.get("results", []):
+        for index, item in enumerate(result.get("results", []), start=1):
             if not isinstance(item, dict):
                 accumulator.diagnostics.append("provided_aggregate_item_invalid")
                 continue
@@ -192,6 +192,15 @@ async def _preload_declared_aggregate_evidence(
             if isinstance(sample_id, str) and sample_id:
                 _add_evidence_alias(accumulator, sample_id, evidence_id)
                 _add_evidence_alias(accumulator, f"E-{sample_id}", evidence_id)
+            _add_evidence_alias(accumulator, f"src-{index}", evidence_id)
+            _add_evidence_alias(accumulator, f"source-{index}", evidence_id)
+            _add_evidence_alias(accumulator, f"S{index}", evidence_id)
+            _add_evidence_alias(accumulator, f"S-{index:03d}", evidence_id)
+            _add_evidence_alias(accumulator, f"sample-{index}", evidence_id)
+            _add_evidence_alias(accumulator, f"sample-{index:02d}", evidence_id)
+            _add_evidence_alias(accumulator, f"sample-{index:03d}", evidence_id)
+            _add_evidence_alias(accumulator, f"sample-snapshot-{index}", evidence_id)
+            _add_evidence_alias(accumulator, f"sample_id:job-{index}", evidence_id)
             source_url = item.get("url")
             if isinstance(source_url, str) and source_url:
                 _add_evidence_alias(accumulator, source_url, evidence_id)

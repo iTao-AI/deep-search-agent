@@ -94,7 +94,7 @@ def test_deterministic_review_requires_claim_without_evidence():
     from agent.talent_contracts import Claim, EvidenceSnapshot
     from api.review_service import build_review_bundle
 
-    claim = Claim(
+    claim = Claim.model_construct(
         claim_id="claim-1",
         text="Agent skills recur across the declared sample.",
         claim_type="hiring_signal",
@@ -190,4 +190,16 @@ def test_research_packet_rejects_claim_reference_to_unknown_finding():
     payload["candidate_claims"][0]["finding_refs"] = ["missing-finding"]
 
     with pytest.raises(ValueError, match="unknown finding"):
+        ResearchPacket.model_validate(payload)
+
+
+def test_research_packet_requires_non_empty_evidence_and_finding_refs():
+    from agent.talent_contracts import ResearchPacket
+
+    payload = _research_packet_payload()
+    payload["findings"][0]["evidence_refs"] = []
+    payload["candidate_claims"][0]["finding_refs"] = []
+    payload["candidate_claims"][0]["evidence_refs"] = []
+
+    with pytest.raises(ValueError):
         ResearchPacket.model_validate(payload)
