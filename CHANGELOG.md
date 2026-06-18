@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Made `decision-research-agent` the canonical Tool Client and configuration
+  identity for new integrations.
+- Added canonical-first `DECISION_RESEARCH_AGENT_*` configuration with
+  value-free warnings for supported `DEEP_SEARCH_AGENT_*` aliases.
+- Changed the default LangSmith project for new setups to
+  `decision-research-agent-dev`; historical traces remain in
+  `deep-search-agent-dev`.
+
+### Compatibility
+
+- Preserved all REST/WebSocket routes, persisted identities, Docker resources,
+  profile and benchmark IDs, and the exact
+  `{"status":"ok","service":"deep-search-agent"}` health response.
+- Kept `tools/deep_search_agent_tool.py` as a compatibility shim.
+
 ## [0.0.1.0] - 2026-06-02
 
 ### Added

@@ -4,7 +4,9 @@
 
 An evidence-driven research agent that gathers source-backed findings and turns them into decision-ready briefs. Built on LangGraph / DeepAgents, it combines autonomous planning, delegated research, auditable evidence capture, run-scoped persistence, and deterministic delivery contracts.
 
-The repository and compatibility identifier remain `deep-search-agent` during the ongoing migration.
+The canonical repository and technical identity are `decision-research-agent`.
+The exact `/health` service value and legacy configuration aliases remain
+`deep-search-agent` for bounded compatibility.
 
 ## Architecture
 
@@ -165,7 +167,7 @@ is disabled by default and only resolves aggregate IDs declared in a validated
 `ResearchScope`.
 
 ```bash
-export DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES=true
+export DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES=true
 
 # Example fixture and matching scope:
 # benchmarks/fixtures/talent-hiring-signal-v1.json
@@ -180,7 +182,7 @@ IDs before review.
 ## Project Structure
 
 ```
-deep-search-agent/
+decision-research-agent/
 ├── agent/
 │   ├── main_agent.py              # Main agent orchestration
 │   ├── llm.py                     # LLM factory with callback support

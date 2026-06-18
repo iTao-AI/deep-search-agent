@@ -4,7 +4,8 @@
 
 一个证据驱动的决策研究智能体：围绕明确的研究范围收集来源证据、形成可追溯结论，并生成支持实际决策的研究简报。项目基于 LangGraph / DeepAgents，支持自主规划、研究任务委派、证据生命周期治理、运行级持久化和确定性交付契约。
 
-迁移期间，仓库及兼容标识继续使用 `deep-search-agent`。
+仓库和技术主标识已统一为 `decision-research-agent`。精确 `/health` 服务标识和
+旧环境变量别名继续使用 `deep-search-agent`，作为有边界的兼容契约。
 
 ## 架构
 
@@ -158,7 +159,7 @@ WebSocket 事件: `session_created`, `tool_start`, `assistant_call`, `task_resul
 ## 项目结构
 
 ```
-deep-search-agent/
+decision-research-agent/
 ├── agent/
 │   ├── main_agent.py              # 主 Agent 编排
 │   ├── llm.py                     # LLM 工厂（支持回调）

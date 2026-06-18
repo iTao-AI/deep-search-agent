@@ -68,9 +68,22 @@ New canonical variables:
 Resolution rules:
 
 1. If the canonical variable exists, use it, including an explicitly empty value.
-2. Otherwise, if the legacy alias exists, use it and emit a `FutureWarning` once per process and legacy key.
+2. Otherwise, if the legacy alias exists, use it and emit a value-free
+   `FutureWarning` once per resolver boundary and legacy key.
 3. Otherwise, use the existing default.
 4. Never log variable values, especially API keys.
+5. Warning filters such as `PYTHONWARNINGS=error` must not turn legacy
+   configuration into a startup failure.
+
+Empty and invalid canonical values never fall through to legacy aliases:
+
+| Setting | Empty canonical value | Invalid canonical value |
+|---|---|---|
+| API key | Explicit tombstone; no auth header | N/A |
+| URL | Use the Tool Client default | Whitespace uses the default |
+| Timeout | Use the Tool Client default | Non-numeric or non-positive uses the default |
+| Benchmark fixture flag | Disabled | Any value except `true` is disabled |
+| Talent recursion limit | Use the safe default | Non-numeric or non-positive uses the safe default |
 
 The benchmark runner must set and restore the canonical fixture variable without leaking process state. Unit tests must retain explicit coverage for legacy fallback and canonical precedence.
 
@@ -81,12 +94,14 @@ This release keeps the existing compatibility contract:
 ```json
 {
   "status": "ok",
-  "service": "deep-search-agent",
-  "product": "decision-research-agent"
+  "service": "deep-search-agent"
 }
 ```
 
-`service` remains unchanged because current integrations may compare it exactly. `product` is the canonical identifier for new clients. A future breaking release may switch `service` only after consumer inventory and an explicit deprecation window.
+The complete payload remains unchanged because current integrations may compare
+the object exactly. Canonical product discovery uses the repository, API title,
+Tool Client, and current documentation. A future breaking release may switch
+`service` only after consumer inventory and an explicit deprecation window.
 
 ### Tool Client
 
@@ -113,13 +128,17 @@ Newly configured local runs use the new project through `.env.example` and obser
 
 Create `agent/runtime_env.py` as the server-side compatibility resolver. Agent runtime modules use it for benchmark fixture and Talent recursion settings. The standalone Tool Client keeps a small local resolver because direct execution with `python tools/decision_research_agent_tool.py` must not depend on repository-root import behavior.
 
-The resolver emits no value data. It uses `FutureWarning` because Python displays that category by default, so operators can see the migration requirement without enabling developer-only warnings. Warning deduplication is process-local and protected against repeated calls. Canonical precedence is deterministic even when both names are set.
+The resolver emits no value data. It uses `FutureWarning` so operators can see
+the migration requirement without enabling developer-only warnings. Warning
+deduplication is lock-protected and local to each resolver boundary: the server
+resolver and standalone Tool Client do not promise cross-module
+deduplication. Canonical precedence is deterministic even when both names are
+set.
 
 ## Documentation Policy
 
 Update current entrypoints:
 
-- `AGENTS.md`
 - `README.md`
 - `README_CN.md`
 - `.env.example`
@@ -127,12 +146,9 @@ Update current entrypoints:
 - `docs/README.md`
 - `docs/AGENT_INTEGRATION.md`
 - `docs/observability.md`
-- `docs/prd.md`
 - `docs/decisions/product-naming.md`
-- `spec/README.md`
+- `docs/superpowers/specs/2026-06-18-technical-identifier-migration-design.md`
 - `spec/api-contract.md`
-- `spec/architecture.md`
-- `spec/state-machine.md`
 
 Do not bulk-edit:
 
@@ -157,12 +173,11 @@ The existing README and architecture diagrams still describe valid generic-profi
 | `scripts/talent_value_gate_runner.py` | Set and restore the canonical fixture flag for benchmark runs. |
 | `tools/decision_research_agent_tool.py` | Become the canonical Tool Client implementation and env contract. |
 | `tools/deep_search_agent_tool.py` | Remain as a compatibility shim. |
-| `api/server.py` | Add `product=decision-research-agent` while preserving `service=deep-search-agent`. |
 | `.env.example` | Publish canonical fixture and LangSmith defaults. |
-| `AGENTS.md`, `README.md`, `README_CN.md`, `docs/prd.md` | Replace stale current-product and repository labels without rewriting architecture narrative. |
+| `README.md`, `README_CN.md` | Replace stale current-product and repository labels without rewriting architecture narrative. |
 | `docs/README.md`, `docs/AGENT_INTEGRATION.md`, `docs/observability.md` | Make the migration discoverable and document canonical client, env, health, and LangSmith usage. |
 | `docs/decisions/product-naming.md` | Record the completed repository rename and the remaining compatibility boundary. |
-| `spec/README.md`, `spec/api-contract.md`, `spec/architecture.md`, `spec/state-machine.md` | Update current-state reference labels and the exact health/client configuration contract. |
+| `spec/api-contract.md` | Update the exact health/client configuration contract. |
 | `CHANGELOG.md` | Add an Unreleased compatibility-migration entry without rewriting historical releases. |
 | focused tests | Lock canonical precedence, legacy fallback, warning behavior, health compatibility, Tool Client shim, and benchmark env restoration. |
 
@@ -170,8 +185,17 @@ The existing README and architecture diagrams still describe valid generic-profi
 
 - Invalid canonical numeric values follow the existing safe default behavior; they do not fall back to a conflicting legacy value.
 - An explicitly empty canonical API key disables the key instead of exposing a legacy secret.
-- Legacy aliases remain supported in this release, so rollback does not require environment changes.
+- Existing deployments should retain matching legacy keys during the rollback
+  window. A fresh canonical-only installation must restore legacy keys before
+  rolling back to pre-migration code.
 - If the code migration is reverted, the GitHub repository can keep the new slug because old GitHub URLs redirect and runtime compatibility remains on the old identifiers.
+
+Legacy aliases remain for at least two tagged releases after this migration.
+Removal requires a separate approved breaking-change plan, a first-party
+consumer inventory, no active first-party legacy use outside shims, tests, and
+compatibility documentation, plus release-note migration instructions. The
+repository currently has no tags, so this release does not start a fabricated
+date-based countdown.
 
 ## Test Matrix
 
@@ -182,7 +206,7 @@ The existing README and architecture diagrams still describe valid generic-profi
 | Both env names | Canonical value wins deterministically. |
 | Empty canonical secret | Legacy secret is not read. |
 | Benchmark runner | Canonical fixture flag is restored after success and failure. |
-| Health | `service` remains `deep-search-agent`; `product` is `decision-research-agent`. |
+| Health | The complete payload remains `{"status":"ok","service":"deep-search-agent"}`. |
 | Tool paths | Canonical CLI works; legacy CLI produces the same behavior. |
 | API routes | Existing REST and WebSocket route tests remain unchanged and pass. |
 | Backend regression | Full `python -m pytest -q` passes. |
@@ -195,10 +219,13 @@ The existing README and architecture diagrams still describe valid generic-profi
 2. New documentation and examples use canonical environment variables and Tool Client path.
 3. Existing legacy environment configurations continue to work without exposing values.
 4. Health consumers that require `service=deep-search-agent` remain compatible.
-5. New clients can identify `product=decision-research-agent`.
+5. Canonical identity discovery uses the repository, API title, Tool Client,
+   and documentation rather than a health payload change.
 6. New LangSmith runs default to `decision-research-agent-dev`; old traces remain untouched.
 7. API paths, persisted data, benchmark identity, and historical evidence remain unchanged.
-8. Focused tests, full backend tests, frontend build, and diff checks pass before the PR is presented for review.
+8. Upgrade and rollback documentation covers canonical-only, dual-key, and
+   legacy-only configurations.
+9. Focused tests, full backend tests, frontend build, and diff checks pass before the PR is presented for review.
 
 ## Delivery Boundary
 
