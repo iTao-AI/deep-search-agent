@@ -3,28 +3,37 @@
 ## Decision
 
 - Public English product name: **Decision Research Agent**
-- Repository and compatibility identifier: `deep-search-agent`
+- Canonical repository and technical identifier: `decision-research-agent`
+- Compatibility service identifier: `deep-search-agent`
 
-`Decision Research Agent` describes the intended product value: an agent that gathers
-source-backed research and turns it into decision-ready briefs.
+The repository and primary local directory were renamed on 2026-06-18 after
+the Talent P1A value gate passed. New configuration, Tool Client usage, and
+LangSmith examples use the canonical identity.
 
-## Current Evidence Boundary
+## Evidence Boundary
 
-The name is supported by the implemented agent runtime, Evidence lifecycle,
-EvidenceLedger, ResearchRun identity model, and deterministic DecisionBrief contracts.
-It does not claim that every source is verified or that the system makes decisions for
-users.
+The name is supported by the implemented agent runtime, evidence lifecycle,
+EvidenceLedger, ResearchRun identity model, deterministic DecisionBrief
+contracts, and the completed Talent value gate. It does not claim that every
+source is verified or that the service makes decisions for users.
 
-The Talent Hiring Signal value gate, end-to-end restricted Talent agent, P0B2 isolation,
-and durable HITL remain incomplete. Public descriptions must not imply otherwise.
+Durable HITL, runtime Skills, Async Subagent, and other deferred capabilities
+are not implied by the name.
 
 ## Compatibility Boundary
 
-Keep these identifiers unchanged until a separately approved migration:
+The following identifiers remain unchanged in this compatibility release:
 
-- Repository and local directory name: `deep-search-agent`
-- Health contract: `"service": "deep-search-agent"`
-- Environment variables such as `DEEP_SEARCH_AGENT_URL`
-- Existing API paths, Docker resources, LangSmith project names, and historical docs
+- Exact health response: `{"status":"ok","service":"deep-search-agent"}`
+- Legacy `DEEP_SEARCH_AGENT_*` environment aliases
+- `tools/deep_search_agent_tool.py` compatibility shim
+- Existing API paths, persisted identities, Docker resources, profile IDs,
+  benchmark IDs, and historical evidence
 
-This phase changes presentation-layer branding only.
+Canonical presence always wins over a legacy alias, including an empty
+canonical value. Legacy use emits a value-free `FutureWarning`.
+
+Legacy removal is a future breaking change. It requires at least two tagged
+releases after this migration, a separate approved plan, a first-party consumer
+inventory, no active first-party legacy use outside compatibility surfaces, and
+release-note migration instructions.

@@ -270,7 +270,7 @@ Legacy events: `session_created`, `tool_start`, `assistant_call`, `task_result`,
 
 ## 认证
 
-除 `/health` 和 API 文档外，HTTP API 在配置 `API_SECRET` 后要求通过 `X-API-Key` 请求头传递密钥。工具客户端只从 `DEEP_SEARCH_AGENT_API_KEY` 环境变量读取密钥，不接受命令行密钥参数。
+除 `/health` 和 API 文档外，HTTP API 在配置 `API_SECRET` 后要求通过 `X-API-Key` 请求头传递密钥。工具客户端优先从 `DECISION_RESEARCH_AGENT_API_KEY` 环境变量读取密钥，并兼容 `DEEP_SEARCH_AGENT_API_KEY` 旧别名；不接受命令行密钥参数。显式空 canonical key 会禁用鉴权请求头，不会回退读取旧 key。
 
 所有调用方提供的 `thread_id` 必须为 1-128 位字母、数字、点、下划线或连字符；服务端会拒绝路径分隔符和路径穿越形式。
 
@@ -293,6 +293,7 @@ Legacy events: `session_created`, `tool_start`, `assistant_call`, `task_result`,
 
 | 日期 | 变更 |
 |------|------|
+| 2026-06-18 | canonical Tool Client 和 `DECISION_RESEARCH_AGENT_*` 配置生效；精确 health 响应保持不变 |
 | 2026-06-12 | 新增 run-scoped telemetry、token usage、WebSocket 与同 thread 并发契约 |
 | 2026-06-08 | 新增 ResearchRun / EvidenceLedger 查询接口 |
 | 2026-05-19 | 初始 API 规范 |

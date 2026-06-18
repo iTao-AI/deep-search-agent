@@ -49,7 +49,7 @@ increment both `schema_failure_count` and `artifact_failure_count`.
 
 ## Service Fixture Boundary
 
-- Set `DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES=true`.
+- Set `DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES=true`.
 - Submit `research-scope.json` with `profile_id=talent-hiring-signal`.
 - The service-side `provided_aggregate` fixture provider can resolve only the
   aggregate ID declared in that validated scope.
