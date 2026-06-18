@@ -28,7 +28,7 @@
 | Canonical Tool Client and legacy shim | Create `tools/decision_research_agent_tool.py`; replace `tools/deep_search_agent_tool.py` with shim |
 | Exact runtime identity compatibility | Verify `api/server.py`; retain the exact response assertion in `tests/unit/test_health_endpoint.py` |
 | Contract tests | Create `tests/unit/test_runtime_env.py`, `tests/unit/test_decision_research_agent_tool.py`; modify `tests/unit/test_deep_search_agent_tool.py`, `tests/unit/test_provided_aggregate.py`, `tests/unit/test_profile_registry.py`, `tests/unit/test_talent_value_gate_runner.py` |
-| Current documentation and examples | Modify only files with active stale identifiers plus the source spec corrected by this review: `.env.example`, `README.md`, `README_CN.md`, `CHANGELOG.md`, `docs/README.md`, `docs/AGENT_INTEGRATION.md`, `docs/observability.md`, `docs/decisions/product-naming.md`, `docs/superpowers/specs/2026-06-18-technical-identifier-migration-design.md`, `spec/api-contract.md` |
+| Current documentation and examples | Modify only files with active stale identifiers plus the source spec corrected by this review: `.env.example`, `AGENTS.md`, `README.md`, `README_CN.md`, `CHANGELOG.md`, `benchmarks/talent-hiring-signal-v1/README.md`, `docs/README.md`, `docs/AGENT_INTEGRATION.md`, `docs/observability.md`, `docs/decisions/product-naming.md`, `docs/superpowers/specs/2026-06-18-technical-identifier-migration-design.md`, `spec/api-contract.md` |
 
 ### Task 1: Add Canonical-First Runtime Environment Resolution
 
@@ -435,9 +435,11 @@ git commit -m "feat(client): add canonical tool entrypoint"
 
 **Files:**
 - Modify: `.env.example`
+- Modify: `AGENTS.md`
 - Modify: `README.md`
 - Modify: `README_CN.md`
 - Modify: `CHANGELOG.md`
+- Modify: `benchmarks/talent-hiring-signal-v1/README.md`
 - Modify: `docs/README.md`
 - Modify: `docs/AGENT_INTEGRATION.md`
 - Modify: `docs/observability.md`
@@ -466,7 +468,7 @@ Document the per-variable empty-value table, canonical-plus-legacy ignored-key w
 
 - [x] **Step 3: Update current product and repository labels**
 
-Change active root-tree labels and canonical repository URLs to `decision-research-agent`. Keep generic-profile architecture descriptions intact. Structurally rewrite `docs/decisions/product-naming.md` because its “presentation-only” premise has been superseded, and add an `Unreleased` compatibility entry to `CHANGELOG.md`.
+Change active root-tree labels and canonical repository URLs to `decision-research-agent`. Update `AGENTS.md` to use the canonical product name while retaining the compatibility service ID, and update the active Talent smoke-test runbook to use `DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES`. Keep generic-profile architecture descriptions and immutable benchmark inputs/artifacts intact. Structurally rewrite `docs/decisions/product-naming.md` because its “presentation-only” premise has been superseded, and add an `Unreleased` compatibility entry to `CHANGELOG.md`.
 
 - [x] **Step 4: Update LangSmith operator instructions**
 
@@ -508,15 +510,15 @@ Run:
 ```bash
 rg -n 'tools/deep_search_agent_tool.py|DEEP_SEARCH_AGENT_(URL|API_KEY|TIMEOUT_SECONDS)|LANGSMITH_PROJECT=deep-search-agent-dev' README.md README_CN.md .env.example docs/AGENT_INTEGRATION.md docs/observability.md spec/api-contract.md
 rg -n 'deep-search-agent|DEEP_SEARCH_AGENT|deep_search_agent' Dockerfile.backend Dockerfile.frontend docker-compose.yml .github 2>/dev/null || true
-git diff --name-only origin/main -- docs/evidence openspec/changes/archive benchmarks docs/superpowers/plans docs/superpowers/specs
+git diff --name-only origin/main -- docs/evidence openspec/changes/archive benchmarks/fixtures benchmarks/talent-hiring-signal-v1/research-scope.json benchmarks/talent_hiring_signal docs/superpowers/plans docs/superpowers/specs
 ```
 
-Expected: the first command reports only explicitly labeled legacy compatibility references; the infrastructure scan finds no stale active identifier requiring migration; the protected-history command reports only this newly created plan file and the already committed 2026-06-18 design spec, never older historical files.
+Expected: the first command reports only explicitly labeled legacy compatibility references; the infrastructure scan finds no stale active identifier requiring migration; the protected-history command reports only this newly created plan file and the already committed 2026-06-18 design spec, never older historical files or immutable benchmark inputs/artifacts. The active benchmark runbook is intentionally outside that protected set.
 
 - [x] **Step 7: Commit documentation and configuration**
 
 ```bash
-git add .env.example README.md README_CN.md CHANGELOG.md docs/README.md docs/AGENT_INTEGRATION.md docs/observability.md docs/decisions/product-naming.md docs/superpowers/specs/2026-06-18-technical-identifier-migration-design.md spec/api-contract.md
+git add .env.example AGENTS.md README.md README_CN.md CHANGELOG.md benchmarks/talent-hiring-signal-v1/README.md docs/README.md docs/AGENT_INTEGRATION.md docs/observability.md docs/decisions/product-naming.md docs/superpowers/specs/2026-06-18-technical-identifier-migration-design.md spec/api-contract.md
 git commit -m "docs: publish canonical technical identifiers"
 ```
 
@@ -571,7 +573,8 @@ rg -n 'deep-search-agent|DEEP_SEARCH_AGENT|deep_search_agent' \
   --glob '!docs/superpowers/plans/2026-06-0*.md' \
   --glob '!docs/superpowers/specs/2026-06-0*.md' \
   --glob '!openspec/changes/archive/**' \
-  --glob '!benchmarks/**'
+  --glob '!benchmarks/fixtures/**' \
+  --glob '!benchmarks/talent_hiring_signal/**'
 git diff --check
 ```
 
@@ -598,10 +601,10 @@ git commit -m "docs(plan): record identifier migration verification"
 
 ### Observed Verification
 
-- Focused migration suite: `76 passed, 3 warnings in 0.78s`.
-- Full backend suite: `498 passed, 3 warnings in 56.24s`.
+- Focused migration suite: `78 passed, 4 warnings in 0.97s`.
+- Full backend suite: `500 passed, 4 warnings in 59.46s`.
 - Frontend: `npm ci` restored lockfile-defined dependencies; `npm run build`
-  completed successfully with Vite in `373ms`.
+  completed successfully with Vite in `146ms`.
 - CLI: canonical and legacy entrypoints returned help successfully from the
   repository root and `/tmp`.
 - Warning safety: legacy Tool Client resolution remained functional under
@@ -609,7 +612,8 @@ git commit -m "docs(plan): record identifier migration verification"
   key value.
 - Static checks: `git diff --check` passed; Docker, Compose, and GitHub workflow
   files contained no active identifier requiring migration; protected
-  evidence, archive, and benchmark paths were unchanged.
+  evidence, archive, and immutable benchmark paths were unchanged; the active
+  benchmark smoke-test runbook was canonicalized.
 - Dependency note: `npm ci` reported one existing high-severity audit finding;
   dependency remediation is outside this identifier-migration PR.
 
@@ -635,7 +639,7 @@ git commit -m "docs(plan): record identifier migration verification"
 | New integrations should stop copying legacy identifiers now | Active `.env.example`, Tool Client docs, benchmark runner, and runtime modules still publish or read legacy names | Valid. Doing nothing increases the future migration population on every new setup. |
 | Existing callers may depend on legacy names even without a consumer inventory | The stable Tool Client, env names, and exact health payload have shipped; no repository-local inventory can prove that external consumers do not compare them | Valid and deliberately conservative. Compatibility aliases are cheaper than a speculative breaking release. |
 | Canonical-first alias resolution is the right migration mechanism | Existing consumers use process environment configuration and a standalone Python script; both can preserve behavior without route or persistence changes | Valid, with an explicit rollback constraint: pre-migration code does not understand canonical keys, so operators must retain or restore legacy keys before code rollback. |
-| One compatibility PR is reviewable | Runtime changes are small and an evidence scan found active stale identifiers in nine current config/documentation entrypoints | Valid with a constraint: implementation must stay in independently testable commits and protected-history checks must prevent a broad search/replace. |
+| One compatibility PR is reviewable | Runtime changes are small and an evidence scan found active stale identifiers in eleven current config/documentation entrypoints | Valid with a constraint: implementation must stay in independently testable commits and protected-history checks must prevent a broad search/replace. |
 | Historical evidence must remain unchanged | Historical plans, benchmark artifacts, archived OpenSpec changes, and evidence records describe the old identity at the time of execution | Valid. Rewriting them would weaken provenance rather than improve current DX. |
 
 **Premise conclusion:** solve canonical adoption and bounded compatibility together. Do not use this PR to remove aliases, rename routes, change persistence, or advance P1B.
@@ -1058,7 +1062,7 @@ No architecture diagram requires redraw because runtime Agent topology is unchan
 
 #### Step 0: Scope Challenge
 
-Scope is accepted after reduction from the original draft. Actual stale-identifier scanning limits current documentation edits to nine entrypoints plus the current source spec. Runtime changes remain five environment key pairs, one canonical Tool Client move, one legacy shim, and benchmark override restoration. No API response, persistence, Agent behavior, dependency, or UI change is required.
+Scope is accepted after reduction from the original draft. Actual stale-identifier scanning limits current documentation edits to eleven entrypoints plus the current source spec. Runtime changes remain five environment key pairs, one canonical Tool Client move, one legacy shim, and benchmark override restoration. No API response, persistence, Agent behavior, dependency, or UI change is required.
 
 Independent engineering review status:
 

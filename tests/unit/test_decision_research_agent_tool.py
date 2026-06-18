@@ -250,6 +250,43 @@ def test_config_from_env_prefers_canonical_values(monkeypatch):
     assert "legacy.example" not in "\n".join(messages)
 
 
+def test_config_from_env_supports_legacy_values_with_value_free_warnings(monkeypatch):
+    monkeypatch.delenv("DECISION_RESEARCH_AGENT_URL", raising=False)
+    monkeypatch.delenv("DECISION_RESEARCH_AGENT_API_KEY", raising=False)
+    monkeypatch.delenv("DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setenv("DEEP_SEARCH_AGENT_URL", "https://legacy.example")
+    monkeypatch.setenv("DEEP_SEARCH_AGENT_API_KEY", "legacy-secret")
+    monkeypatch.setenv("DEEP_SEARCH_AGENT_TIMEOUT_SECONDS", "23")
+    tool._reset_warning_state_for_tests()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        config = tool.config_from_env(_args())
+
+    assert config == tool.ToolConfig(
+        base_url="https://legacy.example",
+        api_key="legacy-secret",
+        timeout_seconds=23,
+    )
+    messages = [str(item.message) for item in caught]
+    assert len(messages) == 3
+    assert all("deprecated; use" in message for message in messages)
+    assert "legacy-secret" not in "\n".join(messages)
+    assert "legacy.example" not in "\n".join(messages)
+
+
+def test_legacy_config_survives_strict_future_warning_filter(monkeypatch):
+    monkeypatch.delenv("DECISION_RESEARCH_AGENT_URL", raising=False)
+    monkeypatch.setenv("DEEP_SEARCH_AGENT_URL", "https://legacy.example")
+    tool._reset_warning_state_for_tests()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        config = tool.config_from_env(_args())
+
+    assert config.base_url == "https://legacy.example"
+
+
 @pytest.mark.parametrize("canonical_timeout", ["", "invalid", "0", "-1"])
 def test_invalid_canonical_timeout_uses_default_without_legacy(
     monkeypatch,

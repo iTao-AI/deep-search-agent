@@ -141,8 +141,10 @@ Update current entrypoints:
 
 - `README.md`
 - `README_CN.md`
+- `AGENTS.md`
 - `.env.example`
 - `CHANGELOG.md`
+- `benchmarks/talent-hiring-signal-v1/README.md`
 - `docs/README.md`
 - `docs/AGENT_INTEGRATION.md`
 - `docs/observability.md`
@@ -174,6 +176,8 @@ The existing README and architecture diagrams still describe valid generic-profi
 | `tools/decision_research_agent_tool.py` | Become the canonical Tool Client implementation and env contract. |
 | `tools/deep_search_agent_tool.py` | Remain as a compatibility shim. |
 | `.env.example` | Publish canonical fixture and LangSmith defaults. |
+| `AGENTS.md` | Use the canonical product name while preserving the compatibility service ID. |
+| `benchmarks/talent-hiring-signal-v1/README.md` | Use the canonical fixture flag in the active service smoke-test runbook; do not rewrite benchmark inputs or artifacts. |
 | `README.md`, `README_CN.md` | Replace stale current-product and repository labels without rewriting architecture narrative. |
 | `docs/README.md`, `docs/AGENT_INTEGRATION.md`, `docs/observability.md` | Make the migration discoverable and document canonical client, env, health, and LangSmith usage. |
 | `docs/decisions/product-naming.md` | Record the completed repository rename and the remaining compatibility boundary. |
