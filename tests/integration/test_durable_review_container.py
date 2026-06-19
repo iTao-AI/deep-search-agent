@@ -91,7 +91,13 @@ def docker_project(tmp_path):
     env["API_SECRET"] = "durable-hitl-container-test-only"
     project = DockerProject(root=root, project_name=project_name, env=env)
     try:
-        project._compose("up", "-d", "--build", "backend")
+        project._compose(
+            "up",
+            "-d",
+            "--build",
+            "backend",
+            timeout=1800,
+        )
         yield project
     finally:
         project._compose(
