@@ -65,7 +65,7 @@ User: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
 
 | Metric | Value | Source |
 |--------|-------|--------|
-| Local pytest run | 303 passed, 0 failed | `PYTHONPATH=. pytest -q` |
+| Local pytest run | 595 passed, 0 failed | Python 3.11 compatibility environment, `python -m pytest -q` |
 | Docker deployment | Verified on localhost | [QA Report](docs/evidence/assets/qa-report-summary.md) |
 | Frontend build | Passed | `cd frontend && npm run build` |
 | E2E Run #1 | 282s, 459K tokens, 2 sub-agents, report.md generated | [Run Log](docs/evidence/run-log.md) |
@@ -78,6 +78,7 @@ User: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
 | Fallback reports | Implemented (Phase 9) | `api/task_finalizer.py`, deterministic terminal states |
 | Task timeout handling | Implemented (Phase 9) | `api/server.py`, `_mark_task_timeout` callback |
 | ResearchRun + EvidenceLedger | Implemented (Phase 10) | `agent/research.py`, `GET /api/research/runs/{thread_id}` |
+| Durable HITL feasibility | 13/13 gates passed; disabled by default | [Gate report](docs/evidence/durable-hitl-gate-report.json) |
 
 > All metrics above are from actual command runs on this machine. Token/cost benchmark data and P95 latency are pending dedicated benchmark runs.
 
@@ -153,6 +154,7 @@ API endpoints:
 - **GET /api/research/runs/{thread_id}** — View ResearchRun and EvidenceLedger for a thread
 - **GET /api/research/runs** — List recent ResearchRun records
 - **POST /api/runs** / **GET /api/runs/{run_id}** — Start and inspect isolated research runs
+- **POST /api/runs/{run_id}/reviews/{review_id}/decisions** — Experimental, feature-flagged Talent review decision
 - **GET /api/telemetry/runs/{run_id}** / **GET /api/token-usage/runs/{run_id}** — View run-scoped observability
 - **WebSocket /ws/runs/{run_id}** — Run-scoped real-time event stream
 - **WebSocket /ws/{thread_id}** — Real-time reasoning stream
@@ -178,6 +180,22 @@ The provider never accepts caller-controlled paths. Keep it disabled outside
 explicit benchmark or development runs. The Talent model cites declared sample
 IDs or source URLs; the service normalizes those aliases to run-scoped evidence
 IDs before review.
+
+### Durable HITL Feasibility
+
+The bounded P1B review path passed all 13 durability and safety gates, including
+container restart and SIGKILL crash windows. It remains experimental and
+disabled by default:
+
+```dotenv
+DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL=false
+```
+
+An `approve` decision permits delivery but does not verify evidence. A `reject`
+decision blocks delivery and does not start new research. See the
+[operator guide](docs/operations/durable-hitl-feasibility.md) and
+[gate report](docs/evidence/durable-hitl-gate-report.json). A PASS report does
+not automatically authorize production enablement.
 
 ## Project Structure
 
@@ -243,6 +261,7 @@ decision-research-agent/
 - **Research evidence persistence**: Terminal tasks also persist ResearchRun metadata and EvidenceLedger entries. Query by `GET /api/research/runs/{thread_id}`. Evidence entries are source-like observations from tool messages, not independently verified facts.
 - **CI/CD**: GitHub Actions runs backend tests and frontend build on push/PR to `main`. API keys must be configured in GitHub Secrets.
 - **Benchmark data**: A repeated benchmark runner exists at `scripts/benchmark_runner.py`, but new median/P95 numbers should only be reported after a real multi-run benchmark is executed and archived. The existing 5-query data remains a single snapshot.
+- **Durable HITL**: The P1B feasibility gate is PASS, but the endpoint remains experimental and disabled by default. Production enablement requires a separate rollout decision; P1C is not included.
 
 ## License
 

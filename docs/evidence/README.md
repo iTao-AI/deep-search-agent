@@ -8,6 +8,7 @@
 |------|------|
 | [run-log.md](run-log.md) | E2E Run #1 数据（282s / 459K tokens / 2 子Agent）+ Phase 8 收口 + Phase 9 确定性终态 + Phase 10 ResearchRun / EvidenceLedger |
 | [technical-decisions.md](technical-decisions.md) | 关键技术决策说明与代码路径 |
+| [durable-hitl-gate-report.json](durable-hitl-gate-report.json) | P1B durable HITL feasibility 的 13 项 gate 机器可读结果 |
 
 ## Phase 9 产出（2026-06-03）
 
@@ -23,6 +24,14 @@
 - API：`GET /api/research/runs/{thread_id}` 和 `GET /api/research/runs`。
 - Benchmark runner：`scripts/benchmark_runner.py` 可执行重复固定 query benchmark；新的多轮结果尚未执行。
 - 测试：303 passed, 0 failed（`PYTHONPATH=. pytest -q`，2026-06-08）。
+
+## P1B Durable HITL Feasibility（2026-06-19）
+
+- 13/13 gate PASS，包括容器重启、幂等冲突、lease reclaim、sync durability
+  和五个 SIGKILL crash windows。
+- 完整后端回归：595 passed, 0 failed（Python 3.11 compatibility
+  environment，`python -m pytest -q`）。
+- 该结果只证明有边界的 feasibility；feature flag 仍默认关闭，不代表生产启用。
 
 ## 已有截图
 

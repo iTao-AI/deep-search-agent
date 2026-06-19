@@ -47,10 +47,78 @@
 **响应：**
 ```json
 {
-  "thread_id": "唯一的会话线程ID",
-  "status": "started"
+  "run_id": "唯一研究执行标识",
+  "thread_id": "调用方会话标识",
+  "execution_status": "completed",
+  "review_status": "required | resolved",
+  "delivery_status": "review_required | ready | blocked",
+  "review_workflow": {
+    "workflow_id": "rwf_...",
+    "review_id": "review_...",
+    "review_revision": 1,
+    "status": "waiting_decision | resume_pending | resuming | resolution_pending | approved | rejected | manual_recovery",
+    "decision_id": null,
+    "post_review_segment_id": "run_..._seg_review_...",
+    "attempt_count": 0,
+    "last_error_code": null
+  },
+  "review_decision": null,
+  "review_resolution": null
 }
 ```
+
+响应只包含有界投影。决策原始 `reason`、`actor_fingerprint`、lease owner、
+checkpoint 路径和 checkpoint payload 不会返回。
+
+### POST /api/runs/{run_id}/reviews/{review_id}/decisions
+
+实验性 P1B durable HITL 路径，仅支持 Talent Hiring Signal profile，默认关闭。
+必须同时设置 `DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL=true`、
+非空 `API_SECRET`，并通过 `X-API-Key` 认证。
+
+**请求体：**
+
+```json
+{
+  "decision_id": "caller_stable_decision_id",
+  "review_revision": 1,
+  "action": "approve | reject",
+  "reason": "reject 时必填，approve 时可选",
+  "expected_state_version": 2
+}
+```
+
+**202 响应：**
+
+```json
+{
+  "status": "resume_pending",
+  "run_id": "run_...",
+  "review_id": "review_...",
+  "decision_id": "caller_stable_decision_id",
+  "idempotent_replay": false
+}
+```
+
+重复提交内容相同的 `decision_id` 返回 `202` 且
+`idempotent_replay=true`。冲突决策、stale state 或错误工作流状态返回固定错误
+envelope：
+
+```json
+{
+  "code": "review_already_decided",
+  "problem": "This review revision already has an accepted decision.",
+  "cause": "A conflicting decision was submitted.",
+  "fix": "Fetch the run and use the persisted decision result.",
+  "retryable": false,
+  "run_id": "run_...",
+  "request_id": "request_..."
+}
+```
+
+Feature flag 关闭返回 `404 durable_hitl_disabled`；已启用但未配置
+`API_SECRET` 返回 `503 review_auth_not_configured`；无效凭证返回
+`401 invalid_api_key`。该 endpoint 标记为 experimental/deprecated，不代表已对外启用。
 
 ### GET /api/tasks/{thread_id}
 

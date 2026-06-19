@@ -11,6 +11,7 @@
 | [PRD](prd.md) | 产品需求文档 — 产品愿景、目标用户、核心功能、成功指标 |
 | [Agent Integration](AGENT_INTEGRATION.md) | 上层 Agent / 自动化脚本调用 Decision Research Agent 的稳定工具客户端 |
 | [LangSmith 可观测性](observability.md) | 隐私优先 Trace 配置、CLI 验证和完整 Trace 切换门槛 |
+| [Durable HITL 运维说明](operations/durable-hitl-feasibility.md) | 实验性 P1B 启用边界、决策语义、恢复边界和 13 项 gate 命令 |
 | [Run Log](evidence/run-log.md) | E2E、ResearchRun 和 benchmark 证据记录 |
 | [技术决策说明](evidence/technical-decisions.md) | 关键工程决策 — 记录为什么选择 A 而不是 B |
 
@@ -36,6 +37,7 @@ Superpowers 文档用于沉淀设计输入和实施计划，供后续 writing pl
 | [Evidence Pack 索引](evidence/README.md) | 证据目录总览 |
 | [Run Log](evidence/run-log.md) | 端到端运行记录模板 |
 | [Technical Decisions](evidence/technical-decisions.md) | 关键技术决策与代码路径 |
+| [Durable HITL Gate Report](evidence/durable-hitl-gate-report.json) | P1B feasibility 的 13 项持久化、安全与 crash gate 结果 |
 
 ## 技术参考文档
 
