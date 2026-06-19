@@ -19,6 +19,35 @@
 
 ## Scope Lock
 
+### Feasibility Boundary
+
+This milestone proves durable review behavior for the repository's current
+single-service, persistent-volume deployment shape. Official LangGraph guidance
+positions `SqliteSaver` as a lightweight/small-project checkpointer and recommends
+Postgres-backed savers for production workloads. Therefore:
+
+- a thirteen-gate PASS proves P1B feasibility, not general production readiness;
+- the feature remains disabled by default after PASS;
+- multi-region, horizontally scaled, or high-throughput review execution is not
+  claimed by this milestone;
+- P1C must separately decide whether SQLite remains acceptable for the actual
+  deployment envelope or whether a production checkpointer is required.
+
+### Four-Day Execution Cutline
+
+The four-day kill gate is evaluated incrementally, not only after all twelve tasks:
+
+| Checkpoint | Required proof | Stop condition |
+|---|---|---|
+| Day 0 | constrained dependency install, reopen/resume compatibility, immutable contracts | any package or `durability="sync"` incompatibility |
+| Day 1 | additive schema, atomic workflow seed, idempotent decision, pure gate reopen/resume | unresolved cross-database invariant or non-deterministic identity |
+| Day 2 | bounded worker, lease/reclaim, strict API, lifecycle integration | duplicate resolution, unbounded retry, or auth fail-open |
+| Day 3 | restart, exact crash-window convergence, Docker persistence, thirteen-gate report | any skip, ambiguous terminal state, or unexplained `manual_recovery` |
+
+Do not continue polishing documentation or integration after a checkpoint has
+already produced a P1B NO-GO. Record the failing evidence and stop the P1B
+implementation.
+
 ### In Scope
 
 - Bundle-level `approve` and `reject`.
@@ -393,7 +422,6 @@ WorkflowStatus = Literal[
     "approved",
     "rejected",
     "manual_recovery",
-    "failed",
 ]
 
 
@@ -1473,7 +1501,10 @@ class ReviewGate:
         connection = sqlite3.connect(
             self._checkpoint_path,
             check_same_thread=False,
+            timeout=5,
         )
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA busy_timeout=5000")
         saver = SqliteSaver(connection)
         saver.setup()
 
@@ -1820,7 +1851,8 @@ class ReviewWorker:
         )
         try:
             if claim.original_status == "checkpoint_pending":
-                gate.ensure_waiting(
+                await asyncio.to_thread(
+                    gate.ensure_waiting,
                     workflow_id=claim.workflow_id,
                     checkpoint_thread_id=claim.checkpoint_thread_id,
                     run_id=claim.run_id,
@@ -1837,7 +1869,8 @@ class ReviewWorker:
                 return True
 
             if claim.original_status != "resolution_pending":
-                result = gate.resume(
+                result = await asyncio.to_thread(
+                    gate.resume,
                     checkpoint_thread_id=claim.checkpoint_thread_id,
                     decision_id=claim.decision_id,
                 )
@@ -1880,13 +1913,15 @@ class ReviewWorker:
                 error_code=str(exc),
             )
             return True
-        except Exception:
+        except Exception as exc:
             logging.exception("Durable review worker failed for %s", claim.workflow_id)
             await asyncio.to_thread(
                 release_workflow_for_retry,
                 db_path=self.db_path,
                 workflow_id=claim.workflow_id,
                 worker_id=self.worker_id,
+                error_code=bounded_worker_error_code(exc),
+                max_attempts=3,
             )
             return True
 
@@ -1906,9 +1941,40 @@ class ReviewWorker:
 ```
 
 Use explicit bounded error codes; do not persist exception text.
+Define `bounded_worker_error_code()` in `api/review_worker.py` as an allowlisted
+exception-to-code mapper; unknown exceptions map to `review_worker_failed`.
 `release_workflow_for_retry()` must return failed `resuming` work to
 `resume_pending`, preserve `resolution_pending` as `resolution_pending`, and clear
 the lease. It must never move a completed checkpoint back to `resume_pending`.
+When `attempt_count >= max_attempts`, it must move the workflow to
+`manual_recovery` with a stable bounded error code instead of creating an infinite
+poison-work loop.
+
+Add tests proving:
+
+```python
+@pytest.mark.asyncio
+async def test_two_workers_do_not_resolve_the_same_workflow_twice(
+    resume_pending_run,
+):
+    worker_a = resume_pending_run.worker(worker_id="worker_a")
+    worker_b = resume_pending_run.worker(worker_id="worker_b")
+    await asyncio.gather(worker_a.run_once(), worker_b.run_once())
+    assert resume_pending_run.count_resolutions() == 1
+    assert resume_pending_run.count_reviewed_json_artifacts() == 1
+
+
+@pytest.mark.asyncio
+async def test_permanent_failure_stops_after_three_attempts(
+    permanently_failing_review_run,
+):
+    worker = permanently_failing_review_run.worker(worker_id="worker_a")
+    for _ in range(3):
+        await worker.run_once()
+    projection = permanently_failing_review_run.projection()
+    assert projection["workflow"]["status"] == "manual_recovery"
+    assert projection["workflow"]["last_error_code"] == "checkpoint_unavailable"
+```
 
 - [ ] **Step 6: Run GREEN**
 
@@ -2435,6 +2501,39 @@ CRASH_STAGES = [
     "graph_resumed",
 ]
 
+EXPECTED_OUTCOMES = {
+    "application_finalized": {
+        "workflow_status": "waiting_decision",
+        "decision_count": 0,
+        "resolution_count": 0,
+        "reviewed_artifact_count": 0,
+    },
+    "checkpoint_interrupted": {
+        "workflow_status": "waiting_decision",
+        "decision_count": 0,
+        "resolution_count": 0,
+        "reviewed_artifact_count": 0,
+    },
+    "decision_committed": {
+        "workflow_status": "approved",
+        "decision_count": 1,
+        "resolution_count": 1,
+        "reviewed_artifact_count": 1,
+    },
+    "lease_acquired": {
+        "workflow_status": "approved",
+        "decision_count": 1,
+        "resolution_count": 1,
+        "reviewed_artifact_count": 1,
+    },
+    "graph_resumed": {
+        "workflow_status": "approved",
+        "decision_count": 1,
+        "resolution_count": 1,
+        "reviewed_artifact_count": 1,
+    },
+}
+
 
 @pytest.mark.parametrize("stage", CRASH_STAGES)
 def test_sigkill_window_converges_without_duplicate_state(tmp_path, stage):
@@ -2455,23 +2554,25 @@ def test_sigkill_window_converges_without_duplicate_state(tmp_path, stage):
     process.wait(timeout=10)
 
     run_recovery_worker(tmp_path)
-    assert_converged_exactly_once(tmp_path, stage)
+    assert_converged_exactly_once(
+        tmp_path,
+        expected=EXPECTED_OUTCOMES[stage],
+    )
 ```
 
 `assert_converged_exactly_once()` must assert:
 
 ```python
-assert count_decisions(tmp_path) <= 1
-assert count_post_review_segments(tmp_path) <= 1
-assert count_resolutions(tmp_path) <= 1
-assert count_reviewed_json_artifacts(tmp_path) <= 1
-assert workflow_status(tmp_path) in {
-    "waiting_decision",
-    "approved",
-    "rejected",
-    "manual_recovery",
-}
+assert count_post_review_segments(tmp_path) == 1
+assert count_decisions(tmp_path) == expected["decision_count"]
+assert count_resolutions(tmp_path) == expected["resolution_count"]
+assert count_reviewed_json_artifacts(tmp_path) == expected["reviewed_artifact_count"]
+assert workflow_status(tmp_path) == expected["workflow_status"]
 ```
+
+`manual_recovery` is not an acceptable generic success result for these five
+known crash windows. It is reserved for genuinely irreconcilable or corrupt state,
+which has its own explicit gate.
 
 - [ ] **Step 3: Run RED**
 
@@ -2871,9 +2972,28 @@ def test_backend_container_restart_preserves_review_state(docker_project):
     assert recovered["reviewed_artifact_preserved"] is True
 ```
 
+Implement `docker_project` locally in
+`tests/integration/test_durable_review_container.py`; do not add a pytest Docker
+plugin. The fixture must:
+
+1. allocate a unique Compose project name;
+2. run `docker compose up -d --build backend` with process-local
+   `DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL=true` and a non-production
+   test-only `API_SECRET`;
+3. expose `exec_json()` and `restart()` wrappers using argument arrays rather than
+   `shell=True`;
+4. always run `docker compose down -v` in `finally`;
+5. fail, rather than skip, when
+   `DECISION_RESEARCH_AGENT_REQUIRE_DOCKER_TESTS=true`.
+
 Mark with `@pytest.mark.docker` and skip with an explicit reason when Docker is
 unavailable. The final P1B gate command must run it on a Docker-capable host; a
 skip does not count as a pass.
+
+When `DECISION_RESEARCH_AGENT_REQUIRE_DOCKER_TESTS=true`, the fixture must call
+`pytest.fail("docker_required_but_unavailable")` instead of `pytest.skip(...)`.
+This prevents pytest's zero exit code for an all-skipped node from becoming a
+false thirteen-gate PASS.
 
 - [ ] **Step 3: Run RED**
 
@@ -2915,7 +3035,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -2974,18 +3096,28 @@ def build_report(results: dict[str, bool]) -> dict:
     }
 
 
+def _pytest_gate_passed(completed: subprocess.CompletedProcess[str]) -> bool:
+    output = f"{completed.stdout}\n{completed.stderr}"
+    skipped = re.search(r"\b\d+\s+skipped\b", output, flags=re.IGNORECASE)
+    return completed.returncode == 0 and skipped is None
+
+
 def run_gate_tests() -> dict[str, bool]:
     results = {}
     for gate_name, node_id in GATE_TESTS.items():
         command = [sys.executable, "-m", "pytest", node_id, "-q"]
+        env = os.environ.copy()
+        if gate_name == "gate_02_container_persistence":
+            env["DECISION_RESEARCH_AGENT_REQUIRE_DOCKER_TESTS"] = "true"
         completed = subprocess.run(
             command,
             text=True,
             capture_output=True,
             check=False,
+            env=env,
         )
-        results[gate_name] = completed.returncode == 0
-        if completed.returncode != 0:
+        results[gate_name] = _pytest_gate_passed(completed)
+        if not results[gate_name]:
             print(completed.stdout, file=sys.stderr)
             print(completed.stderr, file=sys.stderr)
     return results
@@ -3006,6 +3138,11 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 ```
+
+Add a unit test that stubs a Docker gate subprocess returning
+zero with skipped output and verifies the runner still reports `NO_GO`; the
+environment contract above is the primary enforcement, and the output check is
+defense in depth.
 
 Add `scripts/durable_hitl_container_fixture.py` with two commands:
 
@@ -3163,6 +3300,9 @@ Run:
 
 Expected: all focused tests pass.
 
+The focused set must include the two-worker lease race, poison-work retry cap,
+Docker-required skip behavior, and per-stage exact crash oracle.
+
 - [ ] **Step 4: Run the complete backend and frontend regression**
 
 Run:
@@ -3272,3 +3412,670 @@ Report:
 - documentation impact;
 - any `manual_recovery` limitation;
 - confirmation that P1C was not started.
+
+---
+
+## Autoplan Review Addendum
+
+Reviewed on 2026-06-19 in **HOLD SCOPE** mode against the real repository at
+commit `8f6dcc5`.
+
+- Premise gate: passed by the user's explicit confirmation before `/autoplan`.
+- UI scope: no. Design review skipped.
+- Developer-facing scope: yes. The plan adds an experimental HTTP mutation,
+  environment flags, migration commands, an operator gate runner, and runbook.
+- Outside voices: Codex CLI authenticated but returned a usage-limit error before
+  analysis; Claude subagents were unavailable under the active host policy.
+  Consensus tables therefore use `N/A`, never fabricated agreement.
+
+### Phase 1: CEO Review
+
+#### 0A. Premise Challenge
+
+| Premise | Assessment | Decision |
+|---|---|---|
+| P1A value has been proven strongly enough to justify P1B | Supported by the completed Talent value gate and merged renderer work | Keep |
+| Durable HITL must be proven before public enablement | Correct; current non-interrupt bundle is safer until restart/idempotency gates pass | Keep |
+| A pure review graph is safer than interrupting the expensive research graph | Correct because replay is isolated from model/tool side effects | Keep |
+| Separate application and checkpoint SQLite databases are acceptable for a feasibility spike | Acceptable only with explicit reconciliation and `manual_recovery`; not a production scalability claim | Keep with boundary |
+| All twelve tasks should run before the kill gate is evaluated | Wrong proxy; it risks spending the full window after feasibility has already failed | Replace with daily cutlines |
+
+The user outcome is not "we used LangGraph interrupt." The outcome is: a required
+Talent review can be decided once, recovered after a crash, and either release or
+block delivery without changing evidence truth.
+
+Doing nothing leaves the current non-interrupt review bundle intact. That is safe,
+but it prevents externally usable review decisions. The pain is real but not urgent
+enough to justify weakening the kill gate.
+
+#### 0B. What Already Exists
+
+| Sub-problem | Existing code | Reuse decision |
+|---|---|---|
+| Run identity and fenced transitions | `api/run_repository.py` `run_id`, `segment_id`, `state_version` | Extend; do not create a second run model |
+| Atomic Talent finalization | `finalize_run_transaction()` | Seed workflow in the same transaction |
+| Deterministic review content | `api/review_service.py`, `api/talent_artifacts.py` | Retain as review input |
+| Canonical DecisionBrief rendering | `api/decision_brief.py` | Build reviewed artifacts from the original canonical artifact |
+| Persistent application SQLite | `api/persistence.py`, `api/run_migrations.py` | Keep authoritative business ledger |
+| FastAPI API-key middleware | `api/server.py` | Do not trust its fail-open dev behavior for decision mutation; add route-local fail-closed auth |
+| Async task lifecycle | `api/task_tracker.py` | Reuse lifecycle style, not its process-local task registry |
+| Persistent Docker volume | `docker-compose.yml` `backend_data:/app/data` | Store both SQLite files on the existing volume |
+| Evidence/review privacy boundary | sanitized run/artifact APIs | Keep reason and actor audit-only |
+
+#### 0C. Dream State Delta
+
+```text
+CURRENT
+non-interrupt review bundle
+delivery remains review_required
+        |
+        v
+P1B FEASIBILITY
+immutable decision ledger
+pure persisted review gate
+restart + crash recovery
+feature flag remains false
+        |
+        v
+12-MONTH IDEAL
+deployment-appropriate durable checkpointer
+real reviewer identity and authorization
+operational SLOs and bounded recovery tooling
+multiple reviewed delivery channels
+```
+
+P1B moves in the right direction but intentionally stops before reviewer UX,
+role-based authorization, and production-scale checkpoint infrastructure.
+
+#### 0C-bis. Implementation Alternatives
+
+| Approach | Effort | Risk | Pros | Cons | Decision |
+|---|---:|---:|---|---|---|
+| A. Application ledger only, no LangGraph interrupt | S | Low | Smallest diff, proves decision idempotency | Does not prove the approved durable-gate requirement | Reject |
+| B. Pure review graph plus application ledger | L | Medium | Isolates replay, proves the actual durability contract, reuses existing run model | Cross-database reconciliation is real complexity | **Selected** |
+| C. Embed interrupt in Talent research graph | XL | High | One graph and one thread | Replays model/tool work, expands blast radius, couples review to research | Reject |
+
+Approach B remains the best fit. It spends complexity only where the approved
+requirement demands it.
+
+#### 0D. Scope and Complexity
+
+The plan touches more than eight files and introduces four service modules, so the
+complexity smell is real. It is still justified because the scope contains four
+separate responsibilities: immutable contracts, business persistence, checkpoint
+execution, and HTTP/worker integration. Combining them into `api/server.py` would
+reduce file count while increasing coupling and test cost.
+
+The reduction applied inside scope is sequencing, not capability removal:
+
+1. dependency/checkpoint compatibility;
+2. ledger and deterministic identities;
+3. pure graph and bounded worker;
+4. API/lifecycle;
+5. crash/container evidence;
+6. documentation.
+
+#### 0E. Temporal Interrogation
+
+| Time | Decision needed before implementation |
+|---|---|
+| Hour 1 | Exact package compatibility and whether SQLite checkpoint reopen/resume works |
+| Hours 2-3 | Transaction boundaries, deterministic IDs, status/version invariants |
+| Hours 4-5 | Replay-safe graph behavior, lease ownership, retry cap, API auth |
+| Hour 6+ | Exact crash oracles, Docker-required behavior, gate evidence and rollback |
+
+#### 0F. Mode
+
+**HOLD SCOPE**. No Skills, Async Subagent, UI, LLM reviewer, ATS integration,
+Postgres migration, or public P1C activation was added.
+
+#### CEO Architecture Review
+
+```text
+POST Talent run
+      |
+      v
+api/server.py::_run_v2_with_persistence
+      |
+      +---- atomic transaction -------------------------------+
+      |                                                       |
+      v                                                       v
+research_runs_v2 + review_bundles_v2                review_workflows_v2
+      |                                                       |
+      |                                                       v
+      |                                              ReviewWorker lease
+      |                                                       |
+      |                                  +--------------------+------------------+
+      |                                  |                                       |
+      |                                  v                                       v
+      |                         application SQLite                      checkpoint SQLite
+      |                         decision authority                      graph position only
+      |                                  |                                       |
+      |                                  +--------------------+------------------+
+      |                                                       v
+      +---------------------------------------------- fenced resolution
+                                                              |
+                                      +-----------------------+------------------+
+                                      v                                          v
+                             approve: delivery ready                   reject: delivery blocked
+```
+
+Coupling is acceptable only if `api/review_gate.py` never writes business state and
+`api/review_repository.py` never infers authority from raw checkpoint tables.
+
+At 10x current load, SQLite write contention and polling are the first limits. At
+100x, this architecture is outside its stated envelope. The plan now says so.
+
+Rollback:
+
+```text
+incident
+  |
+  +--> set feature flag false
+  |      new decisions return durable_hitl_disabled
+  |      current review bundles remain review_required
+  |
+  +--> preserve both DB files for diagnosis
+  |
+  +--> restore application DB only from verified backup when migration itself failed
+  |
+  +--> do not delete checkpoint state while an accepted decision exists
+```
+
+#### Error and Rescue Registry
+
+| Codepath | Failure | Exception/code | Rescue | Caller sees |
+|---|---|---|---|---|
+| dependency compatibility | package missing/incompatible | import/version failure | stop Day 0 | NO-GO report |
+| `init_review_schema` | locked/corrupt DB | `sqlite3.OperationalError` / `DatabaseError` | restore verified backup for migration failure | migration failure |
+| `accept_review_decision` | stale version | `stale_state_version` | no retry mutation | actionable 409 |
+| `accept_review_decision` | duplicate conflicting request | `decision_id_conflict` / `review_already_decided` | return persisted authority | actionable 409 |
+| `ReviewGate.ensure_waiting` | checkpoint locked | bounded SQLite error | release lease; retry up to cap | pending, logged |
+| `ReviewGate.resume` | mismatched decision | `checkpoint_decision_mismatch` | `manual_recovery` | run projection shows recovery required |
+| `ReviewGate.inspect` | corrupt checkpoint | `checkpoint_corrupt` | `manual_recovery` | run projection shows recovery required |
+| `ReviewWorker.run_once` | transient unknown exception | allowlisted error code | release/retry up to 3 | no false success |
+| `ReviewWorker.run_once` | poison work | max attempts reached | `manual_recovery` | bounded terminal diagnosis |
+| review API auth | missing secret | `review_auth_not_configured` | reject before mutation | 503 with fix |
+| review API auth | bad key | `invalid_api_key` | reject before mutation | 401 with fix |
+| Docker gate | Docker absent | `docker_required_but_unavailable` | fail gate, never skip-pass | NO-GO |
+
+No LLM call exists in this review path, so malformed/refusal model output is not a
+new P1B failure mode.
+
+#### Security Threat Model
+
+| Threat | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| Decision mutation when global auth is fail-open | Medium | High | route-local fail-closed authentication |
+| IDOR by changing `run_id`/`review_id` | Medium | High | transaction checks exact run/review/revision relationship |
+| Duplicate/conflicting decision | High | High | unique constraints, request hash, state-version fence |
+| Reason or credential leakage | Medium | Medium | audit-only fields, sanitized projections, no raw exception persistence |
+| Checkpoint payload becomes business authority | Low | High | decision loader validates against application ledger |
+| SQL injection | Low | High | parameterized SQL only |
+| Path injection for checkpoint DB | Low | Medium | server-controlled environment path, no request-controlled path |
+
+#### Data Flow and Shadow Paths
+
+```text
+DECISION REQUEST
+  |
+  +-- missing/invalid body ----------> 422, no write
+  +-- feature flag false ------------> 404 durable_hitl_disabled
+  +-- secret missing ----------------> 503 review_auth_not_configured
+  +-- wrong key ---------------------> 401 invalid_api_key
+  +-- stale/conflicting -------------> 409 stable conflict envelope
+  |
+  v
+validate run + review + revision + version
+  |
+  v
+atomic decision + resume_pending + state_version
+  |
+  +-- duplicate same hash -----------> idempotent 202
+  +-- DB locked/transient -----------> no partial commit, bounded retry
+  |
+  v
+worker lease -> checkpoint resume -> resolution_pending -> resolution commit
+  |
+  +-- completed graph, app crash ----> startup reconciliation
+  +-- corrupt/mismatch --------------> manual_recovery
+```
+
+#### CEO Code Quality Review
+
+- Keep review contracts in one module and persistence in one repository module.
+- Remove the unused workflow `failed` state; `manual_recovery` is the explicit
+  terminal state for operator intervention.
+- Keep synchronous `SqliteSaver` calls off the FastAPI event loop with
+  `asyncio.to_thread`.
+- Add SQLite `busy_timeout` and WAL to make lock behavior bounded and observable.
+- Keep fixture builders outside `tests/` only because Docker and subprocess
+  harnesses need them in the backend image.
+
+#### CEO Test Review
+
+```text
+NEW USER/API FLOW
+submit approve/reject
+  +-- disabled/auth/validation/conflict/idempotent tests
+  +-- unresolved remains non-deliverable
+  +-- approved becomes ready
+  +-- rejected becomes blocked
+
+NEW DATA FLOW
+Talent finalization -> workflow seed -> checkpoint -> decision -> resolution
+  +-- transaction rollback tests
+  +-- reopen/resume compatibility test
+  +-- decision and artifact exactly-once tests
+
+NEW ASYNC WORK
+lifespan worker -> claim -> lease -> resume -> resolve
+  +-- two-worker race test
+  +-- lease expiry/reclaim test
+  +-- poison-work retry-cap test
+
+NEW CRASH FLOW
+five SIGKILL windows
+  +-- exact per-stage oracle, not generic manual_recovery
+
+NEW DEPLOYMENT FLOW
+Compose persistent volume
+  +-- restart test with Docker required
+  +-- skipped Docker node forces NO-GO
+```
+
+#### CEO Performance Review
+
+- No N+1 network calls are introduced.
+- `get_run()` adds bounded point queries for one workflow, decision, and resolution.
+- Worker polling must claim one row through the indexed
+  `(status, lease_expires_at, updated_at)` path.
+- SQLite lock wait is bounded to five seconds; retries stop after three attempts.
+- No cache is needed because decision and checkpoint state must be strongly fresh.
+
+#### CEO Observability Review
+
+Required structured fields: `workflow_id`, `run_id`, `review_id`, `decision_id`
+when present, `worker_id`, stage, attempt, error code, and elapsed time. Never log
+reason text, API keys, actor fingerprints, evidence snippets, or checkpoint payloads.
+
+The machine-readable gate report is the milestone dashboard. No new UI dashboard or
+alerting system belongs in P1B.
+
+#### CEO Deployment Review
+
+Deploy order:
+
+```text
+install constrained dependency
+  -> apply/verify additive application schema
+  -> deploy code with feature flag false
+  -> run focused + full + Docker gates
+  -> record PASS or NO_GO
+  -> keep feature flag false
+```
+
+Old code ignores additive tables. New code with the flag false preserves current
+review-bundle behavior. Rollback does not require destructive schema deletion.
+
+#### CEO Long-Term Review
+
+Reversibility: **4/5**. Code and route are feature-flagged; schema is additive.
+The path dependency is the dual-database reconciliation protocol. It remains
+acceptable only while clearly scoped as a feasibility result.
+
+#### CEO Failure Modes Registry
+
+| Codepath | Failure mode | Rescued | Test | Visible | Logged |
+|---|---|---:|---:|---:|---:|
+| migration | checksum/table mismatch | yes | yes | yes | yes |
+| decision API | missing auth | yes | yes | yes | yes |
+| decision API | stale/conflict | yes | yes | yes | yes |
+| checkpoint create | process killed | yes | yes | projection | yes |
+| decision commit | process killed | yes | yes | recovered | yes |
+| graph resume | process killed | yes | yes | recovered | yes |
+| checkpoint corrupt | irreconcilable | manual | yes | yes | yes |
+| lease held by dead worker | expiry/reclaim | yes | yes | delayed | yes |
+| poison workflow | repeated failure | manual after 3 | yes | yes | yes |
+| Docker unavailable | gate would skip | fail gate | yes | NO-GO | yes |
+
+Critical gaps after plan corrections: **0**.
+
+#### CEO Dual Voice Consensus
+
+| Dimension | Claude subagent | Codex CLI | Consensus |
+|---|---|---|---|
+| Premises valid | N/A | unavailable: usage limit | primary review only |
+| Right problem | N/A | unavailable | primary review: yes |
+| Scope calibrated | N/A | unavailable | primary review: yes, with daily cutlines |
+| Alternatives explored | N/A | unavailable | primary review: sufficient |
+| Market risk covered | N/A | unavailable | not material to feasibility spike |
+| Six-month trajectory | N/A | unavailable | acceptable with SQLite boundary |
+
+#### CEO Completion Summary
+
+| Item | Result |
+|---|---|
+| Mode | HOLD SCOPE |
+| Architecture issues | 2 corrected: SQLite production claim, event-loop/lock boundary |
+| Error paths mapped | 12 |
+| Security issues | 1 corrected: route-local fail-closed auth retained as mandatory |
+| Data/interaction gaps | 2 corrected: exact crash oracle, Docker skip |
+| Code quality issues | 2 corrected: retry cap, unused state |
+| Test gaps | 4 added |
+| Performance issues | 1 bounded: SQLite lock wait |
+| Observability gaps | 0 after stable-code requirements |
+| Deployment risks | 1 corrected: daily kill cutlines |
+| Design | skipped, no UI scope |
+| Scope proposals | 0 |
+| Unresolved CEO decisions | 0 |
+
+**Phase 1 complete.** Outside voices were unavailable; no user challenge was
+manufactured. The approved premise and HOLD SCOPE direction stand.
+
+### Phase 2: Design Review
+
+Skipped. The plan adds no screen, component, layout, form, or end-user UI flow.
+
+### Phase 3: Engineering Review
+
+#### Scope Challenge
+
+The file count is high, but the architecture can be split into two sequential lanes
+without reducing safety:
+
+```text
+Lane A: contracts -> schema -> decision repository -> artifacts
+                                      |
+                                      v
+Lane B: checkpoint graph -> worker -> API/lifecycle -> crash/container gates
+```
+
+The lanes should not run as independent worktrees because both converge on
+`api/review_repository.py`, `api/run_repository.py`, shared fixtures, and status
+invariants. Sequential implementation is safer and faster than merge-conflict
+coordination for this four-day spike.
+
+#### Engineering Dependency Graph
+
+```text
+review_models
+  +--> review_repository -----> run_repository
+  |          |                       |
+  |          +--> review_artifacts <-+
+  |          |
+  |          +--> review_gate <--> checkpoint SQLite
+  |                    |
+  |                    v
+  +--------------> review_worker
+                         |
+                         +--> review_api
+                         +--> FastAPI lifespan
+                         +--> restart/SIGKILL/container harness
+```
+
+#### Engineering Findings
+
+1. **[P1] (confidence 10/10)** The planned gate runner treated pytest return code
+   zero as PASS, while the plan explicitly allowed Docker tests to skip. Pytest
+   returns zero for skipped tests, so gate 2 could falsely pass. Fixed with a
+   Docker-required environment contract plus skipped-output defense.
+2. **[P1] (confidence 10/10)** The planned SIGKILL assertion accepted
+   `manual_recovery` for every crash window and only checked counts `<= 1`. That
+   proved absence of some duplicates, not correct recovery. Fixed with exact
+   per-stage terminal states and exact counts.
+3. **[P1] (confidence 9/10)** The worker catch-all released poison work forever.
+   Fixed with a three-attempt cap and explicit `manual_recovery`.
+4. **[P2] (confidence 9/10)** Synchronous checkpoint operations were called directly
+   from an async worker. Fixed by moving them to `asyncio.to_thread`.
+5. **[P2] (confidence 8/10)** SQLite lock handling had no explicit wait bound.
+   Fixed with connection timeout, WAL, and `busy_timeout`.
+6. **[P2] (confidence 8/10)** `docker_project` had no fixture contract and could
+   accidentally introduce a plugin or shell injection. Fixed with a local,
+   argument-array fixture contract and guaranteed teardown.
+
+#### Engineering Test Diagram
+
+| Codepath | Happy path | Failure/edge path | Test level |
+|---|---|---|---|
+| contract validation | approve/reject valid | missing reject reason, invalid IDs, extra fields | unit |
+| schema migration | apply twice | checksum mismatch, restore | unit/integration |
+| workflow seed | required review seeds atomically | artifact/evidence insert rollback | unit |
+| decision acceptance | first accept | replay, conflicting ID, stale version, wrong profile | unit/integration |
+| reviewed artifacts | approve/reject deterministic | reason/actor omitted, duplicate artifact fence | unit |
+| gate | interrupt/reopen/resume | wrong review decision, corrupt checkpoint | unit/integration |
+| worker | claim/resume/resolve | two-worker race, lease expiry, poison retry cap | async unit |
+| API | authenticated 202 | disabled 404, no secret 503, wrong key 401, conflict 409 | integration |
+| lifecycle | worker starts/stops | enabled without secret | integration |
+| restart | pending and committed states recover | corruption becomes manual recovery | subprocess |
+| SIGKILL | five exact windows converge | duplicate or wrong terminal state fails | subprocess chaos |
+| container | restart preserves both DBs | Docker unavailable is NO-GO | Docker integration |
+| gate report | all 13 pass | any failure or skip => NO-GO | unit/system |
+
+The 2am confidence test is the thirteen-gate runner on a Docker-capable host. The
+hostile-QA test is the exact five-window SIGKILL matrix plus concurrent workers.
+The chaos test is killing the worker after checkpoint completion but before
+application resolution.
+
+#### Engineering Performance
+
+The plan is low-throughput by design. The main risks are SQLite lock contention and
+poll amplification. One indexed claim query per poll, one claimed row per worker,
+five-second lock bounds, and one-second idle polling are acceptable for the spike.
+No load test is required beyond a two-worker race because production throughput is
+explicitly not claimed.
+
+#### Engineering NOT in Scope
+
+- Postgres or LangGraph Agent Server.
+- Public enablement after PASS.
+- Multiple review revisions per run.
+- Reviewer accounts, RBAC, UI, or browser workflow.
+- Re-research after rejection.
+- Skills, Async Subagent, or LLM reviewer.
+- Performance claims beyond the single-service SQLite envelope.
+
+#### Engineering Completion Summary
+
+| Item | Result |
+|---|---|
+| Scope | accepted with internal hardening |
+| Architecture issues | 2 |
+| Code quality issues | 2 |
+| Test gaps | 4 |
+| Performance issues | 1 |
+| Failure-mode critical gaps | 0 after corrections |
+| Parallelization | 2 conceptual lanes, sequential execution recommended |
+| External voice | unavailable |
+| Unresolved decisions | 0 |
+
+**Phase 3 complete.** Six actionable findings were folded into the plan.
+
+### Phase 3.5: DX Review
+
+#### Developer Persona
+
+| Field | Value |
+|---|---|
+| Who | Repository maintainer or backend engineer evaluating P1B |
+| Context | Existing project environment; needs to prove or reject durability safely |
+| Tolerance | One documented command for the final gate, explicit prerequisites |
+| Expects | stable error codes, deterministic report, no hidden mutation, clean rollback |
+
+#### Developer Perspective
+
+I already know how to run the repository. I do not want a new platform tutorial; I
+want to know whether durable review is enabled, what authority each SQLite file has,
+and whether a failed gate can silently pass. I start from the operations doc, create
+the constrained Python 3.11 environment, and run the compatibility gate before
+touching persistence. During implementation, each task gives me one RED command and
+one focused GREEN command. At the end I run one gate runner. If Docker is unavailable,
+the command must say NO-GO rather than let me believe the feature is safe. If a crash
+lands in `manual_recovery`, I need a stable error code and a runbook, not a traceback
+or raw checkpoint JSON. The best moment is not a flashy output; it is seeing a
+machine-readable report with exactly thirteen passes and knowing the feature still
+did not enable itself.
+
+#### Reference Benchmark
+
+| Reference | Useful pattern | Applied here |
+|---|---|---|
+| LangGraph official HITL | persistent checkpointer, same `thread_id`, `Command(resume=...)` | explicit compatibility and reopen/resume gate |
+| Mature workflow engines | immutable event/decision authority and replay-safe handlers | application ledger remains authoritative |
+| Stripe-style mutation APIs | idempotency, stable structured errors, no implicit success | decision ID/hash and problem/cause/fix envelope |
+| Current project | constrained dependencies, migration backup/restore, machine-readable benchmark | reused directly |
+
+#### Magical Moment
+
+Delivery vehicle: one CLI gate command producing
+`docs/evidence/durable-hitl-gate-report.json`. It is deterministic, reviewable, and
+fails non-zero on NO-GO. No playground or UI is justified for an internal disabled
+feasibility path.
+
+#### Developer Journey
+
+| Stage | Developer does | Friction control | Status |
+|---|---|---|---|
+| Discover | reads P1B operations doc | experimental boundary first | covered |
+| Evaluate | reads 13 gates and kill rules | PASS does not auto-enable | covered |
+| Install | builds constrained Python 3.11 env | exact pinned package set | covered |
+| Hello world | runs checkpoint compatibility script | one visible pass line | covered |
+| Integrate | implements tasks in order | RED/GREEN per task | covered |
+| Debug | reads stable error code and run projection | no raw secret/checkpoint data | covered |
+| Verify | runs focused/full/frontend/Docker checks | exact commands | covered |
+| Upgrade | applies additive migration with backup | checksum + restore | covered |
+| Scale/migrate | stops at stated SQLite envelope | P1C decision, not hidden claim | covered |
+
+Feature-specific time to first controlled proof: target **under 5 minutes after the
+repository environment exists**. Fresh dependency installation is excluded from this
+feature-specific measure and is recorded separately.
+
+#### First-Time Maintainer Confusion Report
+
+```text
+T+0:00  Opens operations doc; sees disabled/experimental status.
+T+0:30  Runs compatibility script; learns whether the checkpoint package works.
+T+1:30  Reads authority table; application DB is ledger, checkpoint DB is position.
+T+2:30  Runs gate runner.
+T+3:00  Receives PASS or NO-GO. Docker absence cannot appear as PASS.
+```
+
+#### DX Scorecard
+
+| Dimension | Before review | After review | Reason |
+|---|---:|---:|---|
+| Getting Started | 7 | 8 | daily cutlines and one final gate command |
+| API design | 8 | 9 | strict auth, stable conflict envelope, idempotent mutation |
+| Error messages | 7 | 9 | bounded codes and problem/cause/fix responses |
+| Documentation | 7 | 8 | operations, API, data model, evidence report |
+| Upgrade path | 8 | 9 | additive schema, backup, checksum, restore |
+| Dev environment | 7 | 8 | constrained Python, Docker-required gate |
+| Community/ecosystem | 7 | 7 | unchanged OSS surface; no P1B expansion needed |
+| DX measurement | 8 | 9 | machine-readable 13-gate report |
+| Overall | 7.4 | 8.6 | fit for an internal experimental path |
+
+#### DX Implementation Checklist
+
+- [ ] Compatibility command works in clean Python 3.11.
+- [ ] Final gate is one command and exits non-zero on NO-GO.
+- [ ] Docker absence cannot count as PASS.
+- [ ] Every API error states problem, cause, fix, and retryability.
+- [ ] Run projection omits reason text, actor fingerprint, lease owner, and checkpoint internals.
+- [ ] Migration has backup, verification, and restore.
+- [ ] Operations doc states PASS does not enable the feature.
+- [ ] `manual_recovery` has stable codes and an operator response.
+- [ ] P1C decision is not implied by P1B PASS.
+
+#### DX Dual Voice Consensus
+
+| Dimension | Claude subagent | Codex CLI | Consensus |
+|---|---|---|---|
+| Getting started | N/A | unavailable | primary review: sufficient |
+| API naming | N/A | unavailable | primary review: consistent |
+| Errors actionable | N/A | unavailable | primary review: strong after correction |
+| Docs complete | N/A | unavailable | primary review: implementation requirement |
+| Upgrade safe | N/A | unavailable | primary review: additive and reversible |
+| Environment friction | N/A | unavailable | primary review: bounded |
+
+**Phase 3.5 complete.** Overall DX target is 8.6/10 for the internal maintainer
+persona; public end-user onboarding remains out of scope.
+
+### Cross-Phase Themes
+
+**Theme: false confidence is the main risk.** CEO, engineering, and DX analysis all
+converged on the same requirement: no Docker skip, generic `manual_recovery`, or
+SQLite PASS may be presented as production-ready success.
+
+**Theme: bounded recovery beats more automation.** Retry caps, exact crash oracles,
+and daily kill cutlines create more value than Skills, more agents, or UI.
+
+### NOT in Scope
+
+- Public HITL enablement or P1C implementation.
+- Reviewer UI, RBAC, SSO, accounts, or multi-tenant authorization.
+- Runtime Skills, Async Subagent, LLM reviewer, or long-term memory authority.
+- Postgres migration, Agent Server, queue platform, or distributed scheduler.
+- ATS, email, spreadsheet, dashboard, or webhook delivery.
+- Re-running research after a rejection.
+- Changing evidence verification status on approval.
+- Repository/service/API rename work.
+
+### Implementation Tasks
+
+- [ ] **AP-T1 (P1, human: ~1h / Codex: ~15m)** — Gate runner — Make Docker skip an explicit NO-GO.
+  - Files: `scripts/durable_hitl_gate_runner.py`, `tests/unit/test_durable_hitl_gate_runner.py`, `tests/integration/test_durable_review_container.py`
+  - Verify: stubbed skip test and Docker-required integration gate.
+- [ ] **AP-T2 (P1, human: ~2h / Codex: ~30m)** — Crash harness — Assert exact per-stage recovery state and counts.
+  - Files: `tests/integration/test_durable_review_kill9.py`, `scripts/durable_hitl_fixture.py`
+  - Verify: all five SIGKILL cases reach their specific oracle.
+- [ ] **AP-T3 (P1, human: ~2h / Codex: ~30m)** — Worker — Bound poison retries and prove two-worker exactly-once behavior.
+  - Files: `api/review_worker.py`, `api/review_repository.py`, `tests/unit/test_review_worker.py`
+  - Verify: retry cap and concurrent worker tests.
+- [ ] **AP-T4 (P2, human: ~1h / Codex: ~15m)** — Checkpoint adapter — Bound SQLite waits and keep sync I/O off the event loop.
+  - Files: `api/review_gate.py`, `api/review_worker.py`, `tests/unit/test_review_gate.py`
+  - Verify: timeout/lock test and async worker regression.
+- [ ] **AP-T5 (P2, human: ~30m / Codex: ~10m)** — Documentation — State the lightweight SQLite feasibility boundary and daily kill cutlines.
+  - Files: `docs/operations/durable-hitl-feasibility.md`, `README.md`, `README_CN.md`
+  - Verify: privacy/scope grep and reviewer read-through.
+
+### Decision Audit Trail
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 1 | CEO | Keep pure review graph separate from research graph | auto-decided | replay safety | isolates interrupt replay from model/tool side effects | interrupt Talent graph |
+| 2 | CEO | Keep dual SQLite only as feasibility envelope | auto-decided | explicit boundaries | proves current deployment without claiming production scale | production-readiness claim |
+| 3 | CEO | Evaluate kill gate daily | auto-decided | speed and focus | stops sunk-cost implementation after failed feasibility | end-only kill gate |
+| 4 | Eng | Docker skip is NO-GO | auto-decided | evidence before assertion | pytest skip must never satisfy a durable gate | return-code-only pass |
+| 5 | Eng | Use exact crash oracles | auto-decided | complete verification | generic terminal sets can hide broken recovery | `<= 1` and any terminal |
+| 6 | Eng | Cap retries at three | auto-decided | bounded failure | poison work must stop visibly | infinite release/retry |
+| 7 | Eng | Move sync checkpoint calls to threads | auto-decided | protect event loop | SQLite waits must not stall FastAPI | direct sync call |
+| 8 | DX | One machine-readable gate command is the magical moment | auto-decided | simplest complete DX | internal maintainer needs certainty, not UI | playground/UI |
+
+No taste decision or user challenge remains open.
+
+## GSTACK REVIEW REPORT
+
+### Runs
+
+| Review | Runs | Status | Findings |
+|---|---:|---|---|
+| CEO Review | 1 | CLEAR | `HOLD_SCOPE`; 0 critical gaps |
+| Codex Independent Review | 1 | UNAVAILABLE | CLI authentication succeeded, but the review call hit the current usage limit |
+| Engineering Review | 1 | CLEAR | 6 findings folded into the plan; 0 unresolved critical gaps |
+| Design Review | 0 | SKIPPED | No UI or visual interaction change in P1B |
+| Developer Experience Review | 1 | CLEAR | Internal maintainer score improved from 7.4 to 8.6 |
+
+### CODEX
+
+Codex CLI was available and authenticated, but the independent review call could not
+run because the account had reached its usage limit. This report does not fabricate
+cross-model consensus; the primary CEO, engineering, and DX reviews remain the
+decision basis.
+
+### VERDICT
+
+CEO, engineering, and developer-experience reviews are cleared. The plan is approved
+for implementation of the bounded P1B durable HITL feasibility gate. Approval does
+not enable the feature, establish production readiness, or authorize P1C.
+
+NO UNRESOLVED DECISIONS
