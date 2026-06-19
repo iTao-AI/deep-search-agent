@@ -1,8 +1,17 @@
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+import json
 
 import pytest
 
-from agent.talent_contracts import ReviewBundle
+from agent.talent_contracts import (
+    DecisionBrief,
+    EvidenceSnapshot,
+    ResearchScope,
+    ReviewBundle,
+)
+from api.decision_brief import with_content_hash
+from api.review_artifacts import ReviewedArtifactResult, build_reviewed_artifacts
 from api.review_models import (
     ReviewDecisionRequest,
     checkpoint_thread_id,
@@ -14,6 +23,7 @@ from api.review_repository import (
     _connect,
     accept_review_decision,
     get_review_projection,
+    resolve_review,
 )
 from api.run_repository import (
     create_run,
@@ -29,11 +39,12 @@ class RequiredReviewRun:
     run_id: str
     review_id: str
     review: ReviewBundle
+    workflow_id: str
+    brief_json: str
 
 
-@pytest.fixture
-def required_review_run(tmp_path) -> RequiredReviewRun:
-    db_path = str(tmp_path / "runs.db")
+def _required_review_run(tmp_path, *, suffix: str) -> RequiredReviewRun:
+    db_path = str(tmp_path / f"runs-{suffix}.db")
     created = create_run(
         db_path=db_path,
         thread_id="thread-1",
@@ -47,16 +58,61 @@ def required_review_run(tmp_path) -> RequiredReviewRun:
         allowed_previous_statuses={"pending"},
         execution_status="running",
     )
+    evidence = EvidenceSnapshot(
+        evidence_id="ev_1",
+        source_url="https://example.com",
+        snippet="Evidence",
+        verification_status="unverified",
+    )
     review = ReviewBundle(
         review_id="review_1",
         run_id=created["run_id"],
         revision=1,
         status="required",
         claim_snapshots=[],
-        evidence_snapshots=[],
+        evidence_snapshots=[evidence],
         triggers=["manual_review_required"],
         recommended_actions=["Review the bundle."],
         required_before_delivery=True,
+    )
+    scope = ResearchScope.model_validate(
+        {
+            "target_roles": ["AI Agent Engineer"],
+            "target_companies": [],
+            "time_window": {"start": "2026-01-01", "end": "2026-06-12"},
+            "declared_samples": [],
+            "allowed_source_types": ["public_job_posting"],
+            "research_questions": ["Which skills recur?"],
+            "requested_outputs": ["decision_brief"],
+        }
+    )
+    brief = with_content_hash(
+        DecisionBrief(
+            schema_version="1",
+            run_id=created["run_id"],
+            profile_id="talent-hiring-signal",
+            profile_version="1",
+            input_snapshot_hash="input_hash",
+            renderer_version="2",
+            canonicalization_version="1",
+            scope=scope,
+            executive_summary="Summary",
+            findings=[],
+            claims=[],
+            evidence_summary=[evidence.model_dump(mode="json")],
+            conflicts=[],
+            limitations=[],
+            recommendations=[],
+            review_summary=review.model_dump(mode="json"),
+            quality_summary={"status": "passed"},
+            generated_at=datetime(2026, 6, 12, tzinfo=timezone.utc),
+        )
+    )
+    brief_json = json.dumps(
+        brief.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
     )
     workflow_id = review_workflow_id(
         created["run_id"],
@@ -74,6 +130,15 @@ def required_review_run(tmp_path) -> RequiredReviewRun:
         delivery_status="review_required",
         evidence_entries=[],
         review_bundle=review,
+        artifacts=[
+            {
+                "artifact_id": "decision-brief.json",
+                "kind": "decision_brief_json",
+                "media_type": "application/json",
+                "content": brief_json,
+                "content_hash": brief.content_hash,
+            }
+        ],
         review_workflow={
             "workflow_id": workflow_id,
             "checkpoint_thread_id": checkpoint_thread_id(workflow_id),
@@ -103,7 +168,86 @@ def required_review_run(tmp_path) -> RequiredReviewRun:
         run_id=created["run_id"],
         review_id=review.review_id,
         review=review,
+        workflow_id=workflow_id,
+        brief_json=brief_json,
     )
+
+
+@pytest.fixture
+def required_review_run(tmp_path) -> RequiredReviewRun:
+    return _required_review_run(tmp_path, suffix="required")
+
+
+@dataclass(frozen=True)
+class ResumableReviewRun:
+    required: RequiredReviewRun
+    artifacts: ReviewedArtifactResult
+
+
+def _make_resumable_review_run(
+    required: RequiredReviewRun,
+    *,
+    action: str,
+) -> ResumableReviewRun:
+    request = ReviewDecisionRequest(
+        decision_id=f"decision_{action}",
+        review_revision=1,
+        action=action,
+        reason="Rejected" if action == "reject" else None,
+        expected_state_version=2,
+    )
+    accepted = accept_review_decision(
+        db_path=required.db_path,
+        run_id=required.run_id,
+        review_id=required.review_id,
+        request=request,
+        actor_fingerprint="actor_hash",
+    )
+    artifacts = build_reviewed_artifacts(
+        original_brief_json=required.brief_json,
+        decision=accepted.decision,
+    )
+    now = datetime.now(timezone.utc)
+    connection = _connect(required.db_path)
+    try:
+        with connection:
+            connection.execute(
+                """
+                UPDATE review_workflows_v2
+                SET status = 'resuming',
+                    lease_owner = 'worker_a',
+                    lease_expires_at = ?,
+                    attempt_count = 1
+                WHERE workflow_id = ?
+                """,
+                (
+                    (now + timedelta(minutes=5)).isoformat(),
+                    required.workflow_id,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO review_resume_attempts_v2 (
+                    workflow_id, attempt, worker_id, started_at
+                ) VALUES (?, 1, 'worker_a', ?)
+                """,
+                (required.workflow_id, now.isoformat()),
+            )
+    finally:
+        connection.close()
+    return ResumableReviewRun(required=required, artifacts=artifacts)
+
+
+@pytest.fixture
+def resumable_approved_review_run(tmp_path) -> ResumableReviewRun:
+    required = _required_review_run(tmp_path, suffix="approved")
+    return _make_resumable_review_run(required, action="approve")
+
+
+@pytest.fixture
+def resumable_rejected_review_run(tmp_path) -> ResumableReviewRun:
+    required = _required_review_run(tmp_path, suffix="rejected")
+    return _make_resumable_review_run(required, action="reject")
 
 
 def test_same_decision_request_is_idempotent(required_review_run):
@@ -240,3 +384,71 @@ def test_run_projection_does_not_expose_sensitive_decision_fields(
     assert "reason" not in projection["decision"]
     assert "actor_fingerprint" not in projection["decision"]
     assert "lease_owner" not in projection["workflow"]
+
+
+def test_approval_resolution_is_exactly_once(resumable_approved_review_run):
+    fixture = resumable_approved_review_run
+    resolution = resolve_review(
+        db_path=fixture.required.db_path,
+        workflow_id=fixture.required.workflow_id,
+        worker_id="worker_a",
+        expected_run_state_version=3,
+        result=fixture.artifacts,
+    )
+    replay = resolve_review(
+        db_path=fixture.required.db_path,
+        workflow_id=fixture.required.workflow_id,
+        worker_id="worker_a",
+        expected_run_state_version=3,
+        result=fixture.artifacts,
+    )
+
+    assert replay == resolution
+    run = get_run(
+        db_path=fixture.required.db_path,
+        run_id=fixture.required.run_id,
+    )
+    assert run["review_status"] == "resolved"
+    assert run["delivery_status"] == "ready"
+    assert run["state_version"] == 4
+    assert [item["artifact_id"] for item in run["artifacts"]].count(
+        "decision-brief.reviewed.json"
+    ) == 1
+
+
+def test_rejection_resolution_blocks_delivery(resumable_rejected_review_run):
+    fixture = resumable_rejected_review_run
+    resolution = resolve_review(
+        db_path=fixture.required.db_path,
+        workflow_id=fixture.required.workflow_id,
+        worker_id="worker_a",
+        expected_run_state_version=3,
+        result=fixture.artifacts,
+    )
+
+    run = get_run(
+        db_path=fixture.required.db_path,
+        run_id=fixture.required.run_id,
+    )
+    assert resolution.action == "reject"
+    assert run["review_status"] == "resolved"
+    assert run["delivery_status"] == "blocked"
+    assert not any(
+        item["artifact_id"].startswith("decision-brief.reviewed")
+        for item in run["artifacts"]
+    )
+
+
+def test_stale_worker_cannot_resolve_after_another_worker(
+    resumable_approved_review_run,
+):
+    fixture = resumable_approved_review_run
+
+    with pytest.raises(ReviewConflict, match="lease_not_owned"):
+        resolve_review(
+            db_path=fixture.required.db_path,
+            workflow_id=fixture.required.workflow_id,
+            worker_id="stale_worker",
+            expected_run_state_version=3,
+            result=fixture.artifacts,
+        )

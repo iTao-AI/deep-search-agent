@@ -18,7 +18,13 @@ EXECUTION_STATUSES = {
     "failed",
 }
 REVIEW_STATUSES = {"not_required", "required", "resolved"}
-DELIVERY_STATUSES = {"pending", "ready", "review_required", "failed"}
+DELIVERY_STATUSES = {
+    "pending",
+    "ready",
+    "review_required",
+    "blocked",
+    "failed",
+}
 MIGRATION_VERSION = "003_run_identity_backbone"
 
 

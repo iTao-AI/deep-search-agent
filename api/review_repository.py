@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 import sqlite3
 from typing import Any
 
+from api.review_artifacts import ReviewedArtifactResult
 from api.review_models import (
     ReviewDecisionRecord,
     ReviewDecisionRequest,
     decision_request_hash,
+    review_resolution_id,
 )
 from api.run_repository import _connect, _now, init_run_schema
 
@@ -22,6 +25,17 @@ class DecisionAcceptance:
     decision: ReviewDecisionRecord
     workflow_status: str
     idempotent_replay: bool
+
+
+@dataclass(frozen=True)
+class ReviewResolution:
+    resolution_id: str
+    run_id: str
+    review_id: str
+    decision_id: str
+    action: str
+    artifact_ids: tuple[str, ...]
+    created_at: str
 
 
 class ReviewConflict(RuntimeError):
@@ -362,5 +376,208 @@ def get_review_projection(
             "decision": _decision_projection(decision),
             "resolution": _resolution_projection(resolution),
         }
+    finally:
+        connection.close()
+
+
+def _resolution_record(row: sqlite3.Row) -> ReviewResolution:
+    return ReviewResolution(
+        resolution_id=row["resolution_id"],
+        run_id=row["run_id"],
+        review_id=row["review_id"],
+        decision_id=row["decision_id"],
+        action=row["action"],
+        artifact_ids=tuple(json.loads(row["artifact_ids_json"])),
+        created_at=row["created_at"],
+    )
+
+
+def _lease_is_active(value: str | None) -> bool:
+    if value is None:
+        return False
+    try:
+        expires_at = datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    if expires_at.tzinfo is None:
+        return False
+    return expires_at > datetime.now(timezone.utc)
+
+
+def resolve_review(
+    *,
+    workflow_id: str,
+    worker_id: str,
+    expected_run_state_version: int,
+    result: ReviewedArtifactResult,
+    db_path: str | None = None,
+) -> ReviewResolution:
+    """Persist one reviewed outcome exactly once under an active worker lease."""
+    init_review_schema(db_path)
+    connection = _connect(db_path)
+    try:
+        with connection:
+            connection.execute("BEGIN IMMEDIATE")
+            workflow = connection.execute(
+                "SELECT * FROM review_workflows_v2 WHERE workflow_id = ?",
+                (workflow_id,),
+            ).fetchone()
+            if workflow is None:
+                raise ReviewConflict("review_not_found")
+
+            existing = connection.execute(
+                "SELECT * FROM review_resolutions_v2 WHERE run_id = ?",
+                (workflow["run_id"],),
+            ).fetchone()
+            if existing is not None:
+                return _resolution_record(existing)
+
+            if (
+                workflow["status"] != "resuming"
+                or workflow["lease_owner"] != worker_id
+                or not _lease_is_active(workflow["lease_expires_at"])
+            ):
+                raise ReviewConflict("lease_not_owned")
+            if workflow["decision_id"] is None:
+                raise ReviewConflict("review_decision_missing")
+
+            decision = connection.execute(
+                "SELECT * FROM review_decisions_v2 WHERE decision_id = ?",
+                (workflow["decision_id"],),
+            ).fetchone()
+            run = connection.execute(
+                "SELECT state_version FROM research_runs_v2 WHERE run_id = ?",
+                (workflow["run_id"],),
+            ).fetchone()
+            if decision is None or run is None:
+                raise ReviewConflict("review_not_found")
+            if (
+                decision["accepted_state_version"]
+                != expected_run_state_version
+                or run["state_version"] != expected_run_state_version
+            ):
+                raise ReviewConflict("stale_state_version")
+
+            result_decision = result.resolved_review.get("decision", {})
+            if (
+                result_decision.get("decision_id") != decision["decision_id"]
+                or result_decision.get("action") != decision["action"]
+            ):
+                raise ReviewConflict("resolution_result_mismatch")
+            if decision["action"] == "reject" and result.artifacts:
+                raise ReviewConflict("resolution_result_mismatch")
+
+            now = _now()
+            artifact_ids = tuple(
+                sorted(artifact["artifact_id"] for artifact in result.artifacts)
+            )
+            resolution = ReviewResolution(
+                resolution_id=review_resolution_id(decision["decision_id"]),
+                run_id=workflow["run_id"],
+                review_id=workflow["review_id"],
+                decision_id=decision["decision_id"],
+                action=decision["action"],
+                artifact_ids=artifact_ids,
+                created_at=now,
+            )
+            connection.executemany(
+                """
+                INSERT INTO run_artifacts_v2 (
+                    artifact_id, run_id, kind, media_type, content,
+                    content_hash, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        artifact["artifact_id"],
+                        workflow["run_id"],
+                        artifact["kind"],
+                        artifact["media_type"],
+                        artifact["content"],
+                        artifact["content_hash"],
+                        now,
+                    )
+                    for artifact in result.artifacts
+                ],
+            )
+            connection.execute(
+                """
+                INSERT INTO review_resolutions_v2 (
+                    resolution_id, run_id, review_id, decision_id, action,
+                    resolved_review_json, artifact_ids_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    resolution.resolution_id,
+                    resolution.run_id,
+                    resolution.review_id,
+                    resolution.decision_id,
+                    resolution.action,
+                    json.dumps(
+                        result.resolved_review,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    json.dumps(artifact_ids, separators=(",", ":")),
+                    now,
+                ),
+            )
+            delivery_status = (
+                "ready" if decision["action"] == "approve" else "blocked"
+            )
+            run_cursor = connection.execute(
+                """
+                UPDATE research_runs_v2
+                SET review_status = 'resolved',
+                    delivery_status = ?,
+                    state_version = state_version + 1,
+                    updated_at = ?
+                WHERE run_id = ? AND state_version = ?
+                """,
+                (
+                    delivery_status,
+                    now,
+                    workflow["run_id"],
+                    expected_run_state_version,
+                ),
+            )
+            if run_cursor.rowcount != 1:
+                raise ReviewConflict("stale_state_version")
+            terminal_status = (
+                "approved" if decision["action"] == "approve" else "rejected"
+            )
+            workflow_cursor = connection.execute(
+                """
+                UPDATE review_workflows_v2
+                SET status = ?, lease_owner = NULL, lease_expires_at = NULL,
+                    updated_at = ?
+                WHERE workflow_id = ? AND status = 'resuming'
+                  AND lease_owner = ?
+                """,
+                (terminal_status, now, workflow_id, worker_id),
+            )
+            if workflow_cursor.rowcount != 1:
+                raise ReviewConflict("lease_not_owned")
+            attempt_cursor = connection.execute(
+                """
+                UPDATE review_resume_attempts_v2
+                SET completed_at = ?, outcome = ?, error_code = NULL
+                WHERE workflow_id = ? AND attempt = ? AND worker_id = ?
+                  AND completed_at IS NULL
+                """,
+                (
+                    now,
+                    terminal_status,
+                    workflow_id,
+                    workflow["attempt_count"],
+                    worker_id,
+                ),
+            )
+            if attempt_cursor.rowcount != 1:
+                raise ReviewConflict("resume_attempt_not_found")
+            return resolution
+    except sqlite3.IntegrityError as exc:
+        raise ReviewConflict("review_resolution_conflict") from exc
     finally:
         connection.close()
