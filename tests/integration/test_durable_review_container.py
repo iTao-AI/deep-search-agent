@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,26 @@ import pytest
 
 
 pytestmark = pytest.mark.docker
+
+
+@contextmanager
+def _ensure_compose_env_file(root: Path):
+    env_path = root / ".env"
+    created = False
+    try:
+        if not env_path.exists():
+            try:
+                with env_path.open("x", encoding="utf-8") as env_file:
+                    env_file.write(
+                        "# Created temporarily by the Docker integration test.\n"
+                    )
+                created = True
+            except FileExistsError:
+                pass
+        yield
+    finally:
+        if created:
+            env_path.unlink(missing_ok=True)
 
 
 class DockerProject:
@@ -90,22 +111,23 @@ def docker_project(tmp_path):
     env["DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL"] = "true"
     env["API_SECRET"] = "durable-hitl-container-test-only"
     project = DockerProject(root=root, project_name=project_name, env=env)
-    try:
-        project._compose(
-            "up",
-            "-d",
-            "--build",
-            "backend",
-            timeout=1800,
-        )
-        yield project
-    finally:
-        project._compose(
-            "down",
-            "-v",
-            "--remove-orphans",
-            timeout=180,
-        )
+    with _ensure_compose_env_file(root):
+        try:
+            project._compose(
+                "up",
+                "-d",
+                "--build",
+                "backend",
+                timeout=1800,
+            )
+            yield project
+        finally:
+            project._compose(
+                "down",
+                "-v",
+                "--remove-orphans",
+                timeout=180,
+            )
 
 
 def test_backend_container_restart_preserves_review_state(docker_project):
