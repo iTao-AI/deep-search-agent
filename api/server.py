@@ -52,6 +52,7 @@ from api.run_repository import (
 from agent.profile_registry import profile_registry
 from agent.talent_contracts import ResearchScope
 from api.talent_artifacts import build_talent_artifacts
+from api.review_api import router as review_router
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -65,8 +66,17 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
 
+        path = request.url.path
+        if (
+            request.method == "POST"
+            and path.startswith("/api/runs/")
+            and "/reviews/" in path
+            and path.endswith("/decisions")
+        ):
+            return await call_next(request)
+
         # Skip auth for docs and health endpoints
-        if request.url.path in ("/docs", "/openapi.json", "/redoc", "/health"):
+        if path in ("/docs", "/openapi.json", "/redoc", "/health"):
             return await call_next(request)
 
         api_secret = os.environ.get("API_SECRET", "")
@@ -123,6 +133,7 @@ app.add_middleware(
 )
 
 app.add_middleware(APIKeyMiddleware)
+app.include_router(review_router)
 
 
 @app.get("/health")
