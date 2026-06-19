@@ -1,4 +1,4 @@
-"""Apply and verify the additive run identity migration."""
+"""Apply and verify the additive run identity and durable review migrations."""
 import argparse
 import json
 from pathlib import Path

@@ -138,8 +138,47 @@ workspace/
 }
 ```
 
+## Durable Review 数据模型
+
+P1B feasibility 使用两个独立 SQLite 文件：
+
+- application DB（`TASKS_DB_PATH`）是业务事实源，保存 ResearchRun、不可变决策、
+  workflow、lease、恢复尝试、resolution 和 artifacts；
+- checkpoint DB（`DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH`）只保存纯
+  LangGraph ReviewGate 的执行 checkpoint，不保存业务权威结论。
+
+application DB 新增四张表：
+
+| 表 | 作用 |
+|---|---|
+| `review_decisions_v2` | 每个 review revision 的不可变 `approve` / `reject` 决策和幂等请求哈希 |
+| `review_workflows_v2` | durable 状态机、post-review segment、lease、重试计数和错误码 |
+| `review_resume_attempts_v2` | 每次 worker claim/resume/reconcile 的审计结果 |
+| `review_resolutions_v2` | exactly-once resolution 与最终 artifact ID 集合 |
+
+状态机：
+
+```text
+checkpoint_pending -> waiting_decision -> resume_pending -> resuming
+    -> resolution_pending -> approved | rejected
+
+ambiguous state or exhausted retries -> manual_recovery
+```
+
+Run 的 `delivery_status` 包含：
+
+- `review_required`：需要决策，尚不可交付；
+- `ready`：`approve` 已 exactly-once resolution；
+- `blocked`：`reject` 已 resolution，禁止交付；
+- `failed`：研究执行失败。
+
+公开 run 投影不会返回 decision reason、actor fingerprint、lease owner、
+checkpoint 路径或 checkpoint payload。`approve` 只允许交付，不改变 EvidenceLedger
+验证状态；`reject` 不触发新的研究。
+
 ## 变更记录
 
 | 日期 | 变更 |
 |------|------|
+| 2026-06-19 | 增加 P1B durable review 双数据库权威边界、四表模型、状态机和 blocked delivery |
 | 2026-05-19 | 初始数据模型文档 |

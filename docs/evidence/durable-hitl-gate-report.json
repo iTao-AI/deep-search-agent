@@ -1,0 +1,21 @@
+{
+  "expected": 13,
+  "failed": [],
+  "passed": 13,
+  "results": {
+    "gate_01_restart_recovery": true,
+    "gate_02_container_persistence": true,
+    "gate_03_duplicate_idempotency": true,
+    "gate_04_decision_before_resume": true,
+    "gate_05_replay_safety": true,
+    "gate_06_conflicting_decision": true,
+    "gate_07_checkpoint_failure": true,
+    "gate_08_migration_restore": true,
+    "gate_09_auth_fail_closed": true,
+    "gate_10_unresolved_not_deliverable": true,
+    "gate_11_lease_reclaim": true,
+    "gate_12_sync_durability": true,
+    "gate_13_sigkill_windows": true
+  },
+  "status": "PASS"
+}

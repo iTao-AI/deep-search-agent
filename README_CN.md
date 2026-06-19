@@ -62,7 +62,7 @@
 
 | 指标 | 值 | 来源 |
 |------|-----|------|
-| Local pytest run | 303 通过, 0 失败 | `PYTHONPATH=. pytest -q` |
+| Local pytest run | 598 通过, 0 失败 | Python 3.11 compatibility environment，`python -m pytest -q` |
 | Docker 部署 | 本机验证通过 | [QA 报告](docs/evidence/assets/qa-report-summary.md) |
 | 前端构建 | 通过 | `cd frontend && npm run build` |
 | E2E Run #1 | 282秒, 459K token, 2 子Agent, 报告.md 已生成 | [运行记录](docs/evidence/run-log.md) |
@@ -75,6 +75,7 @@
 | 兜底报告 | 已实现（Phase 9） | `api/task_finalizer.py`，确定性终态 |
 | 任务超时处理 | 已实现（Phase 9） | `api/server.py`，`_mark_task_timeout` 回调 |
 | ResearchRun + EvidenceLedger | 已实现（Phase 10） | `agent/research.py`, `GET /api/research/runs/{thread_id}` |
+| Durable HITL feasibility | 13/13 门禁通过，默认关闭 | [门禁报告](docs/evidence/durable-hitl-gate-report.json) |
 
 > 以上数据均来自本机实际命令运行结果。Token/cost 基准测试数据和 P95 延迟待专项基准运行后补充。
 
@@ -150,11 +151,25 @@ API 端点:
 - **GET /api/research/runs/{thread_id}** — 查看某个线程的 ResearchRun 和 EvidenceLedger
 - **GET /api/research/runs** — 查看最近的 ResearchRun 列表
 - **POST /api/runs** / **GET /api/runs/{run_id}** — 启动并查询隔离的研究执行
+- **POST /api/runs/{run_id}/reviews/{review_id}/decisions** — 实验性、feature-flagged Talent review 决策
 - **GET /api/telemetry/runs/{run_id}** / **GET /api/token-usage/runs/{run_id}** — 查看 run 级可观测数据
 - **WebSocket /ws/runs/{run_id}** — run 级实时事件流
 - **WebSocket /ws/{thread_id}** — 实时推理流
 
 WebSocket 事件: `session_created`, `tool_start`, `assistant_call`, `task_result`, `task_finalized`, `run_timeout`, `error`
+
+### Durable HITL 可行性
+
+有边界的 P1B review 路径已通过 13 项持久化与安全门禁，包括容器重启和
+SIGKILL crash windows，但仍是实验能力且默认关闭：
+
+```dotenv
+DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL=false
+```
+
+`approve` 只允许交付，不代表证据已验证；`reject` 阻止交付，也不会启动新的研究。
+详见[运维说明](docs/operations/durable-hitl-feasibility.md)和
+[门禁报告](docs/evidence/durable-hitl-gate-report.json)。门禁 PASS 不会自动授权生产启用。
 
 ## 项目结构
 
@@ -220,6 +235,7 @@ decision-research-agent/
 - **研究证据持久化**: 终态任务会额外持久化 ResearchRun 元数据和 EvidenceLedger。查询 GET /api/research/runs/{thread_id}。Evidence 条目来自工具消息中的来源型观察，不等同于已人工验证事实。
 - **CI/CD**: GitHub Actions 在 push/PR 到 main 时自动运行 pytest + 前端构建。API keys 需在 GitHub Secrets 中配置。
 - **Benchmark 数据**: 已提供 `scripts/benchmark_runner.py` 重复 benchmark runner，但新的中位数/P95 只能在真实多轮 benchmark 执行并归档后报告。现有 5-query 数据仍是单次快照。
+- **Durable HITL**: P1B feasibility gate 已 PASS，但 endpoint 仍是实验能力且默认关闭。生产启用需要独立 rollout 决策，本阶段不包含 P1C。
 
 ## License
 

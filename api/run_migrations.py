@@ -5,7 +5,12 @@ from pathlib import Path
 import sqlite3
 
 from api.persistence import _get_db_path
-from api.run_repository import MIGRATION_VERSION, init_run_schema
+from api.review_repository import (
+    REVIEW_MIGRATION_CHECKSUM,
+    REVIEW_MIGRATION_VERSION,
+    init_review_schema,
+)
+from api.run_repository import MIGRATION_VERSION
 
 
 REQUIRED_TABLES = {
@@ -13,8 +18,20 @@ REQUIRED_TABLES = {
     "research_runs_v2",
     "run_segments",
     "evidence_entries_v2",
+    "review_decisions_v2",
+    "review_workflows_v2",
+    "review_resume_attempts_v2",
+    "review_resolutions_v2",
 }
-REQUIRED_INDEXES = {"idx_research_runs_v2_thread"}
+REQUIRED_INDEXES = {
+    "idx_research_runs_v2_thread",
+    "idx_review_workflows_status_lease",
+    "idx_review_decisions_run",
+}
+EXPECTED_MIGRATIONS = {
+    MIGRATION_VERSION: "run-identity-backbone-v1",
+    REVIEW_MIGRATION_VERSION: REVIEW_MIGRATION_CHECKSUM,
+}
 
 
 def backup_database(*, db_path: str, backup_path: str) -> None:
@@ -59,19 +76,35 @@ def verify_run_schema(*, db_path: str) -> dict:
         }
         missing_tables = sorted(REQUIRED_TABLES - tables)
         missing_indexes = sorted(REQUIRED_INDEXES - indexes)
-        migration_count = conn.execute(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = ?",
-            (MIGRATION_VERSION,),
-        ).fetchone()[0] if "schema_migrations" in tables else 0
+        migration_rows = (
+            conn.execute(
+                "SELECT version, checksum FROM schema_migrations"
+            ).fetchall()
+            if "schema_migrations" in tables
+            else []
+        )
+        migrations = {row[0]: row[1] for row in migration_rows}
+        invalid_migrations = sorted(
+            version
+            for version, checksum in EXPECTED_MIGRATIONS.items()
+            if migrations.get(version) != checksum
+        )
         foreign_key_errors = conn.execute("PRAGMA foreign_key_check").fetchall()
-        if missing_tables or missing_indexes or migration_count != 1 or foreign_key_errors:
+        if (
+            missing_tables
+            or missing_indexes
+            or invalid_migrations
+            or foreign_key_errors
+        ):
             raise RuntimeError(
                 "run_schema_verification_failed:"
                 f"tables={missing_tables},indexes={missing_indexes},"
-                f"migration_count={migration_count},foreign_keys={foreign_key_errors}"
+                f"migrations={invalid_migrations},"
+                f"foreign_keys={foreign_key_errors}"
             )
         return {
             "migration_version": MIGRATION_VERSION,
+            "migration_versions": sorted(EXPECTED_MIGRATIONS),
             "tables": sorted(REQUIRED_TABLES),
             "indexes": sorted(REQUIRED_INDEXES),
         }
@@ -83,7 +116,7 @@ def migrate_with_backup(*, db_path: str, backup_path: str) -> dict:
     """Back up, apply, and verify; restore the original DB on any failure."""
     backup_database(db_path=db_path, backup_path=backup_path)
     try:
-        init_run_schema(db_path)
+        init_review_schema(db_path)
         return verify_run_schema(db_path=db_path)
     except Exception:
         restore_database(backup_path=backup_path, db_path=db_path)
