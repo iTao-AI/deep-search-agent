@@ -2,88 +2,59 @@
 
 ## Goal
 
-Make the canonical Talent Hiring Signal `DecisionBrief` faster for an HR or
-hiring lead to scan without weakening its evidence contract or asking the model
-for additional output.
+Make the canonical Talent Hiring Signal `decision-brief.md` scannable within
+two minutes without weakening its evidence contract, changing review authority,
+or asking the model for additional output.
 
-This iteration improves deterministic presentation only. It does not generate
-JD edits, interview questions, or other recommendations that are not already
-supported by the current structured research contract.
+This is a benchmark-bounded presentation milestone. It does not establish
+market-wide accuracy, production adoption, or product-market fit.
 
 ## Evidence And Problem Statement
 
-The P1A value gate passed: the `talent-hiring-signal` profile was stronger than
-the `generic` profile on action value, evidence constraint, and hiring decision
-support without increasing boundary risk. Reviewers still found the generic
-profile easier to scan in some comparisons, especially when it used a compact
-summary matrix.
+The fixed P1A benchmark showed that `talent-hiring-signal` was stronger than
+`generic` on action value, evidence constraint, and hiring decision support
+without increasing boundary risk. Generic output was easier to scan in some
+paired reviews. The current Markdown artifact also omits findings, claims,
+evidence references, review state, conflicts, and evidence gaps that already
+exist in the canonical `DecisionBrief`.
 
-The current canonical artifact underuses data that already exists:
-
-- `DecisionBrief` persists evidence-bound findings and candidate claims.
-- `render_markdown()` renders only metadata, a count-based executive summary,
-  target roles, limitations, and an empty recommendations section.
-- Findings, claims, evidence references, confidence, review state, conflicts,
-  and evidence gaps are absent from the Markdown artifact.
-
-The missing capability is therefore presentation, not research or agent
-reasoning.
+The missing capability is deterministic presentation, not additional research,
+reasoning, or advice generation.
 
 ## Decision
 
-Add an evidence-preserving deterministic presentation layer over the existing
-`DecisionBrief` fields.
+Add a renderer-v2 presentation layer over the existing `DecisionBrief`:
 
-- Keep `ResearchScope`, `ResearchPacket`, `Finding`, `Claim`, `ReviewBundle`,
-  and `DecisionBrief` schemas unchanged.
-- Keep the current deterministic artifact service and content hashing model.
-- Build a concise executive summary from existing counts and the highest
-  confidence candidate claims.
-- Render all findings in a capability signal matrix with their declared scope,
-  confidence, evidence references, and boundaries.
-- Render all candidate claims with their finding/evidence references and review
-  state.
-- Render conflicts, evidence gaps, limitations, and recommendations only from
-  fields already present in the canonical brief.
-- Do not make model calls, read files, use tools, or infer new hiring advice in
-  the renderer.
+- keep `ResearchScope`, `ResearchPacket`, `Finding`, `Claim`, `ReviewBundle`,
+  and `DecisionBrief` schemas unchanged;
+- keep canonical hashing, artifact IDs, persistence, API routes, and review
+  authority unchanged;
+- show a bounded first-read snapshot containing only findings whose non-empty
+  evidence refs all resolve to verified, unambiguous evidence records;
+- preserve canonical finding order after eligibility filtering and display at
+  most three snapshot findings;
+- keep candidate claims out of the snapshot, regardless of confidence or their
+  current verification status;
+- render unresolved findings, every candidate claim, gaps, conflicts,
+  limitations, and complete finding/claim appendices deterministically;
+- render recommendations only when the canonical brief already contains them.
+
+`confidence` remains model metadata. It is displayed in detail blocks but is
+not a business-priority score and does not control placement.
 
 ## Non-Goals
 
 This change does not:
 
-- alter Talent agent prompts, tools, structured output, or filesystem policy;
-- add JD rewrite advice, interview questions, or candidate evaluation logic;
-- add an LLM reviewer or use LangSmith as a business record;
-- change `ResearchRun`, `EvidenceLedger`, review, persistence, or API schemas;
-- add Skills, Async Subagents, durable HITL, or UI work;
-- change the `generic` profile or rerun P1A to justify a broader product claim.
-
-## Options Considered
-
-### Option A: Deterministic Presentation Over Existing Contracts
-
-Use existing findings, claims, evidence references, and limitations to build a
-compact Markdown decision snapshot.
-
-Selected because it directly addresses the observed readability gap with the
-smallest blast radius and no new trust boundary.
-
-### Option B: Extend `DecisionBrief` With A Capability Matrix Schema
-
-Persist a new structured matrix and additional hiring-decision fields.
-
-Rejected for this iteration because the matrix can be rendered losslessly from
-existing canonical fields. A schema/version migration would add no new factual
-content.
-
-### Option C: Ask The Talent Model For JD And Interview Recommendations
-
-Extend `ResearchPacket` and structured output prompts with recommendations.
-
-Rejected because the current contract has no stable taxonomy for mapping hiring
-signals to JD edits or interview questions. This would increase structured
-output failure risk and allow unsupported advice to appear authoritative.
+- alter Talent prompts, tools, structured output, filesystem policy, or model
+  calls;
+- add JD edits, interview questions, candidate evaluation, or other hiring
+  advice;
+- add an LLM reviewer or make LangSmith a business record;
+- change `ResearchRun`, `EvidenceLedger`, review, database, API, or persistence
+  schemas;
+- add Skills, Async Subagents, durable HITL, UI, ATS, email, or dashboard work;
+- migrate or rerender existing renderer-v1 artifacts.
 
 ## Architecture
 
@@ -93,217 +64,184 @@ ResearchPacket + EvidenceLedger snapshot
                  v
        build_talent_artifacts()
                  |
-        existing canonical fields
+                 v
+         canonical DecisionBrief
                  |
-       +---------+----------+
-       |                    |
-       v                    v
-DecisionBrief JSON    deterministic Markdown renderer v2
-unchanged schema      - executive snapshot
-                      - capability signal matrix
-                      - candidate claims
-                      - evidence gaps / conflicts
-                      - limitations
+          +------+------+
+          |             |
+          v             v
+  decision-brief.json   renderer v2
+  unchanged schema      decision-brief.md
+                        - bounded snapshot
+                        - needs verification
+                        - complete appendices
 ```
 
-`api/talent_artifacts.py` remains responsible for constructing the canonical
-brief. `api/decision_brief.py` remains responsible for canonical hashing and
-Markdown presentation. Pure helper functions may be added to those modules, but
-no new service or persistence layer is introduced.
+`api/talent_artifacts.py` continues to construct the canonical brief.
+`api/review_service.py` continues to own review status. The renderer in
+`api/decision_brief.py` derives presentation-only placement and cannot change
+delivery or review decisions.
 
-## Deterministic Presentation Policy
+## Snapshot Eligibility
 
-### Stable Ordering
+A finding is eligible only when all conditions hold:
 
-Presentation row order must not depend on model emission order when a semantic
-priority is available. Canonical JSON preserves the existing list-order
-semantics, so reordering canonical input may still produce a different content
-hash even when the rendered table rows have the same semantic order.
+1. it declares at least one evidence ref;
+2. every ref resolves to exactly one `evidence_summary` entry;
+3. every resolved entry has `verification_status="verified"`;
+4. the finding has no contradictions;
+5. the brief has no global conflicts.
 
-- Candidate claims: descending `confidence`, then ascending `claim_id`.
-- Findings: descending `confidence`, then ascending `finding_id`.
-- Text within each row remains exactly the contract-provided text after Markdown
-  escaping. The renderer does not paraphrase it.
-- Evidence references retain their declared order after duplicate removal.
-- Boundaries retain first-seen order after duplicate removal.
+Malformed evidence records, empty or unhashable IDs, unknown statuses, and
+duplicate IDs fail closed. Every occurrence of a duplicate ID is ambiguous and
+excluded from the verified index.
 
-Stable tie-breakers are required so equivalent canonical inputs produce
-byte-stable Markdown.
+Global conflicts block every snapshot finding because the current brief no
+longer retains finding-level ownership for packet contradictions. Candidate
+claims never enter the snapshot in renderer v2 because the contract still
+labels them as candidates and durable approval is not enabled.
 
-### Executive Summary
+## Information Hierarchy
 
-Replace the current count-only summary with a deterministic summary containing:
+```text
+1. Decision Snapshot
+   - declared scope and record counts
+   - exact ReviewBundle status
+   - separate presentation-only snapshot eligibility
+   - at most three eligible findings in canonical order
+2. Scope And Coverage
+3. Needs Verification
+4. Evidence Gaps And Conflicts
+5. Limitations
+6. Detailed Findings Appendix
+7. Candidate Claims Appendix
+8. Artifact Metadata
+9. Recommendations, only when already present
+```
 
-1. finding, candidate claim, and evidence counts;
-2. up to three highest-confidence candidate claim texts;
-3. if no claims exist, up to three highest-confidence finding statements;
-4. an explicit statement that conclusions are limited to the declared scope.
+The snapshot is the only Markdown table and has two columns. Long content uses
+vertical labeled blocks. All findings and claims remain in appendices without
+silent truncation.
 
-The summary reuses contract text verbatim. It does not synthesize a new claim.
-All omitted items remain visible in later sections.
+## Empty And Degraded States
 
-### Executive Snapshot
-
-Render a compact table before detailed content:
-
-| Metric | Source |
+| Condition | Required display |
 |---|---|
-| Findings | `quality_summary.finding_count` |
-| Candidate claims | `quality_summary.claim_count` |
-| Evidence records | `quality_summary.evidence_count` |
-| Review status | `review_summary.status` |
-| Delivery gate | `review_summary.required_before_delivery` |
+| No findings | `No findings are present in this brief.` |
+| No eligible finding | `No verified evidence-backed findings are available for the snapshot.` |
+| No evidence records | Same fail-closed state plus `Evidence records: 0` |
+| Missing/unverified ref | Finding appears under `Needs Verification` and appendix only |
+| Candidate claim | Appears under `Needs Verification` and appendix only |
+| Unknown optional summary value | `Not declared`; no truthy coercion |
+| No recommendations | Recommendations section omitted |
 
-Missing optional dictionary keys render as `Not declared`; they do not cause an
-artifact failure.
+`Review bundle status` is rendered from `review_summary.status`. Snapshot
+eligibility is explicitly presentation-only; `not_required` is never expanded
+into a claim that human review is unnecessary.
 
-### Capability Signal Matrix
+## Markdown Safety
 
-Render one row for every finding:
+All source/model text is untrusted. Before rendering, the renderer:
 
-| Column | Canonical source |
-|---|---|
-| Signal | `Finding.statement` |
-| Sample scope | `Finding.sample_scope` |
-| Confidence | `Finding.confidence` formatted as a percentage |
-| Evidence | `Finding.evidence_refs` |
-| Boundaries | ordered union of `evidence_gaps`, `contradictions`, and `limitations` |
+1. normalizes CR/LF and Unicode line separators;
+2. removes non-printing control and formatting characters;
+3. HTML-escapes `<`, `>`, `&`, and quotes;
+4. escapes Markdown structural characters;
+5. converts normalized embedded line breaks to renderer-owned `<br>` tokens.
 
-The matrix must not label a signal as common, universal, required, or
-scene-specific unless that classification already appears in contract text.
-This prevents the presentation layer from introducing a stronger market claim.
-
-### Candidate Claims
-
-Render one row for every claim:
-
-| Column | Canonical source |
-|---|---|
-| Claim | `Claim.text` |
-| Type | `Claim.claim_type` |
-| Confidence | `Claim.confidence` formatted as a percentage |
-| Finding refs | `Claim.finding_refs` |
-| Evidence refs | `Claim.evidence_refs` |
-| Status | citation, verification, review, and conflict status |
-| Boundaries | `Claim.limitations` |
-
-This section remains explicitly labeled as candidate claims. Rendering does not
-promote a pending or unverified claim to an approved decision.
-
-### Boundaries And Recommendations
-
-- Aggregate finding evidence gaps into an `Evidence Gaps` section.
-- Render `review_summary.triggers` in a `Review Triggers` section when present.
-- Render brief-level `conflicts` and `limitations` in separate sections.
-- Render `Recommendations` only when `brief.recommendations` is non-empty.
-- An empty recommendations list produces no recommendations section and is not
-  replaced with generated advice.
-
-### Markdown Safety
-
-All table-cell text must HTML-escape model-provided content, escape pipe
-characters, and then normalize embedded line breaks to renderer-owned `<br>`
-separators. Evidence IDs remain code-formatted. The renderer must not emit raw
-HTML supplied by model-provided text.
+The renderer does not emit source-provided HTML, links, or images. Evidence
+URLs are not converted into clickable Markdown.
 
 ## Versioning And Compatibility
 
-- Increment the Talent profile `renderer_version` from `1` to `2`.
-- Keep `brief_schema_version="1"` because no fields or validation rules change.
-- Keep `canonicalization_version="1"` because the canonical JSON hashing
-  algorithm does not change.
-- The improved `executive_summary` and renderer version intentionally change the
-  canonical content hash for newly built artifacts.
-- Existing persisted artifacts are immutable and are not rewritten.
-- Artifact IDs, media types, API routes, and persistence records remain
-  compatible.
+- Talent `renderer_version` changes from `1` to `2`.
+- `brief_schema_version` remains `1`.
+- `canonicalization_version` remains `1`.
+- `content_hash` remains the canonical semantic hash shared by JSON and
+  Markdown artifacts; it is not an artifact-byte checksum.
+- `generated_at` remains excluded from the semantic hash, so timestamp-only
+  changes can change Markdown bytes without changing `content_hash`.
+- Artifact IDs remain `decision-brief.json` and `decision-brief.md`; kinds,
+  media types, API routes, and persistence records remain compatible.
+- Stored renderer-v1 artifacts are immutable and are not migrated.
 
-## Data Flow And Failure Behavior
+Renderer code and `renderer_version="2"` deploy and roll back together.
 
-1. The final validated `ResearchPacket` and evidence snapshot enter
-   `build_talent_artifacts()` as they do today.
-2. The artifact service deterministically builds the improved executive summary
-   and otherwise preserves all existing canonical fields.
-3. `with_content_hash()` hashes the canonical JSON with the same exclusions and
-   canonicalization rules as today.
-4. `render_markdown()` renders the v2 presentation from the hashed brief.
-5. Persistence stores the same two artifact kinds atomically.
+## Runner Contract
 
-Empty findings or claims do not crash rendering. The relevant table renders a
-short `None declared` message, while existing review and benchmark gates retain
-authority over whether the run is deliverable. The renderer never changes a
-review decision.
+The value-gate runner validates Talent artifacts before export sanitization. A
+Talent run passes the renderer contract only when:
+
+- exactly one expected JSON artifact and one expected Markdown artifact exist;
+- each has the expected ID, kind, media type, non-empty content, and declared
+  semantic hash;
+- JSON validates as `DecisionBrief` with `renderer_version="2"`;
+- recomputed semantic hash matches the brief and both artifact declarations;
+- Markdown equals `render_markdown(parsed_brief)` byte-for-byte.
+
+Any failure increments `renderer_contract_failure_count` and prevents
+`ready_for_human_review=true`. The CLI still writes and prints the diagnostic
+bundle path, then exits `1` for an incomplete benchmark.
 
 ## File-Level Scope
 
 | File | Change |
 |---|---|
-| `api/decision_brief.py` | Add deterministic sorting, escaping, snapshot, matrix, claims, and boundary rendering helpers. |
-| `api/talent_artifacts.py` | Build the evidence-bound executive summary from existing brief inputs. |
-| `agent/profile_registry.py` | Increment Talent `renderer_version` to `2`. |
-| `tests/unit/test_decision_brief.py` | Lock byte stability, ordering, Markdown escaping, complete matrix/claim rendering, and empty-section behavior. |
-| `tests/unit/test_talent_artifacts.py` | Lock deterministic summary content and unchanged contract/review behavior. |
-| `tests/unit/test_profile_registry.py` | Lock the renderer version increment without changing other profile contracts. |
-| `benchmarks/talent-hiring-signal-v1/README.md` | Document the v2 readability verification procedure and evidence boundary. |
+| `api/decision_brief.py` | Pure renderer-v2 helpers and presentation |
+| `agent/profile_registry.py` | Talent `renderer_version="2"` only |
+| `scripts/talent_value_gate_runner.py` | Fail-closed renderer contract gate |
+| `tests/unit/test_decision_brief.py` | Eligibility, safety, empty-state, and golden tests |
+| `tests/unit/test_profile_registry.py` | Version contract |
+| `tests/unit/test_talent_artifacts.py` | Artifact identity/version regression |
+| `tests/unit/test_talent_value_gate_runner.py` | Corrupt artifact and CLI exit tests |
+| `tests/unit/test_run_repository.py` | Finalize/retrieve byte compatibility |
+| `tests/fixtures/talent-decision-brief-renderer-v2.*` | Canonical input and byte-exact Markdown |
+| `benchmarks/talent-hiring-signal-v1/README.md` | Deterministic, independent readability, and live gates |
+| `benchmarks/talent-hiring-signal-v1/renderer-v2-readability-scorecard.md` | Timed AI-assisted independent gate |
+| `benchmarks/talent-hiring-signal-v1/renderer-v2-readability-answer-key.md` | Separate post-timer scoring key |
 
-No API, database, frontend, Agent prompt, or tool files are in scope.
-
-## Test Matrix
-
-| Scenario | Expected result |
-|---|---|
-| Identical complete brief input | Byte-identical Markdown and content hash. |
-| Findings/claims supplied in different orders | Confidence-first, ID-tied table rows; canonical hash retains existing input-order semantics. |
-| Pipe/newline in contract text | Valid table cells without column injection or raw HTML. |
-| More than three claims | Summary contains only the top three; all claims remain in the detailed table. |
-| No claims | Summary falls back to top findings and claims section says `None declared`. |
-| No recommendations | Recommendations section is absent. |
-| Evidence gaps/review triggers/conflicts/limitations | Each appears only in its corresponding evidence-bound section or table column. |
-| Pending/unverified claim | Status remains visible; renderer does not promote it. |
-| Persisted artifact integration | Existing JSON/Markdown artifact IDs and hashes remain queryable. |
-| Fixed 1x2 diagnostic | Both runs complete and Talent readiness counters remain zero. |
-| Fixed 3x2 benchmark | Six runs complete, Talent remains review-ready, and no evidence/boundary counter regresses. |
+No contract, review-service, database, API, frontend, prompt, or model file is
+in scope.
 
 ## Validation Sequence
 
-1. Run focused unit tests for decision brief rendering, Talent artifacts, and
-   profile registry.
-2. Run the full backend suite.
-3. Run the frontend build only if the final diff unexpectedly touches frontend
-   or public artifact display behavior; otherwise record it as not required.
-4. Run the fixed 1x2 diagnostic benchmark with configured credentials.
-5. If 1x2 remains review-ready, run the fixed 3x2 benchmark.
-6. Review the three Talent Markdown artifacts for scanability against the prior
-   P1A output. This is a presentation acceptance check, not a new market-value
-   claim.
+1. Run focused renderer/profile/artifact/runner tests.
+2. Run persistence and retrieval integration tests.
+3. Run the complete backend suite and compile checks.
+4. Complete the fixed golden Markdown scorecard in a fresh read-only AI session
+   recorded as `ai-assisted-independent-reviewer`; require 5/5 within 120
+   seconds and keep the answer key separate until timing stops.
+5. Run the fixed 1x2 live regression. Stop on any counter failure.
+6. Run 3x2 only after 1x2 is ready.
+
+Live runs verify end-to-end stability, not readability or broader market value.
 
 ## Acceptance Criteria
 
-1. A reviewer can see the highest-confidence signals, complete finding matrix,
-   candidate claims, evidence references, and boundaries without opening raw
-   JSON.
-2. Every displayed statement and classification comes from the existing
-   `DecisionBrief`; the renderer introduces no new factual or hiring advice.
-3. `ResearchPacket`, `DecisionBrief`, review, API, and persistence schemas remain
-   unchanged.
-4. Talent artifacts declare `renderer_version="2"`; schema and canonicalization
-   versions remain `1`.
-5. Rendering is byte-stable for equivalent inputs and safe for Markdown table
-   delimiters and line breaks.
-6. Focused tests and the full backend suite pass.
-7. Fixed 1x2 and 3x2 benchmark runs remain `ready_for_human_review` with all
-   Talent readiness failure counters at zero.
-8. Existing persisted artifacts are not migrated or rewritten.
+1. The snapshot contains only eligible findings, preserves canonical order, and
+   displays at most three.
+2. Candidate claims never enter the snapshot.
+3. Complete findings and claims remain available in appendices.
+4. Hostile HTML, Markdown, control characters, and line separators cannot
+   inject structure.
+5. Talent artifacts declare renderer v2 while schema/canonicalization remain v1.
+6. Golden bytes, focused tests, full backend tests, and persistence checks pass.
+7. The timed AI-assisted independent reviewer scores 5/5 within 120 seconds;
+   owner confirmation remains a brief final delivery check, not a second timed
+   benchmark gate.
+8. Fixed 1x2 and 3x2 runs are ready with every readiness counter, including
+   `renderer_contract_failure_count`, equal to zero.
 
 ## Rollback
 
-Revert the renderer and summary changes and restore Talent
-`renderer_version="1"`. No data migration or API rollback is required because
-existing artifacts are immutable and the schema is unchanged.
+Revert `api/decision_brief.py` and restore Talent `renderer_version="1"` in the
+same deployment. Do not delete or rerender already persisted renderer-v2
+artifacts. No data or API migration is required.
 
 ## Deferred Work
 
-- A stable taxonomy for mapping evidence-bound signals to JD recommendations.
-- Evidence-bound interview verification prompts.
-- UI-specific rendering of the same canonical artifact.
-- P1B durable HITL and delivery approval workflow.
+- A separately versioned presentation schema after a second consumer exists.
+- Input/list hard limits approved as a schema decision, not renderer truncation.
+- Evidence-bound JD, interview, and candidate-evaluation policies.
+- UI/ATS/email/dashboard adapters and persona-specific prioritization.
+- P1B durable HITL, Skills, Async Subagents, and LLM review.
