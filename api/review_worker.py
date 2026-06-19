@@ -221,23 +221,38 @@ class ReviewWorker:
             )
             return True
         except Exception as exc:
-            logging.exception(
-                "Durable review worker failed for %s",
+            error_code = bounded_worker_error_code(exc)
+            logging.error(
+                "Durable review worker failed for %s: %s",
                 claim.workflow_id,
+                error_code,
             )
-            await asyncio.to_thread(
-                release_workflow_for_retry,
-                db_path=self.db_path,
-                workflow_id=claim.workflow_id,
-                worker_id=self.worker_id,
-                error_code=bounded_worker_error_code(exc),
-                max_attempts=3,
-            )
+            try:
+                await asyncio.to_thread(
+                    release_workflow_for_retry,
+                    db_path=self.db_path,
+                    workflow_id=claim.workflow_id,
+                    worker_id=self.worker_id,
+                    error_code=error_code,
+                    max_attempts=3,
+                )
+            except ReviewConflict as release_error:
+                if release_error.code != "lease_not_owned":
+                    raise
+                self._reconciled = False
             return True
 
     async def run_forever(self) -> None:
         while not self._stop.is_set():
-            if not await self.run_once():
+            try:
+                did_work = await self.run_once()
+            except Exception as exc:
+                logging.error(
+                    "Durable review worker loop failed: %s",
+                    bounded_worker_error_code(exc),
+                )
+                did_work = False
+            if not did_work:
                 try:
                     await asyncio.wait_for(
                         self._stop.wait(),

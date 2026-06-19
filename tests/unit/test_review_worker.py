@@ -1,11 +1,14 @@
 import asyncio
+import logging
 import sqlite3
 
 import pytest
 
+import api.review_worker as review_worker_module
 from api.review_gate import ReviewGate
 from api.review_models import ReviewDecisionRequest
 from api.review_repository import (
+    ReviewConflict,
     _connect,
     accept_review_decision,
     get_decision,
@@ -206,3 +209,94 @@ async def test_permanent_failure_stops_after_three_attempts(
     assert projection["workflow"]["status"] == "manual_recovery"
     assert projection["workflow"]["last_error_code"] == "checkpoint_unavailable"
     assert await worker.run_once() is False
+
+
+@pytest.mark.asyncio
+async def test_expired_lease_after_graph_resume_reconciles_without_worker_exit(
+    resume_pending_run,
+    monkeypatch,
+):
+    original = review_worker_module.mark_resolution_pending
+
+    def expire_lease_then_fail(*, db_path, workflow_id, worker_id, decision_id):
+        connection = _connect(db_path)
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE review_workflows_v2
+                    SET lease_expires_at = '2000-01-01T00:00:00+00:00'
+                    WHERE workflow_id = ?
+                    """,
+                    (workflow_id,),
+                )
+        finally:
+            connection.close()
+        raise ReviewConflict("lease_not_owned")
+
+    monkeypatch.setattr(
+        review_worker_module,
+        "mark_resolution_pending",
+        expire_lease_then_fail,
+    )
+    worker = resume_pending_run.worker(worker_id="worker_a")
+
+    assert await worker.run_once() is True
+
+    monkeypatch.setattr(
+        review_worker_module,
+        "mark_resolution_pending",
+        original,
+    )
+    assert await worker.run_once() is True
+    assert resume_pending_run.get_run()["delivery_status"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_worker_loop_continues_after_transient_run_once_failure(
+    tmp_path,
+    monkeypatch,
+):
+    worker = ReviewWorker(
+        db_path=str(tmp_path / "tasks.db"),
+        checkpoint_path=str(tmp_path / "checkpoints.db"),
+        poll_seconds=0.01,
+    )
+    calls = 0
+
+    async def flaky_run_once():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise sqlite3.OperationalError("database is locked")
+        worker.stop()
+        return False
+
+    monkeypatch.setattr(worker, "run_once", flaky_run_once)
+
+    await asyncio.wait_for(worker.run_forever(), timeout=1)
+
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_worker_logs_bounded_error_code_without_sensitive_exception_text(
+    resume_pending_run,
+    monkeypatch,
+    caplog,
+):
+    def fail_artifact_build(*, original_brief_json, decision):
+        raise ValueError("sensitive claim text")
+
+    monkeypatch.setattr(
+        review_worker_module,
+        "build_reviewed_artifacts",
+        fail_artifact_build,
+    )
+    worker = resume_pending_run.worker(worker_id="worker_a")
+
+    with caplog.at_level(logging.ERROR):
+        assert await worker.run_once() is True
+
+    assert "review_payload_invalid" in caplog.text
+    assert "sensitive claim text" not in caplog.text

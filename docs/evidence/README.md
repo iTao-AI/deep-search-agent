@@ -29,7 +29,7 @@
 
 - 13/13 gate PASS，包括容器重启、幂等冲突、lease reclaim、sync durability
   和五个 SIGKILL crash windows。
-- 完整后端回归：595 passed, 0 failed（Python 3.11 compatibility
+- 完整后端回归：598 passed, 0 failed（Python 3.11 compatibility
   environment，`python -m pytest -q`）。
 - 该结果只证明有边界的 feasibility；feature flag 仍默认关闭，不代表生产启用。
 

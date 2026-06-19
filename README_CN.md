@@ -62,7 +62,7 @@
 
 | 指标 | 值 | 来源 |
 |------|-----|------|
-| Local pytest run | 595 通过, 0 失败 | Python 3.11 compatibility environment，`python -m pytest -q` |
+| Local pytest run | 598 通过, 0 失败 | Python 3.11 compatibility environment，`python -m pytest -q` |
 | Docker 部署 | 本机验证通过 | [QA 报告](docs/evidence/assets/qa-report-summary.md) |
 | 前端构建 | 通过 | `cd frontend && npm run build` |
 | E2E Run #1 | 282秒, 459K token, 2 子Agent, 报告.md 已生成 | [运行记录](docs/evidence/run-log.md) |
