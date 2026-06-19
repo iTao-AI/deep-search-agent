@@ -15,6 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from typing import List
 import shutil
+from contextlib import asynccontextmanager
 from threading import Lock
 
 # Load env once at startup — tools read from os.environ
@@ -53,6 +54,13 @@ from agent.profile_registry import profile_registry
 from agent.talent_contracts import ResearchScope
 from api.talent_artifacts import build_talent_artifacts
 from api.review_api import router as review_router
+from api.review_models import (
+    checkpoint_thread_id,
+    durable_hitl_enabled,
+    post_review_segment_id,
+    review_workflow_id,
+)
+from api.review_worker import ReviewWorker
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -97,9 +105,43 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+def create_review_worker() -> ReviewWorker:
+    checkpoint_path = os.getenv(
+        "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
+        str(project_root / "data" / "review_checkpoints.db"),
+    )
+    return ReviewWorker(
+        db_path=os.getenv("TASKS_DB_PATH"),
+        checkpoint_path=checkpoint_path,
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = None
+    worker = None
+    if durable_hitl_enabled():
+        if not os.getenv("API_SECRET", ""):
+            logging.error(
+                "durable_hitl_worker_not_started:review_auth_not_configured"
+            )
+        else:
+            worker = create_review_worker()
+            task = asyncio.create_task(worker.run_forever())
+            await asyncio.sleep(0)
+    try:
+        yield
+    finally:
+        if worker is not None:
+            worker.stop()
+        if task is not None:
+            await task
+
+
 app = FastAPI(
     title="Decision Research Agent API",
     description="Source-backed research runs that produce decision-ready briefs.",
+    lifespan=lifespan,
 )
 # Legacy `/api/task` only. Run-scoped `/api/runs` does not use this process-local guard.
 active_run_threads: set[str] = set()
@@ -366,6 +408,7 @@ async def _run_v2_with_persistence(
         delivery_status = "failed" if execution_status == "failed" else "ready"
         review_status = "not_required"
         review_bundle = None
+        review_workflow = None
         artifacts = []
         if execution_status == "completed" and profile_id == "talent-hiring-signal":
             review_bundle, _, artifacts = build_talent_artifacts(
@@ -378,6 +421,23 @@ async def _run_v2_with_persistence(
             review_status = review_bundle.status
             if review_bundle.required_before_delivery:
                 delivery_status = "review_required"
+                if durable_hitl_enabled():
+                    workflow_id = review_workflow_id(
+                        run_id,
+                        review_bundle.review_id,
+                        review_bundle.revision,
+                    )
+                    review_workflow = {
+                        "workflow_id": workflow_id,
+                        "checkpoint_thread_id": checkpoint_thread_id(
+                            workflow_id
+                        ),
+                        "post_review_segment_id": post_review_segment_id(
+                            run_id,
+                            review_bundle.review_id,
+                            review_bundle.revision,
+                        ),
+                    }
         finalized = await asyncio.to_thread(
             finalize_run_transaction,
             run_id=run_id,
@@ -391,6 +451,7 @@ async def _run_v2_with_persistence(
             research_packets=result.research_packets,
             review_bundle=review_bundle,
             artifacts=artifacts,
+            review_workflow=review_workflow,
         )
         if not finalized:
             raise RuntimeError("stale_run_write")

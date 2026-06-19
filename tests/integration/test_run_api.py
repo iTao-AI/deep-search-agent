@@ -256,6 +256,7 @@ async def test_talent_run_persists_review_and_canonical_artifacts(tmp_path, monk
     from api.run_repository import create_run, get_run
 
     monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "false")
     scope = {
         "target_roles": ["AI Agent Engineer"],
         "target_companies": [],
@@ -315,6 +316,7 @@ async def test_talent_run_persists_review_and_canonical_artifacts(tmp_path, monk
     assert {item["artifact_id"] for item in run["artifacts"]} == {
         "decision-brief.json", "decision-brief.md",
     }
+    assert run["review_workflow"] is None
 
 
 def test_run_artifact_api_resolves_by_run_and_artifact_id(tmp_path, monkeypatch):
