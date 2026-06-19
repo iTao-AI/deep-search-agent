@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import time
 import uuid
 
 import pytest
@@ -67,8 +68,38 @@ class DockerProject:
         lines = [line for line in completed.stdout.splitlines() if line.strip()]
         return json.loads(lines[-1])
 
+    def wait_until_ready(
+        self,
+        *,
+        timeout_seconds: float = 30,
+        poll_seconds: float = 0.25,
+    ) -> None:
+        deadline = time.monotonic() + timeout_seconds
+        last_error: Exception | None = None
+        while time.monotonic() < deadline:
+            try:
+                self._compose(
+                    "exec",
+                    "-T",
+                    "backend",
+                    "python",
+                    "-c",
+                    (
+                        "from urllib.request import urlopen;"
+                        "urlopen('http://127.0.0.1:8000/health', timeout=2).read()"
+                    ),
+                    timeout=15,
+                )
+                return
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                last_error = exc
+                time.sleep(poll_seconds)
+        raise RuntimeError("backend_container_readiness_timeout") from last_error
+
     def restart(self, service: str) -> None:
         self._compose("restart", service, timeout=120)
+        if service == "backend":
+            self.wait_until_ready()
 
 
 @pytest.fixture
@@ -120,6 +151,7 @@ def docker_project(tmp_path):
                 "backend",
                 timeout=1800,
             )
+            project.wait_until_ready()
             yield project
         finally:
             project._compose(
