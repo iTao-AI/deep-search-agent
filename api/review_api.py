@@ -9,10 +9,11 @@ import uuid
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from starlette.requests import ClientDisconnect
 
 from api.review_models import (
+    BoundedId,
     ReviewDecisionRequest,
     ReviewListQuery,
     decode_review_cursor,
@@ -27,6 +28,7 @@ from api.review_repository import (
 
 
 router = APIRouter()
+_BOUNDED_ID_ADAPTER = TypeAdapter(BoundedId)
 
 
 def _error(
@@ -97,6 +99,8 @@ def authenticate_review_request(
 
 
 def _is_json_content_type(value: str | None) -> bool:
+    if value is None:
+        return True
     if not value:
         return False
     message = Message()
@@ -105,6 +109,27 @@ def _is_json_content_type(value: str | None) -> bool:
         return False
     subtype = message.get_content_subtype()
     return subtype == "json" or subtype.endswith("+json")
+
+
+def _validate_review_identity(
+    *,
+    run_id: str,
+    review_id: str,
+):
+    try:
+        return (
+            _BOUNDED_ID_ADAPTER.validate_python(run_id),
+            _BOUNDED_ID_ADAPTER.validate_python(review_id),
+        ), None
+    except ValidationError:
+        return None, _error(
+            422,
+            code="invalid_review_identity",
+            problem="The review identity is invalid.",
+            cause="The run or review ID failed the bounded identity contract.",
+            fix="Use bounded run and review IDs from the review API.",
+            retryable=False,
+        )
 
 
 @router.get("/api/reviews")
@@ -168,6 +193,13 @@ async def show_review(run_id: str, review_id: str, request: Request):
     _, error = authenticate_review_request(request, run_id=run_id)
     if error is not None:
         return error
+    identity, error = _validate_review_identity(
+        run_id=run_id,
+        review_id=review_id,
+    )
+    if error is not None:
+        return error
+    run_id, review_id = identity
     detail = await asyncio.to_thread(
         get_review_detail,
         run_id=run_id,
@@ -266,7 +298,7 @@ def _conflict_response(code: str, *, run_id: str) -> JSONResponse:
             "required": True,
             "content": {
                 "application/json": {
-                    "schema": ReviewDecisionRequest.model_json_schema(),
+                    "schema": {"title": "Body"},
                 },
             },
         },
@@ -280,6 +312,13 @@ async def submit_review_decision(
     actor, error = authenticate_review_request(request, run_id=run_id)
     if error is not None:
         return error
+    identity, error = _validate_review_identity(
+        run_id=run_id,
+        review_id=review_id,
+    )
+    if error is not None:
+        return error
+    run_id, review_id = identity
     try:
         if not _is_json_content_type(request.headers.get("content-type")):
             raise ValueError("invalid_review_content_type")
