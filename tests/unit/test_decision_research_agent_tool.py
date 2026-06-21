@@ -250,6 +250,171 @@ def test_review_read_parser_commands():
     assert shown.review_id is None
 
 
+def test_stable_decision_id_is_semantic_and_retry_safe():
+    first = tool.stable_decision_id(
+        run_id="run_1",
+        review_id="review_1",
+        revision=1,
+        action="reject",
+        reason="Not accepted",
+    )
+
+    assert first == tool.stable_decision_id(
+        run_id="run_1",
+        review_id="review_1",
+        revision=1,
+        action="reject",
+        reason="Not accepted",
+    )
+    assert first != tool.stable_decision_id(
+        run_id="run_1",
+        review_id="review_1",
+        revision=1,
+        action="approve",
+        reason=None,
+    )
+    assert re.fullmatch(r"decision_[0-9a-f]{32}", first)
+
+
+def test_reject_parser_has_no_plain_reason_argument():
+    parser = tool._build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            ["review", "reject", "--run-id", "run_1", "--reason", "secret"]
+        )
+
+
+def test_reject_requires_exactly_one_safe_reason_source(tmp_path):
+    reason_file = tmp_path / "reason.txt"
+    reason_file.write_text("Not accepted\n", encoding="utf-8")
+
+    assert tool.read_rejection_reason(
+        reason_file=reason_file,
+        reason_stdin=False,
+        stdin=io.StringIO(""),
+    ) == "Not accepted"
+    assert tool.read_rejection_reason(
+        reason_file=None,
+        reason_stdin=True,
+        stdin=io.StringIO("Read from stdin\n"),
+    ) == "Read from stdin"
+    with pytest.raises(
+        tool.ToolClientError,
+        match="exactly_one_reason_source_required",
+    ):
+        tool.read_rejection_reason(
+            reason_file=None,
+            reason_stdin=False,
+            stdin=io.StringIO(""),
+        )
+    with pytest.raises(
+        tool.ToolClientError,
+        match="exactly_one_reason_source_required",
+    ):
+        tool.read_rejection_reason(
+            reason_file=reason_file,
+            reason_stdin=True,
+            stdin=io.StringIO(""),
+        )
+
+
+@pytest.mark.parametrize("reason", ["", "x" * 1001])
+def test_rejection_reason_is_bounded(reason):
+    with pytest.raises(
+        tool.ToolClientError,
+        match="rejection_reason_must_be_1_to_1000_characters",
+    ):
+        tool.read_rejection_reason(
+            reason_file=None,
+            reason_stdin=True,
+            stdin=io.StringIO(reason),
+        )
+
+
+def test_submit_review_decision_fetches_current_contract_before_post(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        tool,
+        "show_review",
+        lambda **kwargs: {
+            "review_id": "review/1",
+            "review_revision": 3,
+            "state_version": 7,
+        },
+    )
+
+    def fake_urlopen(req, timeout):
+        captured["url"] = req.full_url
+        captured["method"] = req.method
+        captured["payload"] = json.loads(req.data.decode("utf-8"))
+        return FakeResponse(
+            {
+                "status": "resume_pending",
+                "run_id": "run/1",
+                "review_id": "review/1",
+                "decision_id": captured["payload"]["decision_id"],
+                "idempotent_replay": False,
+            },
+            status=202,
+        )
+
+    monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
+    response = tool.submit_review_decision(
+        run_id="run/1",
+        review_id=None,
+        decision_id=None,
+        action="reject",
+        reason="Not accepted",
+        config=tool.ToolConfig(base_url="http://127.0.0.1:9000"),
+    )
+
+    assert captured["url"] == (
+        "http://127.0.0.1:9000/api/runs/run%2F1"
+        "/reviews/review%2F1/decisions"
+    )
+    assert captured["method"] == "POST"
+    assert captured["payload"] == {
+        "decision_id": tool.stable_decision_id(
+            run_id="run/1",
+            review_id="review/1",
+            revision=3,
+            action="reject",
+            reason="Not accepted",
+        ),
+        "review_revision": 3,
+        "action": "reject",
+        "reason": "Not accepted",
+        "expected_state_version": 7,
+    }
+    assert "reason" not in response
+
+
+def test_review_decision_parser_commands():
+    parser = tool._build_parser()
+
+    approved = parser.parse_args(
+        ["review", "approve", "--run-id", "run_1", "--wait"]
+    )
+    rejected = parser.parse_args(
+        [
+            "review",
+            "reject",
+            "--run-id",
+            "run_1",
+            "--reason-stdin",
+        ]
+    )
+
+    assert approved.review_command == "approve"
+    assert approved.wait is True
+    assert approved.review_id is None
+    assert approved.decision_id is None
+    assert rejected.review_command == "reject"
+    assert rejected.reason_stdin is True
+    assert rejected.reason_file is None
+
+
 def test_cli_does_not_print_api_key(monkeypatch, capsys):
     def fake_urlopen(req, timeout):
         return FakeResponse({"status": "ok", "service": "deep-search-agent"})

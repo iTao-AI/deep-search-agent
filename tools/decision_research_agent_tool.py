@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 from threading import RLock
 import time
 from dataclasses import dataclass
 from typing import Any
 from urllib import error, parse, request
+import uuid
 import warnings
 
 
@@ -229,6 +232,86 @@ def show_review(
     )
 
 
+def stable_decision_id(
+    *,
+    run_id: str,
+    review_id: str,
+    revision: int,
+    action: str,
+    reason: str | None,
+) -> str:
+    reason_hash = hashlib.sha256((reason or "").encode("utf-8")).hexdigest()
+    semantic = "\n".join(
+        [run_id, review_id, str(revision), action, reason_hash]
+    )
+    return f"decision_{uuid.uuid5(uuid.NAMESPACE_URL, semantic).hex}"
+
+
+def read_rejection_reason(
+    *,
+    reason_file: Path | None,
+    reason_stdin: bool,
+    stdin,
+) -> str:
+    if (reason_file is None) == (not reason_stdin):
+        raise ToolClientError("exactly_one_reason_source_required")
+    value = (
+        reason_file.read_text(encoding="utf-8")
+        if reason_file is not None
+        else stdin.read()
+    ).strip()
+    if not 1 <= len(value) <= 1000:
+        raise ToolClientError(
+            "rejection_reason_must_be_1_to_1000_characters"
+        )
+    return value
+
+
+def submit_review_decision(
+    *,
+    run_id: str,
+    review_id: str | None,
+    decision_id: str | None,
+    action: str,
+    reason: str | None,
+    config: ToolConfig,
+) -> dict[str, Any]:
+    detail = show_review(
+        run_id=run_id,
+        review_id=review_id,
+        config=config,
+    )
+    resolved_review_id = detail["review_id"]
+    resolved_decision_id = decision_id or stable_decision_id(
+        run_id=run_id,
+        review_id=resolved_review_id,
+        revision=detail["review_revision"],
+        action=action,
+        reason=reason,
+    )
+    payload = {
+        "decision_id": resolved_decision_id,
+        "review_revision": detail["review_revision"],
+        "action": action,
+        "reason": reason,
+        "expected_state_version": detail["state_version"],
+    }
+    result = _request_json(
+        "POST",
+        _join_url(
+            config.base_url,
+            (
+                f"/api/runs/{parse.quote(run_id, safe='')}"
+                f"/reviews/{parse.quote(resolved_review_id, safe='')}"
+                "/decisions"
+            ),
+        ),
+        config=config,
+        payload=payload,
+    )
+    return {key: value for key, value in result.items() if key != "reason"}
+
+
 def wait_for_run(
     run_id: str,
     config: ToolConfig,
@@ -368,6 +451,21 @@ def _build_parser() -> argparse.ArgumentParser:
     review_show = review_subparsers.add_parser("show")
     review_show.add_argument("--run-id", required=True)
     review_show.add_argument("--review-id")
+
+    review_approve = review_subparsers.add_parser("approve")
+    review_approve.add_argument("--run-id", required=True)
+    review_approve.add_argument("--review-id")
+    review_approve.add_argument("--decision-id")
+    review_approve.add_argument("--wait", action="store_true")
+
+    review_reject = review_subparsers.add_parser("reject")
+    review_reject.add_argument("--run-id", required=True)
+    review_reject.add_argument("--review-id")
+    review_reject.add_argument("--decision-id")
+    reason = review_reject.add_mutually_exclusive_group(required=True)
+    reason.add_argument("--reason-file", type=Path)
+    reason.add_argument("--reason-stdin", action="store_true")
+    review_reject.add_argument("--wait", action="store_true")
     return parser
 
 
@@ -418,6 +516,41 @@ def main(argv: list[str] | None = None) -> int:
                 review_id=args.review_id,
                 config=config,
             )
+        elif args.command == "review" and args.review_command == "approve":
+            result = submit_review_decision(
+                run_id=args.run_id,
+                review_id=args.review_id,
+                decision_id=args.decision_id,
+                action="approve",
+                reason=None,
+                config=config,
+            )
+            if args.wait:
+                result = wait_for_review(
+                    run_id=args.run_id,
+                    review_id=result["review_id"],
+                    config=config,
+                )
+        elif args.command == "review" and args.review_command == "reject":
+            reason = read_rejection_reason(
+                reason_file=args.reason_file,
+                reason_stdin=args.reason_stdin,
+                stdin=sys.stdin,
+            )
+            result = submit_review_decision(
+                run_id=args.run_id,
+                review_id=args.review_id,
+                decision_id=args.decision_id,
+                action="reject",
+                reason=reason,
+                config=config,
+            )
+            if args.wait:
+                result = wait_for_review(
+                    run_id=args.run_id,
+                    review_id=result["review_id"],
+                    config=config,
+                )
         else:
             parser.error(f"unknown command: {args.command}")
             return 1
