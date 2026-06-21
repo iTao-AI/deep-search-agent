@@ -440,6 +440,14 @@ def test_doctor_checks_health_and_profile_manifest(monkeypatch):
 
     def fake_urlopen(req, timeout):
         urls.append(req.full_url)
+        if req.full_url.endswith("/api/reviews/health"):
+            return FakeResponse(
+                {
+                    "status": "ok",
+                    "worker_running": True,
+                    "gate_report_status": "PASS",
+                }
+            )
         if req.full_url.endswith("/health"):
             return FakeResponse({"status": "ok", "service": "deep-search-agent"})
         return FakeResponse(
@@ -457,10 +465,69 @@ def test_doctor_checks_health_and_profile_manifest(monkeypatch):
     assert result["checks"]["server"]["status"] == "ok"
     assert result["checks"]["server"]["service"] == "deep-search-agent"
     assert result["checks"]["talent_profile"]["status"] == "ok"
+    assert result["checks"]["durable_review"] == {
+        "status": "ok",
+        "worker_running": True,
+        "gate_report_status": "PASS",
+    }
     assert urls == [
         "http://127.0.0.1:9000/health",
         "http://127.0.0.1:9000/api/profiles/talent-hiring-signal",
+        "http://127.0.0.1:9000/api/reviews/health",
     ]
+
+
+def test_doctor_treats_disabled_review_as_optional(monkeypatch):
+    monkeypatch.setattr(tool, "healthcheck", lambda config: {"status": "ok"})
+    monkeypatch.setattr(
+        tool,
+        "profile_manifest",
+        lambda profile_id, config: {
+            "profile": {"profile_id": "talent-hiring-signal"},
+            "harness_policy": {"allowed_tools": []},
+        },
+    )
+    monkeypatch.setattr(
+        tool,
+        "review_health",
+        lambda config: (_ for _ in ()).throw(
+            tool.ToolClientHTTPError(
+                404,
+                {"code": "durable_hitl_disabled"},
+            )
+        ),
+    )
+
+    result = tool.doctor(tool.ToolConfig())
+
+    assert result["status"] == "ok"
+    assert result["checks"]["durable_review"]["status"] == "disabled"
+
+
+def test_doctor_fails_when_enabled_review_is_not_ready(monkeypatch):
+    monkeypatch.setattr(tool, "healthcheck", lambda config: {"status": "ok"})
+    monkeypatch.setattr(
+        tool,
+        "profile_manifest",
+        lambda profile_id, config: {
+            "profile": {"profile_id": "talent-hiring-signal"},
+            "harness_policy": {"allowed_tools": []},
+        },
+    )
+    monkeypatch.setattr(
+        tool,
+        "review_health",
+        lambda config: {
+            "status": "failed",
+            "worker_running": False,
+            "gate_report_status": "PASS",
+        },
+    )
+
+    result = tool.doctor(tool.ToolConfig())
+
+    assert result["status"] == "failed"
+    assert result["checks"]["durable_review"]["status"] == "failed"
 
 
 def test_wait_for_run_polls_until_terminal(monkeypatch):
@@ -480,6 +547,84 @@ def test_wait_for_run_polls_until_terminal(monkeypatch):
     )
 
     assert result["execution_status"] == "completed"
+
+
+def test_wait_for_review_returns_terminal_resolution(monkeypatch):
+    responses = iter(
+        [
+            {"workflow": {"status": "resume_pending"}},
+            {"workflow": {"status": "approved"}},
+        ]
+    )
+    monkeypatch.setattr(tool, "show_review", lambda **kwargs: next(responses))
+    monkeypatch.setattr(tool.time, "sleep", lambda seconds: None)
+
+    result = tool.wait_for_review(
+        run_id="run_1",
+        review_id="review_1",
+        config=tool.ToolConfig(),
+        poll_seconds=0.01,
+        timeout_seconds=1,
+    )
+
+    assert result["workflow"]["status"] == "approved"
+
+
+def test_wait_for_review_fails_closed_on_manual_recovery(monkeypatch):
+    monkeypatch.setattr(
+        tool,
+        "show_review",
+        lambda **kwargs: {
+            "workflow": {
+                "status": "manual_recovery",
+                "last_error_code": "checkpoint_corrupt",
+            }
+        },
+    )
+
+    with pytest.raises(
+        tool.ToolClientError,
+        match="manual_recovery:checkpoint_corrupt",
+    ):
+        tool.wait_for_review(
+            run_id="run_1",
+            review_id="review_1",
+            config=tool.ToolConfig(),
+            poll_seconds=0.01,
+            timeout_seconds=1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("poll_seconds", "timeout_seconds", "code"),
+    [
+        (0, 1, "review_poll_seconds_must_be_positive"),
+        (1, 0, "review_wait_timeout_seconds_must_be_positive"),
+    ],
+)
+def test_wait_for_review_rejects_non_positive_bounds(
+    poll_seconds,
+    timeout_seconds,
+    code,
+):
+    with pytest.raises(tool.ToolClientError, match=code):
+        tool.wait_for_review(
+            run_id="run_1",
+            review_id="review_1",
+            config=tool.ToolConfig(),
+            poll_seconds=poll_seconds,
+            timeout_seconds=timeout_seconds,
+        )
+
+
+def test_review_wait_parser_defaults():
+    args = tool._build_parser().parse_args(
+        ["review", "wait", "--run-id", "run_1"]
+    )
+
+    assert args.poll_seconds == 1
+    assert args.wait_timeout_seconds == 120
+    assert args.review_id is None
 
 
 def _args(*, base_url="", timeout=""):

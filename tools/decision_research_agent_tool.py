@@ -134,6 +134,14 @@ def profile_manifest(profile_id: str, config: ToolConfig) -> dict[str, Any]:
     )
 
 
+def review_health(config: ToolConfig) -> dict[str, Any]:
+    return _request_json(
+        "GET",
+        _join_url(config.base_url, "/api/reviews/health"),
+        config=config,
+    )
+
+
 def doctor(config: ToolConfig) -> dict[str, Any]:
     """Check the backend and the compiled Talent profile contract."""
     checks: dict[str, dict[str, Any]] = {}
@@ -151,9 +159,28 @@ def doctor(config: ToolConfig) -> dict[str, Any]:
         ),
         "allowed_tools": manifest.get("harness_policy", {}).get("allowed_tools", []),
     }
+    try:
+        review = review_health(config)
+    except ToolClientHTTPError as exc:
+        if (
+            exc.status == 404
+            and exc.payload.get("code") == "durable_hitl_disabled"
+        ):
+            checks["durable_review"] = {"status": "disabled"}
+        else:
+            raise
+    else:
+        checks["durable_review"] = {
+            "status": "ok" if review.get("status") == "ok" else "failed",
+            "worker_running": review.get("worker_running"),
+            "gate_report_status": review.get("gate_report_status"),
+        }
     return {
         "status": "ok"
-        if all(check["status"] == "ok" for check in checks.values())
+        if all(
+            check["status"] in {"ok", "disabled"}
+            for check in checks.values()
+        )
         else "failed",
         "checks": checks,
     }
@@ -329,6 +356,37 @@ def wait_for_run(
         time.sleep(poll_seconds)
 
 
+def wait_for_review(
+    *,
+    run_id: str,
+    review_id: str | None,
+    config: ToolConfig,
+    poll_seconds: float = 1.0,
+    timeout_seconds: float = 120.0,
+) -> dict[str, Any]:
+    if poll_seconds <= 0:
+        raise ToolClientError("review_poll_seconds_must_be_positive")
+    if timeout_seconds <= 0:
+        raise ToolClientError(
+            "review_wait_timeout_seconds_must_be_positive"
+        )
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        result = show_review(
+            run_id=run_id,
+            review_id=review_id,
+            config=config,
+        )
+        status = result["workflow"]["status"]
+        if status in {"approved", "rejected"}:
+            return result
+        if status == "manual_recovery":
+            code = result["workflow"].get("last_error_code") or "unknown"
+            raise ToolClientError(f"manual_recovery:{code}")
+        time.sleep(poll_seconds)
+    raise ToolClientError("review_wait_timeout")
+
+
 def _resolve_env(
     canonical_key: str,
     legacy_key: str,
@@ -466,6 +524,16 @@ def _build_parser() -> argparse.ArgumentParser:
     reason.add_argument("--reason-file", type=Path)
     reason.add_argument("--reason-stdin", action="store_true")
     review_reject.add_argument("--wait", action="store_true")
+
+    review_wait = review_subparsers.add_parser("wait")
+    review_wait.add_argument("--run-id", required=True)
+    review_wait.add_argument("--review-id")
+    review_wait.add_argument("--poll-seconds", type=float, default=1)
+    review_wait.add_argument(
+        "--wait-timeout-seconds",
+        type=float,
+        default=120,
+    )
     return parser
 
 
@@ -551,6 +619,14 @@ def main(argv: list[str] | None = None) -> int:
                     review_id=result["review_id"],
                     config=config,
                 )
+        elif args.command == "review" and args.review_command == "wait":
+            result = wait_for_review(
+                run_id=args.run_id,
+                review_id=args.review_id,
+                config=config,
+                poll_seconds=args.poll_seconds,
+                timeout_seconds=args.wait_timeout_seconds,
+            )
         else:
             parser.error(f"unknown command: {args.command}")
             return 1
