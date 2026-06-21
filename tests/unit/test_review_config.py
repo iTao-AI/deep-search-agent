@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import pytest
 
@@ -131,3 +132,53 @@ def test_readiness_requires_exact_thirteen_gate_pass(
     )
 
     assert readiness.ready is True
+
+
+def test_readiness_rejects_incomplete_existing_review_schema(
+    tmp_path,
+    monkeypatch,
+):
+    tasks_path = tmp_path / "tasks.db"
+    connection = sqlite3.connect(tasks_path)
+    try:
+        connection.execute(
+            """
+            CREATE TABLE review_workflows_v2 (
+                status TEXT,
+                lease_expires_at TEXT,
+                updated_at TEXT
+            )
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
+    monkeypatch.setenv("API_SECRET", "configured")
+    monkeypatch.setenv("TASKS_DB_PATH", str(tasks_path))
+    monkeypatch.setenv(
+        "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
+        str(tmp_path / "checkpoints.db"),
+    )
+    report = tmp_path / "gate.json"
+    report.write_text(
+        json.dumps(
+            {
+                "status": "PASS",
+                "expected": 13,
+                "passed": 13,
+                "failed": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    runtime = validate_review_runtime(output_dir=tmp_path / "output")
+
+    readiness = check_review_readiness(
+        runtime=runtime,
+        gate_report_path=report,
+    )
+
+    assert readiness.application_schema_ready is False
+    assert readiness.ready is False

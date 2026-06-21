@@ -9,6 +9,7 @@ import uuid
 from api.review_gate import ReviewGate
 from api.review_models import durable_hitl_enabled
 from api.review_repository import init_review_schema
+from api.run_migrations import verify_run_schema
 
 
 class ReviewConfigurationError(RuntimeError):
@@ -108,6 +109,7 @@ def check_review_readiness(
     gate_report_status = "MISSING"
     try:
         init_review_schema(str(runtime.application_db_path))
+        verify_run_schema(db_path=str(runtime.application_db_path))
         application_schema_ready = True
     except Exception:
         pass

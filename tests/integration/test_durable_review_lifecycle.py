@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
@@ -247,5 +248,38 @@ def test_app_lifespan_fails_startup_without_api_secret(monkeypatch):
     monkeypatch.delenv("API_SECRET", raising=False)
 
     with pytest.raises(RuntimeError, match="review_auth_not_configured"):
+        with TestClient(server.app):
+            pass
+
+
+def test_app_lifespan_fails_startup_with_incomplete_review_schema(
+    tmp_path,
+    monkeypatch,
+):
+    tasks_path = tmp_path / "tasks.db"
+    connection = sqlite3.connect(tasks_path)
+    try:
+        connection.execute(
+            """
+            CREATE TABLE review_workflows_v2 (
+                status TEXT,
+                lease_expires_at TEXT,
+                updated_at TEXT
+            )
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
+    monkeypatch.setenv("API_SECRET", "configured")
+    monkeypatch.setenv("TASKS_DB_PATH", str(tasks_path))
+    monkeypatch.setenv(
+        "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
+        str(tmp_path / "review-checkpoints.db"),
+    )
+
+    with pytest.raises(RuntimeError, match="review_runtime_not_ready"):
         with TestClient(server.app):
             pass
