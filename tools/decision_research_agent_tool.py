@@ -282,11 +282,15 @@ def read_rejection_reason(
 ) -> str:
     if (reason_file is None) == (not reason_stdin):
         raise ToolClientError("exactly_one_reason_source_required")
-    value = (
-        reason_file.read_text(encoding="utf-8")
-        if reason_file is not None
-        else stdin.read()
-    ).strip()
+    try:
+        if reason_file is not None:
+            with reason_file.open("r", encoding="utf-8") as handle:
+                value = handle.read(1001)
+        else:
+            value = stdin.read(1001)
+    except (OSError, UnicodeError) as exc:
+        raise ToolClientError("rejection_reason_unreadable") from exc
+    value = value.strip()
     if not 1 <= len(value) <= 1000:
         raise ToolClientError(
             "rejection_reason_must_be_1_to_1000_characters"
@@ -383,7 +387,8 @@ def wait_for_review(
         if status == "manual_recovery":
             code = result["workflow"].get("last_error_code") or "unknown"
             raise ToolClientError(f"manual_recovery:{code}")
-        time.sleep(poll_seconds)
+        remaining = max(0.0, deadline - time.monotonic())
+        time.sleep(min(poll_seconds, remaining))
     raise ToolClientError("review_wait_timeout")
 
 

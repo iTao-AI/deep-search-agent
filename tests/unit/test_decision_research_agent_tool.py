@@ -1,6 +1,7 @@
 import argparse
 import io
 import json
+from pathlib import Path
 import re
 import warnings
 
@@ -319,6 +320,95 @@ def test_reject_requires_exactly_one_safe_reason_source(tmp_path):
         )
 
 
+@pytest.mark.parametrize(
+    ("filename", "content"),
+    [
+        ("missing-reason.txt", None),
+        ("invalid-utf8-reason.txt", b"\xff\xfe"),
+    ],
+)
+def test_reject_reason_file_failure_is_structured_and_private(
+    tmp_path,
+    capsys,
+    filename,
+    content,
+):
+    reason_file = tmp_path / filename
+    if content is not None:
+        reason_file.write_bytes(content)
+
+    exit_code = tool.main(
+        [
+            "review",
+            "reject",
+            "--run-id",
+            "run_1",
+            "--reason-file",
+            str(reason_file),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert json.loads(captured.out) == {
+        "status": "failed",
+        "error": "rejection_reason_unreadable",
+    }
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+    assert str(reason_file) not in captured.out
+    assert str(reason_file) not in captured.err
+
+
+class _RecordingTextIO(io.StringIO):
+    def __init__(self, value):
+        super().__init__(value)
+        self.read_sizes = []
+
+    def read(self, size=-1):
+        self.read_sizes.append(size)
+        return super().read(size)
+
+
+def test_rejection_reason_reads_at_most_1001_characters_from_stdin():
+    stdin = _RecordingTextIO("x" * 1002)
+
+    with pytest.raises(
+        tool.ToolClientError,
+        match="rejection_reason_must_be_1_to_1000_characters",
+    ):
+        tool.read_rejection_reason(
+            reason_file=None,
+            reason_stdin=True,
+            stdin=stdin,
+        )
+
+    assert stdin.read_sizes == [1001]
+
+
+def test_rejection_reason_reads_at_most_1001_characters_from_file(
+    monkeypatch,
+):
+    reason_stream = _RecordingTextIO("x" * 1002)
+    monkeypatch.setattr(
+        Path,
+        "open",
+        lambda self, *args, **kwargs: reason_stream,
+    )
+
+    with pytest.raises(
+        tool.ToolClientError,
+        match="rejection_reason_must_be_1_to_1000_characters",
+    ):
+        tool.read_rejection_reason(
+            reason_file=Path("reason.txt"),
+            reason_stdin=False,
+            stdin=io.StringIO(""),
+        )
+
+    assert reason_stream.read_sizes == [1001]
+
+
 @pytest.mark.parametrize("reason", ["", "x" * 1001])
 def test_rejection_reason_is_bounded(reason):
     with pytest.raises(
@@ -593,6 +683,38 @@ def test_wait_for_review_fails_closed_on_manual_recovery(monkeypatch):
             poll_seconds=0.01,
             timeout_seconds=1,
         )
+
+
+def test_wait_for_review_sleep_does_not_cross_deadline(monkeypatch):
+    class FakeClock:
+        def __init__(self):
+            self.now = 0.0
+
+        def monotonic(self):
+            return self.now
+
+        def sleep(self, seconds):
+            self.now += seconds
+
+    clock = FakeClock()
+    monkeypatch.setattr(tool.time, "monotonic", clock.monotonic)
+    monkeypatch.setattr(tool.time, "sleep", clock.sleep)
+    monkeypatch.setattr(
+        tool,
+        "show_review",
+        lambda **kwargs: {"workflow": {"status": "resume_pending"}},
+    )
+
+    with pytest.raises(tool.ToolClientError, match="review_wait_timeout"):
+        tool.wait_for_review(
+            run_id="run_1",
+            review_id="review_1",
+            config=tool.ToolConfig(),
+            poll_seconds=10,
+            timeout_seconds=1,
+        )
+
+    assert clock.now == 1
 
 
 @pytest.mark.parametrize(

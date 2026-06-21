@@ -36,11 +36,19 @@ python tools/decision_research_agent_tool.py doctor
 
 python scripts/durable_hitl_gate_runner.py \
   --output docs/evidence/durable-hitl-gate-report.json
+
+DECISION_RESEARCH_AGENT_REQUIRE_DOCKER_TESTS=true \
+  python -m pytest \
+  tests/integration/test_durable_review_container.py::test_controlled_review_cli_approve_and_reject_canary \
+  -q
 ```
 
 `doctor` must report the server, Talent profile, and durable review checks as
 `ok`. The gate report must contain `status=PASS`, `expected=13`, `passed=13`,
-and an empty `failed` list.
+and an empty `failed` list. The Docker CLI canary must pass without a skip:
+approval reaches `workflow.status=approved` with `delivery_status=ready`;
+rejection reaches `workflow.status=rejected` with `delivery_status=blocked`
+and no reviewed artifact.
 
 Before allowing an external caller, create controlled synthetic reviews and
 complete one approve and one reject lifecycle with the first-party Tool Client.
