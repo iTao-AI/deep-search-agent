@@ -356,6 +356,10 @@ def test_talent_run_prefetches_declared_aggregate_evidence_and_normalizes_refs(t
             "https://jobs.example.com/role-2",
         ]
         assert all(entry.verification_status == "verified" for entry in outcome.evidence_entries)
+        assert all(
+            entry.baseline_verification_origin == "declared_fixture"
+            for entry in outcome.evidence_entries
+        )
         evidence_ids = [
             "ev_run-talent_" + entry.evidence_fingerprint
             for entry in outcome.evidence_entries

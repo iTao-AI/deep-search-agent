@@ -252,6 +252,7 @@ def _freeze_execution_outcome(
                     entry,
                     citation_status="cited",
                     verification_status="verified",
+                    baseline_verification_origin="declared_fixture",
                 )
                 if f"ev_{execution_id}_{entry.evidence_fingerprint}"
                 in accumulator.verified_evidence_ids
