@@ -9,6 +9,9 @@ from api.evidence_verification_models import (
     EvidencePreflightResult,
     VerificationDecisionRecord,
     VerificationDecisionRequest,
+    VerificationSnapshotRecord,
+    canonical_hash,
+    snapshot_id_for,
     verification_request_hash,
 )
 from api.evidence_verification_service import evaluate_evidence_preflight
@@ -24,6 +27,12 @@ VERIFICATION_MIGRATION_CHECKSUM = "evidence-verification-authority-v1"
 class VerificationDecisionAcceptance:
     decision: VerificationDecisionRecord
     preflight: EvidencePreflightResult
+    idempotent_replay: bool
+
+
+@dataclass(frozen=True)
+class VerificationSnapshotAcceptance:
+    snapshot: VerificationSnapshotRecord
     idempotent_replay: bool
 
 
@@ -220,6 +229,19 @@ def _preflight_record(row: sqlite3.Row) -> EvidencePreflightResult:
             "status": row["status"],
             "checks": json.loads(row["checks_json"]),
             "preflight_hash": row["preflight_hash"],
+        }
+    )
+
+
+def _snapshot_record(row: sqlite3.Row) -> VerificationSnapshotRecord:
+    return VerificationSnapshotRecord.model_validate(
+        {
+            "snapshot_id": row["snapshot_id"],
+            "run_id": row["run_id"],
+            "revision": row["revision"],
+            "snapshot": json.loads(row["snapshot_json"]),
+            "snapshot_hash": row["snapshot_hash"],
+            "created_at": row["created_at"],
         }
     )
 
@@ -606,5 +628,137 @@ def list_effective_verifications(
                 )
             )
         return result
+    finally:
+        connection.close()
+
+
+def finalize_verification_snapshot(
+    *,
+    db_path: str,
+    run_id: str,
+) -> VerificationSnapshotAcceptance:
+    init_evidence_verification_schema(db_path)
+    connection = _connect(db_path)
+    try:
+        with connection:
+            connection.execute("BEGIN IMMEDIATE")
+            run = connection.execute(
+                """
+                SELECT run_id
+                FROM research_runs_v2
+                WHERE run_id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+            if run is None:
+                raise VerificationConflict("evidence_not_found")
+
+            evidence_rows = connection.execute(
+                """
+                SELECT *
+                FROM evidence_entries_v2
+                WHERE run_id = ?
+                ORDER BY evidence_id
+                """,
+                (run_id,),
+            ).fetchall()
+            projections = []
+            for evidence in evidence_rows:
+                decision = connection.execute(
+                    """
+                    SELECT *
+                    FROM evidence_verification_decisions_v2
+                    WHERE run_id = ?
+                      AND evidence_id = ?
+                      AND evidence_fingerprint = ?
+                    ORDER BY revision DESC
+                    LIMIT 1
+                    """,
+                    (
+                        run_id,
+                        evidence["evidence_id"],
+                        evidence["evidence_fingerprint"],
+                    ),
+                ).fetchone()
+                projections.append(
+                    _effective_projection(
+                        evidence=evidence,
+                        decision=decision,
+                    )
+                )
+
+            snapshot_payload = [
+                item.model_dump(mode="json")
+                for item in projections
+            ]
+            snapshot_hash = canonical_hash(snapshot_payload)
+            existing = connection.execute(
+                """
+                SELECT *
+                FROM evidence_verification_snapshots_v2
+                WHERE run_id = ? AND snapshot_hash = ?
+                """,
+                (run_id, snapshot_hash),
+            ).fetchone()
+            if existing is not None:
+                return VerificationSnapshotAcceptance(
+                    snapshot=_snapshot_record(existing),
+                    idempotent_replay=True,
+                )
+
+            revision = connection.execute(
+                """
+                SELECT COALESCE(MAX(revision), 0) + 1
+                FROM evidence_verification_snapshots_v2
+                WHERE run_id = ?
+                """,
+                (run_id,),
+            ).fetchone()[0]
+            snapshot_id = snapshot_id_for(
+                run_id=run_id,
+                snapshot_hash=snapshot_hash,
+            )
+            now = _now()
+            connection.execute(
+                """
+                INSERT INTO evidence_verification_snapshots_v2 (
+                    snapshot_id,
+                    run_id,
+                    revision,
+                    snapshot_json,
+                    snapshot_hash,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    snapshot_id,
+                    run_id,
+                    revision,
+                    json.dumps(
+                        snapshot_payload,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    snapshot_hash,
+                    now,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT *
+                FROM evidence_verification_snapshots_v2
+                WHERE snapshot_id = ?
+                """,
+                (snapshot_id,),
+            ).fetchone()
+            return VerificationSnapshotAcceptance(
+                snapshot=_snapshot_record(row),
+                idempotent_replay=False,
+            )
+    except sqlite3.IntegrityError as exc:
+        raise VerificationConflict(
+            "verification_persistence_conflict"
+        ) from exc
     finally:
         connection.close()

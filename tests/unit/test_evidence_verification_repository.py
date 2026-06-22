@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+import json
 import sqlite3
 
 import pytest
@@ -8,6 +9,7 @@ from api.evidence_verification_models import VerificationDecisionRequest
 from api.evidence_verification_repository import (
     VerificationConflict,
     accept_verification_decision,
+    finalize_verification_snapshot,
     get_or_create_evidence_preflight,
     get_effective_verification,
     init_evidence_verification_schema,
@@ -416,3 +418,98 @@ def test_list_projection_is_stable_and_sorted_by_evidence_id(tmp_path):
         projections,
         key=lambda item: item.evidence_id,
     )
+
+
+def test_same_effective_state_reuses_snapshot_identity(tmp_path):
+    db_path, run_id, _, _ = _persisted_evidence(tmp_path)
+
+    first = finalize_verification_snapshot(
+        db_path=db_path,
+        run_id=run_id,
+    )
+    second = finalize_verification_snapshot(
+        db_path=db_path,
+        run_id=run_id,
+    )
+
+    assert first.idempotent_replay is False
+    assert second.idempotent_replay is True
+    assert first.snapshot == second.snapshot
+    assert first.snapshot.revision == 1
+
+
+def test_changed_effective_state_creates_next_snapshot_revision(tmp_path):
+    db_path, run_id, evidence_id, fingerprint = _persisted_evidence(tmp_path)
+    initial = finalize_verification_snapshot(
+        db_path=db_path,
+        run_id=run_id,
+    )
+    accept_verification_decision(
+        db_path=db_path,
+        run_id=run_id,
+        evidence_id=evidence_id,
+        request=_verify_request(fingerprint=fingerprint),
+        actor_fingerprint="actor-hash",
+    )
+
+    changed = finalize_verification_snapshot(
+        db_path=db_path,
+        run_id=run_id,
+    )
+
+    assert changed.idempotent_replay is False
+    assert changed.snapshot.revision == 2
+    assert changed.snapshot.snapshot_hash != initial.snapshot.snapshot_hash
+    assert changed.snapshot.snapshot[0].verification_origin == "human"
+
+
+def test_snapshot_json_is_sorted_and_omits_private_audit_fields(tmp_path):
+    db_path, run_id, evidence_id, fingerprint = _persisted_evidence(tmp_path)
+    accept_verification_decision(
+        db_path=db_path,
+        run_id=run_id,
+        evidence_id=evidence_id,
+        request=_reject_request(
+            fingerprint=fingerprint,
+            expected_revision=0,
+        ),
+        actor_fingerprint="private-actor",
+    )
+
+    accepted = finalize_verification_snapshot(
+        db_path=db_path,
+        run_id=run_id,
+    )
+    connection = sqlite3.connect(db_path)
+    try:
+        raw = connection.execute(
+            """
+            SELECT snapshot_json
+            FROM evidence_verification_snapshots_v2
+            WHERE snapshot_id = ?
+            """,
+            (accepted.snapshot.snapshot_id,),
+        ).fetchone()[0]
+    finally:
+        connection.close()
+
+    assert raw == json.dumps(
+        [
+            item.model_dump(mode="json")
+            for item in accepted.snapshot.snapshot
+        ],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    assert "private-actor" not in raw
+    assert "request_hash" not in raw
+    assert "reason_note" not in raw
+
+
+def test_snapshot_rejects_unknown_run(tmp_path):
+    with pytest.raises(VerificationConflict, match="evidence_not_found"):
+        finalize_verification_snapshot(
+            db_path=str(tmp_path / "missing.db"),
+            run_id="run-missing",
+        )
