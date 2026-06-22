@@ -29,6 +29,18 @@ The milestone ends with a bounded proof using real public sources. It does not
 add runtime Skills, Async Subagents, LLM verification, a frontend, or distributed
 deployment.
 
+Naming cleanup follows a gradual fade rather than a separate product milestone.
+New P2A code, configuration, examples, and active documentation use only the
+canonical `decision-research-agent` identity. Existing runtime aliases, the
+legacy Tool Client shim, the health service ID, historical documents, and
+public portfolio entry remain unchanged during PR1. Do not create a dedicated
+PR, feature claim, or prominent release narrative for this cleanup.
+
+Runtime compatibility removal is deferred to the later UI and public portfolio
+maintenance batch, after first-party consumers have moved to canonical
+identifiers. Historical specs, links, trace project names, and changelog records
+remain as history rather than being rewritten.
+
 ## Decision
 
 Adopt a narrow human-authoritative verification workflow:
@@ -141,6 +153,8 @@ current run. A bounded reason code and optional note explain why.
 - Runtime Skills, Async Subagents, Agent Server migration, or long-term memory
   authority.
 - General market accuracy, recall, production SLA, or hiring outcome claims.
+- Removing runtime legacy identifiers or updating the personal portfolio/UI
+  during P2A PR1.
 
 ## Approaches Considered
 
@@ -245,9 +259,10 @@ Required checks:
 7. The source is inside the run's declared source boundary when the profile
    defines one.
 8. Snippet is non-empty and within the persisted contract bounds.
-9. Duplicate or ambiguous evidence IDs are rejected.
-10. The evidence fingerprint is not already superseded by a different
-    persisted snapshot.
+9. The stored evidence ID matches the deterministic identity for the supplied
+   run and fingerprint.
+10. The decision request fingerprint exactly matches the persisted immutable
+    fingerprint; stale or changed requests are rejected before persistence.
 
 Preflight result:
 
@@ -319,6 +334,24 @@ revision for the same evidence fingerprint is the effective human state.
 | `created_at` | UTC timestamp |
 
 Repeated identical preflight inputs reuse the same deterministic identity.
+
+### Evidence baseline origin
+
+Add `baseline_verification_origin` to `evidence_entries_v2`.
+
+- `none` is the default for ordinary evidence.
+- `declared_fixture` is written only by the controlled server-bundled aggregate
+  preload path.
+- `human` is never stored on the immutable Evidence row; it is derived from the
+  latest accepted Verification Ledger decision.
+
+Existing Talent fixture rows are backfilled as `declared_fixture` only when the
+run is the Talent profile, its persisted scope is aggregate-only
+(`allowed_source_types` contains only `provided_aggregate` and every declared
+sample has that type), and the legacy row is already `verified`. Mixed-source
+runs are not inferred because the current schema does not preserve per-row
+aggregate provenance. Legacy `verification_status=verified` alone is
+insufficient.
 
 ### `evidence_verification_decisions_v2`
 
@@ -653,11 +686,13 @@ outcome improvement, production throughput, or P95 from this sample.
 ### PR 1: Verification Authority
 
 - schema migration for preflights, decisions, and snapshots;
+- immutable baseline origin on persisted Evidence;
 - deterministic preflight service;
 - effective verification projection;
 - legacy `declared_fixture` origin compatibility;
 - repository and unit/integration tests;
-- no mutation API and no artifact rebuild.
+- internal append/finalize repository operations only, with no mutation API and
+  no artifact rebuild.
 
 Exit condition: current P1A and P1C behavior is unchanged while the feature is
 disabled, and the ledger can deterministically represent human decisions.
@@ -671,6 +706,10 @@ disabled, and the ledger can deterministically represent human decisions.
 - deterministic artifact rebuild;
 - fresh controlled review workflow for every changed snapshot;
 - operator documentation and migration recovery tests.
+
+All new PR2 surfaces use canonical names only. Do not extend the legacy
+environment-variable resolver or legacy Tool Client shim for new P2A
+configuration and commands.
 
 Exit condition: one evidence change cannot reuse an old review decision, and
 only an approved non-stale publication is current.
@@ -773,5 +812,9 @@ Stop P2A expansion and retain completed work when any applies:
 - PostgreSQL and multi-instance coordination.
 - Skills and Async Subagents.
 - Statistical market coverage or accuracy evaluation.
+- Runtime removal of `DEEP_SEARCH_AGENT_*`,
+  `tools/deep_search_agent_tool.py`, and `service=deep-search-agent`, bundled
+  with the later UI/personal-portfolio identity refresh after first-party
+  consumer verification.
 
 These items require separate evidence, design, and approval.
