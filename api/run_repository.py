@@ -104,11 +104,17 @@ def init_run_schema(db_path: str | None = None) -> None:
                     tool_call_id TEXT,
                     citation_status TEXT NOT NULL,
                     verification_status TEXT NOT NULL,
+                    baseline_verification_origin TEXT NOT NULL DEFAULT 'none'
+                        CHECK(
+                            baseline_verification_origin
+                            IN ('none', 'declared_fixture')
+                        ),
                     created_at TEXT NOT NULL,
                     UNIQUE(run_id, evidence_fingerprint)
                 )
                 """
             )
+            _ensure_baseline_origin_column(conn)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS research_packets_v2 (
@@ -160,6 +166,28 @@ def init_run_schema(db_path: str | None = None) -> None:
             )
     finally:
         conn.close()
+
+
+def _ensure_baseline_origin_column(
+    connection: sqlite3.Connection,
+) -> None:
+    columns = {
+        row["name"]
+        for row in connection.execute(
+            "PRAGMA table_info(evidence_entries_v2)"
+        ).fetchall()
+    }
+    if "baseline_verification_origin" not in columns:
+        connection.execute(
+            """
+            ALTER TABLE evidence_entries_v2
+            ADD COLUMN baseline_verification_origin TEXT NOT NULL DEFAULT 'none'
+            CHECK(
+                baseline_verification_origin
+                IN ('none', 'declared_fixture')
+            )
+            """
+        )
 
 
 def create_run(
@@ -217,6 +245,12 @@ def _run_row(row: sqlite3.Row) -> dict[str, Any]:
     return data
 
 
+def _public_evidence_row(row: sqlite3.Row) -> dict[str, Any]:
+    value = dict(row)
+    value.pop("baseline_verification_origin", None)
+    return value
+
+
 def get_run(*, run_id: str, db_path: str | None = None) -> dict[str, Any] | None:
     from api.review_repository import get_review_projection, init_review_schema
 
@@ -242,7 +276,7 @@ def get_run(*, run_id: str, db_path: str | None = None) -> dict[str, Any] | None
             """,
             (run_id,),
         ).fetchall()
-        result["evidence"] = [dict(entry) for entry in evidence]
+        result["evidence"] = [_public_evidence_row(entry) for entry in evidence]
         packets = conn.execute(
             "SELECT packet_json FROM research_packets_v2 WHERE run_id = ? ORDER BY packet_id",
             (run_id,),
@@ -343,8 +377,9 @@ def finalize_run_transaction(
                     evidence_id, run_id, segment_id, query_text, subagent_name,
                     tool_name, source_url, source_identity, snippet,
                     evidence_fingerprint, retrieved_at, tool_call_id,
-                    citation_status, verification_status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    citation_status, verification_status,
+                    baseline_verification_origin, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -362,6 +397,7 @@ def finalize_run_transaction(
                         entry.tool_call_id,
                         entry.citation_status,
                         entry.verification_status,
+                        entry.baseline_verification_origin,
                         entry.created_at,
                     )
                     for entry in evidence_entries

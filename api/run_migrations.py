@@ -5,6 +5,11 @@ from pathlib import Path
 import sqlite3
 
 from api.persistence import _get_db_path
+from api.evidence_verification_repository import (
+    VERIFICATION_MIGRATION_CHECKSUM,
+    VERIFICATION_MIGRATION_VERSION,
+    init_evidence_verification_schema,
+)
 from api.review_repository import (
     REVIEW_MIGRATION_CHECKSUM,
     REVIEW_MIGRATION_VERSION,
@@ -104,6 +109,51 @@ REQUIRED_COLUMNS = {
         "created_at",
     },
 }
+VERIFICATION_TABLES = {
+    "evidence_verification_preflights_v2",
+    "evidence_verification_decisions_v2",
+    "evidence_verification_snapshots_v2",
+}
+VERIFICATION_INDEXES = {
+    "idx_evidence_preflights_evidence",
+    "idx_evidence_decisions_current",
+}
+VERIFICATION_COLUMNS = {
+    "evidence_entries_v2": {"baseline_verification_origin"},
+    "evidence_verification_preflights_v2": {
+        "preflight_id",
+        "run_id",
+        "evidence_id",
+        "evidence_fingerprint",
+        "preflight_version",
+        "status",
+        "checks_json",
+        "preflight_hash",
+        "created_at",
+    },
+    "evidence_verification_decisions_v2": {
+        "verification_id",
+        "run_id",
+        "evidence_id",
+        "evidence_fingerprint",
+        "revision",
+        "action",
+        "reason_code",
+        "reason_note",
+        "preflight_id",
+        "actor_fingerprint",
+        "request_hash",
+        "created_at",
+    },
+    "evidence_verification_snapshots_v2": {
+        "snapshot_id",
+        "run_id",
+        "revision",
+        "snapshot_json",
+        "snapshot_hash",
+        "created_at",
+    },
+}
 
 
 def backup_database(*, db_path: str, backup_path: str) -> None:
@@ -130,8 +180,27 @@ def restore_database(*, backup_path: str, db_path: str) -> None:
         source.close()
 
 
-def verify_run_schema(*, db_path: str) -> dict:
+def verify_run_schema(
+    *,
+    db_path: str,
+    include_evidence_verification: bool = False,
+) -> dict:
     """Fail closed unless the run identity schema is complete and consistent."""
+    required_tables = set(REQUIRED_TABLES)
+    required_indexes = set(REQUIRED_INDEXES)
+    required_columns = {
+        table: set(columns)
+        for table, columns in REQUIRED_COLUMNS.items()
+    }
+    expected_migrations = dict(EXPECTED_MIGRATIONS)
+    if include_evidence_verification:
+        required_tables.update(VERIFICATION_TABLES)
+        required_indexes.update(VERIFICATION_INDEXES)
+        for table, columns in VERIFICATION_COLUMNS.items():
+            required_columns.setdefault(table, set()).update(columns)
+        expected_migrations[VERIFICATION_MIGRATION_VERSION] = (
+            VERIFICATION_MIGRATION_CHECKSUM
+        )
     conn = sqlite3.connect(_get_db_path(db_path))
     try:
         tables = {
@@ -146,8 +215,8 @@ def verify_run_schema(*, db_path: str) -> dict:
                 "SELECT name FROM sqlite_master WHERE type = 'index'"
             )
         }
-        missing_tables = sorted(REQUIRED_TABLES - tables)
-        missing_indexes = sorted(REQUIRED_INDEXES - indexes)
+        missing_tables = sorted(required_tables - tables)
+        missing_indexes = sorted(required_indexes - indexes)
         missing_columns = {
             table: sorted(
                 required
@@ -156,7 +225,7 @@ def verify_run_schema(*, db_path: str) -> dict:
                     for row in conn.execute(f"PRAGMA table_info({table})")
                 }
             )
-            for table, required in REQUIRED_COLUMNS.items()
+            for table, required in required_columns.items()
             if table in tables
         }
         missing_columns = {
@@ -174,7 +243,7 @@ def verify_run_schema(*, db_path: str) -> dict:
         migrations = {row[0]: row[1] for row in migration_rows}
         invalid_migrations = sorted(
             version
-            for version, checksum in EXPECTED_MIGRATIONS.items()
+            for version, checksum in expected_migrations.items()
             if migrations.get(version) != checksum
         )
         try:
@@ -199,12 +268,12 @@ def verify_run_schema(*, db_path: str) -> dict:
             )
         return {
             "migration_version": MIGRATION_VERSION,
-            "migration_versions": sorted(EXPECTED_MIGRATIONS),
-            "tables": sorted(REQUIRED_TABLES),
-            "indexes": sorted(REQUIRED_INDEXES),
+            "migration_versions": sorted(expected_migrations),
+            "tables": sorted(required_tables),
+            "indexes": sorted(required_indexes),
             "columns": {
                 table: sorted(columns)
-                for table, columns in REQUIRED_COLUMNS.items()
+                for table, columns in required_columns.items()
             },
         }
     finally:
@@ -215,8 +284,11 @@ def migrate_with_backup(*, db_path: str, backup_path: str) -> dict:
     """Back up, apply, and verify; restore the original DB on any failure."""
     backup_database(db_path=db_path, backup_path=backup_path)
     try:
-        init_review_schema(db_path)
-        return verify_run_schema(db_path=db_path)
+        init_evidence_verification_schema(db_path)
+        return verify_run_schema(
+            db_path=db_path,
+            include_evidence_verification=True,
+        )
     except Exception:
         restore_database(backup_path=backup_path, db_path=db_path)
         raise
