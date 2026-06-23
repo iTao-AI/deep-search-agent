@@ -3,9 +3,12 @@ import json
 
 import pytest
 
+from agent.research import evidence_id_for
 from scripts.real_source_proof import (
     RealSourceManifest,
+    build_research_packet_for_manifest,
     canonical_manifest_hash,
+    evidence_entries_for_manifest,
     load_manifest,
 )
 
@@ -74,3 +77,61 @@ def test_manifest_hash_is_ordered_and_stable(tmp_path):
 
     assert isinstance(manifest, RealSourceManifest)
     assert canonical_manifest_hash(manifest) == canonical_manifest_hash(manifest)
+
+
+def test_manifest_evidence_starts_as_ordinary_unverified(tmp_path):
+    manifest = load_manifest(
+        _write_manifest(
+            tmp_path,
+            [
+                _record(f"real_source_00{i}", f"https://example.com/careers/{i}")
+                for i in range(1, 6)
+            ],
+        )
+    )
+
+    entries = evidence_entries_for_manifest(
+        manifest,
+        thread_id="thread-real-proof",
+        query_text=manifest.question,
+    )
+
+    assert len(entries) == 5
+    assert {entry.baseline_verification_origin for entry in entries} == {"none"}
+    assert {entry.verification_status for entry in entries} == {"unverified"}
+    assert all(entry.tool_name == "real_source_manifest" for entry in entries)
+
+
+def test_research_packet_references_real_evidence_ids(tmp_path):
+    manifest = load_manifest(
+        _write_manifest(
+            tmp_path,
+            [
+                _record(f"real_source_00{i}", f"https://example.com/careers/{i}")
+                for i in range(1, 6)
+            ],
+        )
+    )
+    run_id = "run_real_source"
+    entries = evidence_entries_for_manifest(
+        manifest,
+        thread_id="thread-real-proof",
+        query_text=manifest.question,
+    )
+
+    packet = build_research_packet_for_manifest(
+        manifest=manifest,
+        run_id=run_id,
+        evidence_entries=entries,
+    )
+
+    expected_ids = {
+        evidence_id_for(entry.source_url, entry.snippet, run_id=run_id)
+        for entry in entries
+    }
+    actual_ids = {
+        evidence_ref
+        for finding in packet.findings
+        for evidence_ref in finding.evidence_refs
+    }
+    assert actual_ids == expected_ids

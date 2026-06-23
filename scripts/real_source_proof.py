@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
 from urllib.parse import urlparse
+
+from agent.research import EvidenceEntry, evidence_id_for
+from agent.talent_contracts import ResearchPacket
+from api.review_models import (
+    checkpoint_thread_id,
+    post_review_segment_id,
+    review_workflow_id,
+)
+from api.run_repository import create_run, finalize_run_transaction
+from api.talent_artifacts import build_talent_artifacts
 
 
 @dataclass(frozen=True)
@@ -112,3 +123,162 @@ def canonical_manifest_json(manifest: RealSourceManifest) -> str:
 
 def canonical_manifest_hash(manifest: RealSourceManifest) -> str:
     return hashlib.sha256(canonical_manifest_json(manifest).encode("utf-8")).hexdigest()
+
+
+def evidence_entries_for_manifest(
+    manifest: RealSourceManifest,
+    *,
+    thread_id: str,
+    query_text: str,
+) -> tuple[EvidenceEntry, ...]:
+    created_at = datetime.now(timezone.utc).isoformat()
+    return tuple(
+        EvidenceEntry(
+            thread_id=thread_id,
+            query_text=query_text,
+            subagent_name="operator_manifest",
+            tool_name="real_source_manifest",
+            source_url=record.source_url,
+            source_identity=record.source_url,
+            snippet=record.observation,
+            citation_status="cited",
+            verification_status="unverified",
+            baseline_verification_origin="none",
+            created_at=created_at,
+        )
+        for record in manifest.records
+    )
+
+
+def build_research_packet_for_manifest(
+    *,
+    manifest: RealSourceManifest,
+    run_id: str,
+    evidence_entries: tuple[EvidenceEntry, ...],
+) -> ResearchPacket:
+    findings = []
+    claims = []
+    for index, (record, entry) in enumerate(
+        zip(manifest.records, evidence_entries), start=1
+    ):
+        evidence_id = evidence_id_for(entry.source_url, entry.snippet, run_id=run_id)
+        finding_id = f"finding-{index}"
+        findings.append(
+            {
+                "finding_id": finding_id,
+                "research_question_id": "real_source_question",
+                "statement": record.observation,
+                "evidence_refs": [evidence_id],
+                "sample_scope": "real_source_manifest",
+                "confidence": 0.8,
+            }
+        )
+        claims.append(
+            {
+                "claim_id": f"claim-{index}",
+                "text": record.observation,
+                "claim_type": "signal",
+                "finding_refs": [finding_id],
+                "evidence_refs": [evidence_id],
+                "confidence": 0.8,
+                "citation_status": "cited",
+                "verification_status": "unverified",
+                "review_status": "pending",
+                "conflict_status": "none",
+            }
+        )
+    return ResearchPacket.model_validate(
+        {
+            "packet_id": "real-source-proof-packet",
+            "scope_id": manifest.manifest_id,
+            "findings": findings,
+            "candidate_claims": claims,
+        }
+    )
+
+
+def manifest_scope(manifest: RealSourceManifest) -> dict:
+    return {
+        "target_roles": ["AI Agent Engineer", "Applied AI Engineer"],
+        "target_companies": sorted({record.organization for record in manifest.records}),
+        "time_window": {"start": "2026-06-01", "end": "2026-06-23"},
+        "declared_samples": [
+            {
+                "sample_id": record.sample_id,
+                "source_type": record.source_type,
+                "reference": record.source_url,
+            }
+            for record in manifest.records
+        ],
+        "allowed_source_types": ["public_job_posting"],
+        "research_questions": ["real_source_question"],
+        "requested_outputs": ["decision_brief"],
+    }
+
+
+def seed_real_source_run(*, manifest_path: Path, db_path: str | None = None) -> dict:
+    manifest = load_manifest(manifest_path)
+    created = create_run(
+        db_path=db_path,
+        thread_id=f"thread-{manifest.manifest_id}",
+        query=manifest.question,
+        profile_id="talent-hiring-signal",
+        profile_version="1",
+        scope=manifest_scope(manifest),
+    )
+    entries = evidence_entries_for_manifest(
+        manifest,
+        thread_id=created["thread_id"],
+        query_text=manifest.question,
+    )
+    packet = build_research_packet_for_manifest(
+        manifest=manifest,
+        run_id=created["run_id"],
+        evidence_entries=entries,
+    )
+    scope = manifest_scope(manifest)
+    review, _brief, artifacts = build_talent_artifacts(
+        run_id=created["run_id"],
+        scope=scope,
+        packets=[packet],
+        evidence_entries=list(entries),
+        generated_at=datetime.now(timezone.utc),
+    )
+    workflow_id = review_workflow_id(
+        created["run_id"],
+        review.review_id,
+        review.revision,
+    )
+    accepted = finalize_run_transaction(
+        db_path=db_path,
+        run_id=created["run_id"],
+        segment_id=created["segment_id"],
+        expected_state_version=0,
+        allowed_previous_statuses={"pending"},
+        execution_status="completed",
+        review_status="required",
+        delivery_status="review_required",
+        evidence_entries=list(entries),
+        research_packets=[packet],
+        review_bundle=review,
+        artifacts=artifacts,
+        review_workflow={
+            "workflow_id": workflow_id,
+            "checkpoint_thread_id": checkpoint_thread_id(workflow_id),
+            "post_review_segment_id": post_review_segment_id(
+                created["run_id"],
+                review.review_id,
+                review.revision,
+            ),
+        },
+    )
+    if not accepted:
+        raise RuntimeError("seed_run_finalization_failed")
+    return {
+        "manifest_id": manifest.manifest_id,
+        "manifest_hash": canonical_manifest_hash(manifest),
+        "run_id": created["run_id"],
+        "segment_id": created["segment_id"],
+        "review_id": review.review_id,
+        "evidence_count": len(entries),
+    }
