@@ -34,8 +34,8 @@ accuracy score, or guarantee that the source remains unchanged.
 Existing Talent benchmark fixtures remain effectively `verified` with origin
 `declared_fixture`. They are not labeled `human`. Ordinary legacy
 `verification_status=verified` rows do not gain fixture or human authority
-unless the migration also proves the persisted Talent scope declared a
-`provided_aggregate`.
+unless the migration also proves an aggregate-only Talent scope and the row has
+legacy `verification_status=verified`.
 
 PR1 adds no API, CLI, publication pointer, artifact revision, or new review
 workflow. Those changes require the separately approved P2A PR2.

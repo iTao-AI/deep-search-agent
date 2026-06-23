@@ -182,7 +182,16 @@ def init_evidence_verification_schema(
                 );
                 """
             )
-            _backfill_declared_fixture_origin(connection)
+            migration_applied = connection.execute(
+                """
+                SELECT 1
+                FROM schema_migrations
+                WHERE version = ?
+                """,
+                (VERIFICATION_MIGRATION_VERSION,),
+            ).fetchone()
+            if migration_applied is None:
+                _backfill_declared_fixture_origin(connection)
             connection.execute(
                 """
                 INSERT OR IGNORE INTO schema_migrations(

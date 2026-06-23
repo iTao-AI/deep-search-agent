@@ -284,6 +284,67 @@ def test_legacy_unverified_talent_evidence_is_not_backfilled(tmp_path):
     assert origin == "none"
 
 
+def test_completed_migration_does_not_backfill_new_verified_evidence(tmp_path):
+    path = str(tmp_path / "tasks.db")
+    init_evidence_verification_schema(path)
+    created = create_run(
+        db_path=path,
+        thread_id="thread-post-migration",
+        query="query",
+        profile_id="talent-hiring-signal",
+        scope={
+            "target_roles": ["AI Agent Engineer"],
+            "target_companies": [],
+            "time_window": {"start": "2026-01-01", "end": "2026-06-12"},
+            "declared_samples": [
+                {
+                    "sample_id": "aggregate-v1",
+                    "source_type": "provided_aggregate",
+                    "reference": "aggregate-v1",
+                }
+            ],
+            "allowed_source_types": ["provided_aggregate"],
+            "research_questions": ["question-1"],
+            "requested_outputs": ["decision_brief"],
+        },
+    )
+    entry = EvidenceEntry(
+        thread_id="thread-post-migration",
+        query_text="query",
+        subagent_name="network_search",
+        tool_name="internet_search",
+        source_url="https://example.com/post-migration",
+        snippet="post-migration evidence",
+        verification_status="verified",
+    )
+    assert finalize_run_transaction(
+        db_path=path,
+        run_id=created["run_id"],
+        segment_id=created["segment_id"],
+        expected_state_version=0,
+        allowed_previous_statuses={"pending"},
+        execution_status="completed",
+        delivery_status="ready",
+        evidence_entries=[entry],
+    )
+
+    init_evidence_verification_schema(path)
+
+    connection = sqlite3.connect(path)
+    try:
+        origin = connection.execute(
+            """
+            SELECT baseline_verification_origin
+            FROM evidence_entries_v2
+            WHERE run_id = ?
+            """,
+            (created["run_id"],),
+        ).fetchone()[0]
+    finally:
+        connection.close()
+    assert origin == "none"
+
+
 @pytest.mark.parametrize(
     ("table", "column"),
     [

@@ -382,6 +382,68 @@ def test_talent_run_prefetches_declared_aggregate_evidence_and_normalizes_refs(t
     assert "OK" in result.stdout
 
 
+def test_talent_fixture_origin_survives_evidence_snapshot_failure(tmp_path):
+    script = textwrap.dedent(
+        f"""
+        import os
+        from pathlib import Path
+        from unittest.mock import MagicMock, patch
+
+        os.environ["OPENAI_API_KEY"] = "test"
+        os.environ["OPENAI_BASE_URL"] = "http://test"
+        os.environ["LLM_QWEN_MAX"] = "test"
+
+        with patch("deepagents.create_deep_agent", return_value=MagicMock()):
+            import agent.main_agent as main_agent
+
+        from agent.research import EvidenceEntry
+        from agent.run_result import AgentRunAccumulator
+
+        entry = EvidenceEntry(
+            thread_id="thread-talent",
+            query_text="query",
+            subagent_name="network_search",
+            tool_name="internet_search",
+            source_url="https://jobs.example.com/role",
+            snippet="Controlled aggregate evidence",
+        )
+        evidence_id = "ev_run-talent_" + entry.evidence_fingerprint
+        accumulator = AgentRunAccumulator(
+            thread_id="thread-talent",
+            query="query",
+            session_dir=Path({str(tmp_path)!r}),
+            profile_id="talent-hiring-signal",
+            run_id="run-talent",
+            evidence_entries=[entry],
+            verified_evidence_ids={{evidence_id}},
+        )
+
+        with patch.object(
+            main_agent.shared_context,
+            "snapshot_facts",
+            side_effect=RuntimeError("snapshot failed"),
+        ):
+            outcome = main_agent._freeze_execution_outcome(accumulator, None)
+
+        frozen = outcome.evidence_entries[0]
+        assert outcome.failure_kind == "evidence_snapshot_failed"
+        assert frozen.verification_status == "verified"
+        assert frozen.baseline_verification_origin == "declared_fixture"
+        print("OK")
+        """
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parents[2],
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout
+
+
 def test_talent_profile_sets_bounded_recursion_limit(tmp_path):
     script = textwrap.dedent(
         f"""

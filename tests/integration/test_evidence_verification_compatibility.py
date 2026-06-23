@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 from agent.research import EvidenceEntry
 from agent.talent_contracts import ResearchPacket
@@ -145,3 +146,15 @@ def test_pr1_creates_no_publication_or_new_review_revision_tables(tmp_path):
     finally:
         connection.close()
     assert "run_publications_v2" not in tables
+
+
+def test_authority_adr_states_exact_legacy_backfill_boundary():
+    adr = (
+        Path(__file__).parents[2]
+        / "docs"
+        / "decisions"
+        / "evidence-verification-authority.md"
+    ).read_text(encoding="utf-8")
+
+    assert "aggregate-only Talent scope" in adr
+    assert "legacy `verification_status=verified`" in adr

@@ -223,6 +223,28 @@ def _process_stream_chunk(chunk, accumulator: AgentRunAccumulator):
     process_stream_chunk(chunk, accumulator, monitor)
 
 
+def _mark_declared_fixture_evidence(
+    evidence_entries,
+    *,
+    execution_id: str,
+    verified_evidence_ids: set[str],
+):
+    if not verified_evidence_ids:
+        return evidence_entries
+    return [
+        replace(
+            entry,
+            citation_status="cited",
+            verification_status="verified",
+            baseline_verification_origin="declared_fixture",
+        )
+        if f"ev_{execution_id}_{entry.evidence_fingerprint}"
+        in verified_evidence_ids
+        else entry
+        for entry in evidence_entries
+    ]
+
+
 def _freeze_execution_outcome(
     accumulator: AgentRunAccumulator,
     outcome_box: OutcomeBox | None,
@@ -246,24 +268,16 @@ def _freeze_execution_outcome(
         evidence_entries = merge_evidence_entries(
             accumulator.evidence_entries, snapshot_evidence
         )
-        if accumulator.verified_evidence_ids:
-            evidence_entries = [
-                replace(
-                    entry,
-                    citation_status="cited",
-                    verification_status="verified",
-                    baseline_verification_origin="declared_fixture",
-                )
-                if f"ev_{execution_id}_{entry.evidence_fingerprint}"
-                in accumulator.verified_evidence_ids
-                else entry
-                for entry in evidence_entries
-            ]
     except Exception as exc:
         accumulator.diagnostics.append(f"evidence_snapshot_failed:{type(exc).__name__}")
         evidence_entries = list(accumulator.evidence_entries)
         failure_kind = failure_kind or "evidence_snapshot_failed"
 
+    evidence_entries = _mark_declared_fixture_evidence(
+        evidence_entries,
+        execution_id=execution_id,
+        verified_evidence_ids=accumulator.verified_evidence_ids,
+    )
     outcome = accumulator.to_outcome(
         evidence_entries=evidence_entries,
         error_message=error_message,
