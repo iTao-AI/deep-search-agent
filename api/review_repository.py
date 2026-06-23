@@ -6,6 +6,8 @@ import json
 import sqlite3
 from typing import Any
 
+from agent.talent_contracts import DecisionBrief
+from api.decision_brief import with_content_hash
 from api.review_artifacts import ReviewedArtifactResult
 from api.review_models import (
     ReviewDecisionRecord,
@@ -1146,6 +1148,8 @@ def mark_manual_recovery(
             ).fetchone()
             if workflow is None:
                 raise ReviewConflict("review_not_found")
+            if workflow["status"] == "superseded":
+                raise ReviewConflict("review_superseded")
             if worker_id is not None:
                 workflow = _owned_workflow(
                     connection,
@@ -1161,7 +1165,12 @@ def mark_manual_recovery(
                         lease_expires_at = NULL, last_error_code = ?,
                         updated_at = ?
                     WHERE workflow_id = ?
-                      AND status NOT IN ('approved', 'rejected', 'manual_recovery')
+                      AND status NOT IN (
+                        'approved',
+                        'rejected',
+                        'manual_recovery',
+                        'superseded'
+                      )
                     """,
                     (error_code, now, workflow_id),
                 )
@@ -1402,6 +1411,46 @@ def resolve_review(
                 raise ReviewConflict("resolution_result_mismatch")
             if decision["action"] == "reject" and result.artifacts:
                 raise ReviewConflict("resolution_result_mismatch")
+            reviewed_content_hash = None
+            if decision["action"] == "approve":
+                if result.brief is None:
+                    raise ReviewConflict("resolution_result_mismatch")
+                reviewed_content_hash = with_content_hash(
+                    result.brief
+                ).content_hash
+                if result.brief.content_hash != reviewed_content_hash:
+                    raise ReviewConflict("resolution_result_mismatch")
+                json_artifacts = [
+                    artifact
+                    for artifact in result.artifacts
+                    if artifact["media_type"] == "application/json"
+                ]
+                markdown_artifacts = [
+                    artifact
+                    for artifact in result.artifacts
+                    if artifact["media_type"] == "text/markdown"
+                ]
+                if len(json_artifacts) != 1 or len(markdown_artifacts) != 1:
+                    raise ReviewConflict("resolution_result_mismatch")
+                if any(
+                    artifact["content_hash"] != reviewed_content_hash
+                    for artifact in result.artifacts
+                ):
+                    raise ReviewConflict("resolution_result_mismatch")
+                try:
+                    stored_brief = DecisionBrief.model_validate_json(
+                        json_artifacts[0]["content"]
+                    )
+                except ValueError as exc:
+                    raise ReviewConflict(
+                        "resolution_result_mismatch"
+                    ) from exc
+                if (
+                    stored_brief.content_hash != reviewed_content_hash
+                    or with_content_hash(stored_brief).content_hash
+                    != reviewed_content_hash
+                ):
+                    raise ReviewConflict("resolution_result_mismatch")
 
             now = _now()
             artifact_ids = tuple(
@@ -1482,6 +1531,7 @@ def resolve_review(
                     UPDATE run_publications_v2
                     SET status = ?,
                         artifact_ids_json = ?,
+                        content_hash = ?,
                         resolved_at = ?
                     WHERE publication_id = ?
                       AND is_current = 1
@@ -1492,6 +1542,11 @@ def resolve_review(
                         json.dumps(
                             publication_artifact_ids,
                             separators=(",", ":"),
+                        ),
+                        (
+                            reviewed_content_hash
+                            if decision["action"] == "approve"
+                            else publication["content_hash"]
                         ),
                         now,
                         publication["publication_id"],

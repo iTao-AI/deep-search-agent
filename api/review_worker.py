@@ -60,12 +60,17 @@ def reconcile_review_workflows(
         try:
             checkpoint = gate.inspect(workflow.checkpoint_thread_id)
         except Exception:
-            mark_manual_recovery(
-                db_path=db_path,
-                workflow_id=workflow.workflow_id,
-                worker_id=None,
-                error_code="checkpoint_corrupt",
-            )
+            try:
+                mark_manual_recovery(
+                    db_path=db_path,
+                    workflow_id=workflow.workflow_id,
+                    worker_id=None,
+                    error_code="checkpoint_corrupt",
+                )
+            except ReviewConflict as exc:
+                if exc.code == "review_superseded":
+                    continue
+                raise
             reconciled += 1
             continue
 
@@ -96,12 +101,17 @@ def reconcile_review_workflows(
                     workflow_id=workflow.workflow_id,
                 )
             else:
-                mark_manual_recovery(
-                    db_path=db_path,
-                    workflow_id=workflow.workflow_id,
-                    worker_id=None,
-                    error_code="checkpoint_decision_mismatch",
-                )
+                try:
+                    mark_manual_recovery(
+                        db_path=db_path,
+                        workflow_id=workflow.workflow_id,
+                        worker_id=None,
+                        error_code="checkpoint_decision_mismatch",
+                    )
+                except ReviewConflict as exc:
+                    if exc.code == "review_superseded":
+                        continue
+                    raise
             reconciled += 1
     return reconciled
 

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 import logging
 import sqlite3
 
@@ -15,6 +16,7 @@ from api.review_repository import (
     get_review_projection,
 )
 from api.review_worker import ReviewWorker
+from api.review_worker import reconcile_review_workflows
 from api.run_repository import get_run
 from tests.unit.test_review_repository import _required_review_run
 
@@ -175,6 +177,40 @@ async def test_worker_marks_manual_recovery_on_mismatched_checkpoint(
     assert projection["workflow"]["status"] == "manual_recovery"
     assert projection["workflow"]["last_error_code"] == (
         "checkpoint_decision_mismatch"
+    )
+
+
+def test_reconcile_does_not_overwrite_concurrently_superseded_workflow(
+    checkpoint_pending_run,
+):
+    class SupersedingGate:
+        def inspect(self, checkpoint_thread_id):
+            connection = _connect(checkpoint_pending_run.db_path)
+            try:
+                with connection:
+                    connection.execute(
+                        """
+                        UPDATE review_workflows_v2
+                        SET status = 'superseded',
+                            lease_owner = NULL,
+                            lease_expires_at = NULL
+                        WHERE workflow_id = ?
+                        """,
+                        (checkpoint_pending_run.required.workflow_id,),
+                    )
+            finally:
+                connection.close()
+            raise sqlite3.OperationalError("checkpoint unavailable")
+
+    reconciled = reconcile_review_workflows(
+        db_path=checkpoint_pending_run.db_path,
+        gate=SupersedingGate(),
+        now=datetime.now(timezone.utc),
+    )
+
+    assert reconciled == 0
+    assert checkpoint_pending_run.projection()["workflow"]["status"] == (
+        "superseded"
     )
 
 

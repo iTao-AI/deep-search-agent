@@ -514,6 +514,7 @@ def test_fresh_approval_marks_only_current_publication_ready(tmp_path):
         "decision-brief.r2.reviewed.json",
         "decision-brief.r2.reviewed.md",
     )
+    assert current.content_hash == result.brief.content_hash
     assert get_publication_by_revision(
         db_path=seeded.db_path,
         run_id=seeded.run_id,
