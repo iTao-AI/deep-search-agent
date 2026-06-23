@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import sqlite3
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 from api.server import app
+from api.evidence_verification_repository import finalize_verification_snapshot
 from api.run_repository import get_run
 from tests.unit.test_publication_repository import (
     _accept_verification,
@@ -181,3 +183,65 @@ def test_finalize_returns_publication_and_review_identity(seeded_run):
     assert response.json()["revision"] == 2
     assert response.json()["review_id"].startswith("review_")
     assert response.json()["idempotent_replay"] is False
+
+
+@pytest.mark.parametrize(
+    ("corruption", "expected_code"),
+    [
+        ("packet", "publication_packet_state_invalid"),
+        ("snapshot", "verification_snapshot_invalid"),
+    ],
+)
+def test_finalize_maps_corrupt_persisted_state_to_bounded_json(
+    seeded_run,
+    corruption,
+    expected_code,
+):
+    _accept_verification(seeded_run)
+    state_version = get_run(
+        db_path=seeded_run.db_path,
+        run_id=seeded_run.run_id,
+    )["state_version"]
+    connection = sqlite3.connect(seeded_run.db_path)
+    try:
+        if corruption == "packet":
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE research_packets_v2
+                    SET packet_json = '{'
+                    WHERE run_id = ?
+                    """,
+                    (seeded_run.run_id,),
+                )
+        else:
+            snapshot = finalize_verification_snapshot(
+                db_path=seeded_run.db_path,
+                run_id=seeded_run.run_id,
+            )
+            with connection:
+                connection.execute(
+                    """
+                    UPDATE evidence_verification_snapshots_v2
+                    SET snapshot_json = '{'
+                    WHERE snapshot_id = ?
+                    """,
+                    (snapshot.snapshot.snapshot_id,),
+                )
+    finally:
+        connection.close()
+
+    response = TestClient(app, raise_server_exceptions=False).post(
+        (
+            f"/api/runs/{seeded_run.run_id}/evidence/"
+            "verification-snapshots"
+        ),
+        headers=AUTH,
+        json={"expected_state_version": state_version},
+    )
+
+    assert response.status_code == 409
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["code"] == expected_code
+    assert "traceback" not in response.text.lower()
+    assert seeded_run.db_path not in response.text

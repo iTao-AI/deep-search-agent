@@ -21,6 +21,7 @@ from api.run_repository import _connect, _now
 
 VERIFICATION_MIGRATION_VERSION = "005_evidence_verification_authority"
 VERIFICATION_MIGRATION_CHECKSUM = "evidence-verification-authority-v1"
+DECISION_HISTORY_LIMIT = 100
 
 
 @dataclass(frozen=True)
@@ -243,16 +244,19 @@ def _preflight_record(row: sqlite3.Row) -> EvidencePreflightResult:
 
 
 def _snapshot_record(row: sqlite3.Row) -> VerificationSnapshotRecord:
-    return VerificationSnapshotRecord.model_validate(
-        {
-            "snapshot_id": row["snapshot_id"],
-            "run_id": row["run_id"],
-            "revision": row["revision"],
-            "snapshot": json.loads(row["snapshot_json"]),
-            "snapshot_hash": row["snapshot_hash"],
-            "created_at": row["created_at"],
-        }
-    )
+    try:
+        return VerificationSnapshotRecord.model_validate(
+            {
+                "snapshot_id": row["snapshot_id"],
+                "run_id": row["run_id"],
+                "revision": row["revision"],
+                "snapshot": json.loads(row["snapshot_json"]),
+                "snapshot_hash": row["snapshot_hash"],
+                "created_at": row["created_at"],
+            }
+        )
+    except ValueError as exc:
+        raise VerificationConflict("verification_snapshot_invalid") from exc
 
 
 def _target_rows(
@@ -620,37 +624,65 @@ def list_effective_verifications(
     *,
     db_path: str,
     run_id: str,
+    after: str | None = None,
+    limit: int | None = None,
 ) -> list[EffectiveEvidenceVerification]:
     init_evidence_verification_schema(db_path)
     connection = _connect(db_path)
     try:
+        params: list = [run_id]
+        after_sql = ""
+        if after is not None:
+            after_sql = "AND evidence_id > ?"
+            params.append(after)
+        limit_sql = ""
+        if limit is not None:
+            limit_sql = "LIMIT ?"
+            params.append(limit)
         evidence_rows = connection.execute(
-            """
+            f"""
             SELECT *
             FROM evidence_entries_v2
             WHERE run_id = ?
+              {after_sql}
             ORDER BY evidence_id
+            {limit_sql}
             """,
-            (run_id,),
+            params,
         ).fetchall()
-        result = []
-        for evidence in evidence_rows:
-            decision = connection.execute(
-                """
-                SELECT *
+        if not evidence_rows:
+            return []
+        evidence_ids = [row["evidence_id"] for row in evidence_rows]
+        placeholders = ", ".join("?" for _ in evidence_ids)
+        decision_rows = connection.execute(
+            f"""
+            WITH ranked AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY evidence_id, evidence_fingerprint
+                           ORDER BY revision DESC
+                       ) AS decision_rank
                 FROM evidence_verification_decisions_v2
                 WHERE run_id = ?
-                  AND evidence_id = ?
-                  AND evidence_fingerprint = ?
-                ORDER BY revision DESC
-                LIMIT 1
-                """,
-                (
-                    run_id,
-                    evidence["evidence_id"],
-                    evidence["evidence_fingerprint"],
-                ),
-            ).fetchone()
+                  AND evidence_id IN ({placeholders})
+            )
+            SELECT * FROM ranked WHERE decision_rank = 1
+            """,
+            [run_id, *evidence_ids],
+        ).fetchall()
+        decision_by_evidence = {
+            row["evidence_id"]: row
+            for row in decision_rows
+        }
+        result = []
+        for evidence in evidence_rows:
+            decision = decision_by_evidence.get(evidence["evidence_id"])
+            if (
+                decision is not None
+                and decision["evidence_fingerprint"]
+                != evidence["evidence_fingerprint"]
+            ):
+                decision = None
             result.append(
                 _effective_projection(
                     evidence=evidence,
@@ -681,22 +713,6 @@ def get_evidence_verification_detail(
         ).fetchone()
         if evidence is None:
             return None
-        decision = connection.execute(
-            """
-            SELECT *
-            FROM evidence_verification_decisions_v2
-            WHERE run_id = ?
-              AND evidence_id = ?
-              AND evidence_fingerprint = ?
-            ORDER BY revision DESC
-            LIMIT 1
-            """,
-            (
-                run_id,
-                evidence_id,
-                evidence["evidence_fingerprint"],
-            ),
-        ).fetchone()
         preflight = connection.execute(
             """
             SELECT *
@@ -713,21 +729,32 @@ def get_evidence_verification_detail(
                 evidence["evidence_fingerprint"],
             ),
         ).fetchone()
-        decisions = connection.execute(
+        decision_rows = connection.execute(
             """
             SELECT *
             FROM evidence_verification_decisions_v2
             WHERE run_id = ?
               AND evidence_id = ?
               AND evidence_fingerprint = ?
-            ORDER BY revision
+            ORDER BY revision DESC
+            LIMIT ?
             """,
             (
                 run_id,
                 evidence_id,
                 evidence["evidence_fingerprint"],
+                DECISION_HISTORY_LIMIT + 1,
             ),
         ).fetchall()
+        truncated = len(decision_rows) > DECISION_HISTORY_LIMIT
+        selected_rows = list(
+            reversed(decision_rows[:DECISION_HISTORY_LIMIT])
+        )
+        decision = decision_rows[0] if decision_rows else None
+        projected_decisions = [
+            _decision_record(row).model_dump(mode="json")
+            for row in selected_rows
+        ]
         return {
             "effective": _effective_projection(
                 evidence=evidence,
@@ -738,10 +765,22 @@ def get_evidence_verification_detail(
                 if preflight is not None
                 else None
             ),
-            "decisions": [
-                _decision_record(row).model_dump(mode="json")
-                for row in decisions
-            ],
+            "decisions": projected_decisions,
+            "decision_history": {
+                "limit": DECISION_HISTORY_LIMIT,
+                "returned": len(projected_decisions),
+                "truncated": truncated,
+                "oldest_returned_revision": (
+                    projected_decisions[0]["revision"]
+                    if projected_decisions
+                    else None
+                ),
+                "newest_returned_revision": (
+                    projected_decisions[-1]["revision"]
+                    if projected_decisions
+                    else None
+                ),
+            },
         }
     finally:
         connection.close()

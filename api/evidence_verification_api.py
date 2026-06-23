@@ -29,6 +29,7 @@ from api.publication_repository import (
     evidence_verification_enabled,
     finalize_verification_publication,
 )
+from api.publication_service import PublicationBuildConflict
 from api.review_models import BoundedId
 from api.run_repository import get_run
 
@@ -274,9 +275,9 @@ async def list_evidence_verifications(run_id: str, request: Request):
         list_effective_verifications,
         db_path=os.getenv("TASKS_DB_PATH", ""),
         run_id=run_id,
+        after=after,
+        limit=query.limit + 1,
     )
-    if after is not None:
-        items = [item for item in items if item.evidence_id > after]
     page = items[: query.limit]
     next_cursor = (
         encode_evidence_cursor(evidence_id=page[-1].evidence_id)
@@ -431,7 +432,11 @@ async def finalize_evidence_verification(
             run_id=run_id,
             expected_state_version=validated.expected_state_version,
         )
-    except (PublicationConflict, VerificationConflict) as exc:
+    except (
+        PublicationBuildConflict,
+        PublicationConflict,
+        VerificationConflict,
+    ) as exc:
         return _conflict_response(exc.code, run_id=run_id)
     return {
         "run_id": run_id,
