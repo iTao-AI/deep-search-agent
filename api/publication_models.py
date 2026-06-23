@@ -67,11 +67,12 @@ def publication_id_for(
     _BOUNDED_ID_ADAPTER.validate_python(verification_snapshot_id)
     if revision < 1:
         raise ValueError("revision must be at least 1")
-    return f"publication_{_canonical_hash({
+    payload = {
         'run_id': run_id,
         'revision': revision,
         'verification_snapshot_id': verification_snapshot_id,
-    })}"
+    }
+    return f"publication_{_canonical_hash(payload)}"
 
 
 def encode_evidence_cursor(*, evidence_id: str) -> str:

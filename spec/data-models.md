@@ -208,14 +208,40 @@ The baseline origin column never stores `human`. Human state comes only from
 the latest accepted decision for the exact Evidence fingerprint. Review
 approval remains independent and does not write these tables.
 
-PR1 exposes only internal repository operations. It adds no HTTP/CLI mutation
-surface and does not rebuild artifacts.
+P2A PR2 adds revisioned delivery state:
+
+| Storage | Contract |
+|---|---|
+| `review_bundles_v2` | `UNIQUE(run_id, revision)`; immutable bundle per publication revision |
+| `review_workflows_v2` | `UNIQUE(run_id, review_revision)`; active workflows may terminate as `superseded` |
+| `review_resolutions_v2` | `UNIQUE(run_id, review_id)`; exact review resolution |
+| `run_publications_v2` | Explicit publication revision, snapshot, review, artifacts, status, and current pointer |
+
+`run_publications_v2` has a unique partial index on `run_id WHERE is_current=1`.
+Publication, ReviewBundle, and post-review segment revision are equal. Snapshot
+revision is independent.
+
+```text
+review_required -> ready | blocked | stale
+ready -> stale
+blocked -> stale
+```
+
+An accepted non-idempotent verification decision atomically stales the current
+publication and supersedes its non-terminal workflow. Finalization is fenced by
+`research_runs_v2.state_version`; a changed snapshot creates immutable
+revisioned artifacts and a fresh review. Historical review decisions remain
+queryable but cannot resolve a later publication.
+
+Only a current publication with `status=ready` is deliverable. Review approval
+still does not write Evidence verification decisions.
 
 ## 变更记录
 
 | 日期 | 变更 |
 |------|------|
 | 2026-06-22 | 增加 P2A PR1 Evidence Verification Ledger schema、不可变 baseline origin 与独立 verification authority 边界 |
+| 2026-06-23 | 增加 P2A PR2 revisioned publication、fresh review、authenticated API/CLI 与 current delivery 语义 |
 | 2026-06-20 | 明确 P1C 队列/详情为只读投影，以及 review revision 决策与新 run 纠正语义 |
 | 2026-06-19 | 增加 P1B durable review 双数据库权威边界、四表模型、状态机和 blocked delivery |
 | 2026-05-19 | 初始数据模型文档 |

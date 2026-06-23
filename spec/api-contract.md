@@ -173,6 +173,50 @@ Feature flag 关闭返回 `404 durable_hitl_disabled`；已启用但未配置
 `401 invalid_api_key`。P1C 仅移除该 endpoint 的 OpenAPI deprecated 标记；
 请求体、幂等语义、冲突处理和异步 `202` 响应保持不变。
 
+### Evidence verification endpoints
+
+以下 P2A endpoints 同时要求：
+
+- `DECISION_RESEARCH_AGENT_ENABLE_EVIDENCE_VERIFICATION=true`；
+- durable review runtime 就绪；
+- 非空 `API_SECRET`；
+- 正确 `X-API-Key`；
+- 完整 PR1/PR2 application schema。
+
+认证在 path/query/body validation 和 resource lookup 之前执行。稳定 endpoints：
+
+```text
+GET  /api/evidence-verifications/health
+GET  /api/runs/{run_id}/evidence/verifications
+GET  /api/runs/{run_id}/evidence/{evidence_id}/verification
+POST /api/runs/{run_id}/evidence/{evidence_id}/verification-decisions
+POST /api/runs/{run_id}/evidence/verification-snapshots
+```
+
+list 使用 `evidence_id` keyset pagination，`limit=1..100`，cursor 不透明。
+list/detail 不返回 `actor_fingerprint`、request hash 或其他私有 audit 字段。
+
+verify request 必须设置 `confirm_source_match=true`。reject request 必须提供
+`reason_code`，`reason_note` 最长 1000 字符。相同 deterministic
+`verification_id` 和相同内容安全 replay；不同内容冲突。
+
+finalization body：
+
+```json
+{"expected_state_version": 4}
+```
+
+stale state 返回 `409 stale_state_version` 且不提交部分 snapshot、artifact、
+review、workflow 或 publication row。
+
+当 publication 存在时，`GET /api/runs/{run_id}` 额外返回
+`current_publication`、`current_artifacts` 和 `verification_summary`。历史
+`artifacts` 列表继续保留；current delivery 只能由
+`current_publication.artifact_ids` 解析。
+
+Feature flag 关闭返回 `404 evidence_verification_disabled`。该接口没有
+`DEEP_SEARCH_AGENT_*` 环境变量或 legacy Tool Client alias。
+
 ### GET /api/tasks/{thread_id}
 
 查询异步 Agent 任务的持久化状态。
