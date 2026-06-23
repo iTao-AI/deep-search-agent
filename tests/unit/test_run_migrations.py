@@ -67,7 +67,11 @@ def test_migration_verification_failure_restores_backup(tmp_path, monkeypatch):
     init_db(db_path).close()
     original_tables = _table_names(db_path)
 
-    def fail_verification(*, db_path):
+    def fail_verification(
+        *,
+        db_path,
+        include_evidence_verification=False,
+    ):
         raise RuntimeError("verification failed")
 
     monkeypatch.setattr(migrations, "verify_run_schema", fail_verification)
