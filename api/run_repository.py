@@ -329,10 +329,19 @@ def finalize_run_transaction(
     if not allowed_previous_statuses:
         raise ValueError("allowed_previous_statuses must not be empty")
 
+    from api.publication_repository import (
+        adopt_baseline_publication,
+        evidence_verification_enabled,
+        publication_schema_exists,
+    )
     from api.review_repository import init_review_schema
 
+    publication_enabled = evidence_verification_enabled()
     init_review_schema(db_path)
     conn = _connect(db_path)
+    if publication_enabled and not publication_schema_exists(conn):
+        conn.close()
+        raise RuntimeError("verification_schema_not_ready")
     now = _now()
     placeholders = ", ".join("?" for _ in allowed_previous_statuses)
     try:
@@ -482,6 +491,11 @@ def finalize_run_transaction(
                     for artifact in (artifacts or [])
                 ],
             )
+            if publication_enabled:
+                adopt_baseline_publication(
+                    conn,
+                    run_id=run_id,
+                )
             return True
     finally:
         conn.close()

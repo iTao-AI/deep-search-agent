@@ -1462,6 +1462,43 @@ def resolve_review(
             delivery_status = (
                 "ready" if decision["action"] == "approve" else "blocked"
             )
+            publication = _publication_for_review(
+                connection,
+                run_id=workflow["run_id"],
+                review_id=workflow["review_id"],
+            )
+            if publication is not None:
+                publication_artifact_ids = (
+                    artifact_ids
+                    if decision["action"] == "approve"
+                    else tuple(
+                        json.loads(
+                            publication["artifact_ids_json"]
+                        )
+                    )
+                )
+                publication_cursor = connection.execute(
+                    """
+                    UPDATE run_publications_v2
+                    SET status = ?,
+                        artifact_ids_json = ?,
+                        resolved_at = ?
+                    WHERE publication_id = ?
+                      AND is_current = 1
+                      AND status = 'review_required'
+                    """,
+                    (
+                        delivery_status,
+                        json.dumps(
+                            publication_artifact_ids,
+                            separators=(",", ":"),
+                        ),
+                        now,
+                        publication["publication_id"],
+                    ),
+                )
+                if publication_cursor.rowcount != 1:
+                    raise ReviewConflict("review_superseded")
             run_cursor = connection.execute(
                 """
                 UPDATE research_runs_v2
