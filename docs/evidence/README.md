@@ -9,6 +9,8 @@
 | [run-log.md](run-log.md) | E2E Run #1 数据（282s / 459K tokens / 2 子Agent）+ Phase 8 收口 + Phase 9 确定性终态 + Phase 10 ResearchRun / EvidenceLedger |
 | [technical-decisions.md](technical-decisions.md) | 关键技术决策说明与代码路径 |
 | [durable-hitl-gate-report.json](durable-hitl-gate-report.json) | P1B durable HITL feasibility 的 13 项 gate 机器可读结果 |
+| [p2a-real-source-proof.json](p2a-real-source-proof.json) | P2A PR3 小样本真实来源 proof 的有界机器可读报告 |
+| [p2a-real-source-proof.md](p2a-real-source-proof.md) | P2A PR3 人工核验、publication、fresh review 与限制说明 |
 
 ## Phase 9 产出（2026-06-03）
 
@@ -32,6 +34,14 @@
 - 完整后端回归：598 passed, 0 failed（Python 3.11 compatibility
   environment，`python -m pytest -q`）。
 - 该结果只证明有边界的 feasibility；feature flag 仍默认关闭，不代表生产启用。
+
+## P2A Real-Source Proof
+
+- 样本由固定 manifest 声明，Evidence 以
+  `baseline_verification_origin=none` 进入现有核验流程。
+- 每条 Evidence 由本地 operator 打开公开来源后做 `verify` 或 `reject`
+  决策；approval 只许可交付，不替代 Evidence verification。
+- 报告只证明小样本工作流执行，不是来源归档、抓取能力、市场覆盖率或招聘结果声明。
 
 ## 已有截图
 
