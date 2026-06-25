@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import re
+import sqlite3
 import sys
 from urllib.parse import urlparse
 
@@ -20,7 +23,18 @@ from api.review_models import (
     post_review_segment_id,
     review_workflow_id,
 )
-from api.run_repository import create_run, finalize_run_transaction
+from api.evidence_verification_repository import get_evidence_verification_detail
+from api.publication_repository import (
+    finalize_verification_publication,
+    get_current_publication,
+)
+from api.publication_service import build_publication_artifacts
+from api.review_artifacts import build_reviewed_artifacts
+from api.review_repository import (
+    get_decision,
+    get_review_detail,
+)
+from api.run_repository import create_run, finalize_run_transaction, get_run
 from api.talent_artifacts import build_talent_artifacts
 
 
@@ -40,7 +54,16 @@ class RealSourceManifest:
     manifest_id: str
     manifest_version: int
     question: str
+    allowed_hosts: tuple[str, ...]
     records: tuple[RealSourceRecord, ...]
+
+
+OFFICIAL_SOURCE_HOSTS = {
+    "jobs.ashbyhq.com": "LangChain",
+    "openai.com": "OpenAI",
+    "www.google.com": "Google",
+}
+SUPPORTED_SOURCE_TYPE = "public_job_posting"
 
 
 def _require_text(value: object, *, field: str, max_length: int) -> str:
@@ -59,8 +82,34 @@ def _validate_url(value: str) -> str:
     return value
 
 
+def _validate_observed_at(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("observed_at_invalid") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("observed_at_invalid")
+    return value
+
+
 def load_manifest(path: Path) -> RealSourceManifest:
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("manifest_version") != 1 or isinstance(
+        payload.get("manifest_version"), bool
+    ):
+        raise ValueError("manifest_version_unsupported")
+    allowed_hosts_payload = payload.get("allowed_hosts")
+    if not isinstance(allowed_hosts_payload, list) or not allowed_hosts_payload:
+        raise ValueError("manifest_allowed_hosts_required")
+    allowed_hosts = tuple(sorted(set(allowed_hosts_payload)))
+    if (
+        len(allowed_hosts) != len(allowed_hosts_payload)
+        or any(
+            not isinstance(host, str) or host not in OFFICIAL_SOURCE_HOSTS
+            for host in allowed_hosts
+        )
+    ):
+        raise ValueError("manifest_allowed_hosts_invalid")
     records = payload.get("records")
     if not isinstance(records, list) or not 5 <= len(records) <= 8:
         raise ValueError("manifest_record_count")
@@ -76,12 +125,25 @@ def load_manifest(path: Path) -> RealSourceManifest:
         source_url = _validate_url(
             _require_text(item.get("source_url"), field="source_url", max_length=500)
         )
+        source_host = urlparse(source_url).hostname
+        if source_host not in allowed_hosts:
+            raise ValueError("source_host_not_allowed")
         if sample_id in sample_ids:
             raise ValueError("duplicate_sample_id")
         if source_url in urls:
             raise ValueError("duplicate_source_url")
         sample_ids.add(sample_id)
         urls.add(source_url)
+        organization = _require_text(
+            item.get("organization"), field="organization", max_length=100
+        )
+        if OFFICIAL_SOURCE_HOSTS[source_host] != organization:
+            raise ValueError("source_organization_mismatch")
+        source_type = _require_text(
+            item.get("source_type"), field="source_type", max_length=80
+        )
+        if source_type != SUPPORTED_SOURCE_TYPE:
+            raise ValueError("source_type_unsupported")
         parsed_records.append(
             RealSourceRecord(
                 sample_id=sample_id,
@@ -89,26 +151,29 @@ def load_manifest(path: Path) -> RealSourceManifest:
                 source_title=_require_text(
                     item.get("source_title"), field="source_title", max_length=200
                 ),
-                organization=_require_text(
-                    item.get("organization"), field="organization", max_length=100
-                ),
-                observed_at=_require_text(
-                    item.get("observed_at"), field="observed_at", max_length=40
+                organization=organization,
+                observed_at=_validate_observed_at(
+                    _require_text(
+                        item.get("observed_at"),
+                        field="observed_at",
+                        max_length=40,
+                    )
                 ),
                 observation=_require_text(
                     item.get("observation"), field="observation", max_length=500
                 ),
-                source_type=_require_text(
-                    item.get("source_type"), field="source_type", max_length=80
-                ),
+                source_type=source_type,
             )
         )
+    if len({record.organization for record in parsed_records}) < 3:
+        raise ValueError("manifest_organization_count")
     return RealSourceManifest(
         manifest_id=_require_text(
             payload.get("manifest_id"), field="manifest_id", max_length=128
         ),
-        manifest_version=int(payload.get("manifest_version")),
+        manifest_version=payload["manifest_version"],
         question=_require_text(payload.get("question"), field="question", max_length=300),
+        allowed_hosts=allowed_hosts,
         records=tuple(parsed_records),
     )
 
@@ -119,6 +184,7 @@ def canonical_manifest_json(manifest: RealSourceManifest) -> str:
             "manifest_id": manifest.manifest_id,
             "manifest_version": manifest.manifest_version,
             "question": manifest.question,
+            "allowed_hosts": list(manifest.allowed_hosts),
             "records": [record.__dict__ for record in manifest.records],
         },
         ensure_ascii=False,
@@ -131,33 +197,306 @@ def canonical_manifest_hash(manifest: RealSourceManifest) -> str:
     return hashlib.sha256(canonical_manifest_json(manifest).encode("utf-8")).hexdigest()
 
 
+def _require_schema(value: object, fields: set[str], *, error: str) -> dict:
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError(error)
+    return value
+
+
+def _require_hash(value: object) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        raise ValueError("proof_hash_invalid")
+    return value
+
+
+def _require_identifier(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", value) is None
+    ):
+        raise ValueError("proof_identifier_invalid")
+    return value
+
+
+def _require_positive_int(value: object, *, error: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError(error)
+    return value
+
+
 def assert_complete_proof_report(report: dict) -> None:
+    encoded = json.dumps(report, ensure_ascii=False)
+    disallowed = (
+        "API_SECRET",
+        "actor_fingerprint",
+        "request_hash",
+        "/Users/",
+        "/private/",
+        "/var/",
+        "/tmp/",
+    )
+    for token in disallowed:
+        if token in encoded:
+            raise ValueError(f"proof_report_leaks:{token}")
     required = {
+        "schema_version",
         "manifest_id",
+        "manifest_version",
         "manifest_hash",
         "run_id",
         "source_count",
+        "organization_counts",
+        "source_type_counts",
         "decision_mode",
+        "source_decisions",
         "verification_summary",
         "publication",
         "review",
         "artifact_hashes",
+        "idempotency",
+        "byte_stability",
         "limits",
     }
     missing = required - set(report)
     if missing:
         raise ValueError(f"proof_report_missing:{','.join(sorted(missing))}")
+    if set(report) != required:
+        raise ValueError("proof_report_schema")
+    if report["schema_version"] != 1 or report["manifest_version"] != 1:
+        raise ValueError("proof_report_version")
+    _require_identifier(report["manifest_id"])
+    _require_identifier(report["run_id"])
+    _require_hash(report["manifest_hash"])
     if report["decision_mode"] != "human_operator":
         raise ValueError("proof_decision_mode_not_human")
-    if report["verification_summary"].get("unresolved_count") != 0:
+    source_count = _require_positive_int(
+        report["source_count"],
+        error="proof_source_count_invalid",
+    )
+    if not 5 <= source_count <= 8:
+        raise ValueError("proof_source_count_invalid")
+    decisions = report["source_decisions"]
+    if not isinstance(decisions, list) or len(decisions) != source_count:
+        raise ValueError("proof_source_count_mismatch")
+    decision_fields = {
+        "sample_id",
+        "organization",
+        "source_type",
+        "source_url",
+        "evidence_id",
+        "evidence_fingerprint",
+        "verification_id",
+        "action",
+        "reason_code",
+        "revision",
+        "verification_state",
+        "verification_origin",
+    }
+    unique_fields = (
+        "sample_id",
+        "source_url",
+        "evidence_id",
+        "evidence_fingerprint",
+        "verification_id",
+    )
+    seen = {field: set() for field in unique_fields}
+    action_counts: Counter[str] = Counter()
+    organization_counts: Counter[str] = Counter()
+    source_type_counts: Counter[str] = Counter()
+    for decision in decisions:
+        _require_schema(decision, decision_fields, error="proof_decision_schema")
+        if any(
+            not isinstance(decision[field], str) or not decision[field]
+            for field in (
+                "sample_id",
+                "organization",
+                "source_type",
+                "source_url",
+                "evidence_id",
+                "evidence_fingerprint",
+                "verification_id",
+            )
+        ):
+            raise ValueError("proof_decision_schema")
+        _require_hash(decision["evidence_fingerprint"])
+        if (
+            urlparse(decision["source_url"]).scheme != "https"
+            or decision["action"] not in {"verify", "reject"}
+            or decision["verification_origin"] != "human"
+        ):
+            raise ValueError("proof_decision_schema")
+        _require_positive_int(
+            decision["revision"],
+            error="proof_decision_schema",
+        )
+        expected_state = (
+            "verified" if decision["action"] == "verify" else "rejected"
+        )
+        if decision["verification_state"] != expected_state:
+            raise ValueError("proof_decision_state_mismatch")
+        if (
+            decision["action"] == "verify"
+            and decision["reason_code"] is not None
+        ) or (
+            decision["action"] == "reject"
+            and (
+                not isinstance(decision["reason_code"], str)
+                or not decision["reason_code"]
+            )
+        ):
+            raise ValueError("proof_decision_reason_mismatch")
+        for field in unique_fields:
+            if decision[field] in seen[field]:
+                raise ValueError("proof_decision_duplicate")
+            seen[field].add(decision[field])
+        action_counts[decision["action"]] += 1
+        organization_counts[decision["organization"]] += 1
+        source_type_counts[decision["source_type"]] += 1
+    if dict(sorted(organization_counts.items())) != report["organization_counts"]:
+        raise ValueError("proof_organization_counts_mismatch")
+    if dict(sorted(source_type_counts.items())) != report["source_type_counts"]:
+        raise ValueError("proof_source_type_counts_mismatch")
+
+    summary = _require_schema(
+        report["verification_summary"],
+        {
+            "state_counts",
+            "origin_counts",
+            "unresolved_count",
+            "snapshot_id",
+            "snapshot_hash",
+        },
+        error="proof_verification_summary_schema",
+    )
+    if summary["unresolved_count"] != 0:
         raise ValueError("proof_unresolved_verifications")
-    if report["publication"].get("status") != "ready":
+    _require_identifier(summary["snapshot_id"])
+    expected_states = {
+        state: count
+        for state, count in {
+            "verified": action_counts["verify"],
+            "rejected": action_counts["reject"],
+        }.items()
+        if count
+    }
+    if (
+        summary["state_counts"] != expected_states
+        or summary["origin_counts"] != {"human": source_count}
+    ):
+        raise ValueError("proof_verification_counts_mismatch")
+    _require_hash(summary["snapshot_hash"])
+
+    publication = _require_schema(
+        report["publication"],
+        {
+            "publication_id",
+            "revision",
+            "verification_snapshot_id",
+            "review_id",
+            "status",
+            "is_current",
+            "content_hash",
+        },
+        error="proof_publication_schema",
+    )
+    if publication["status"] != "ready" or publication["is_current"] is not True:
         raise ValueError("proof_publication_not_ready")
-    encoded = json.dumps(report, ensure_ascii=False)
-    disallowed = ("API_SECRET", "actor_fingerprint", "request_hash", "/Users/")
-    for token in disallowed:
-        if token in encoded:
-            raise ValueError(f"proof_report_leaks:{token}")
+    for field in (
+        "publication_id",
+        "verification_snapshot_id",
+        "review_id",
+    ):
+        _require_identifier(publication[field])
+    _require_positive_int(
+        publication["revision"],
+        error="proof_publication_revision_invalid",
+    )
+    _require_hash(publication["content_hash"])
+    if publication["verification_snapshot_id"] != summary["snapshot_id"]:
+        raise ValueError("proof_snapshot_mismatch")
+
+    review = _require_schema(
+        report["review"],
+        {
+            "review_id",
+            "revision",
+            "status",
+            "action",
+            "decision_id",
+            "resolution_id",
+            "delivery_status",
+        },
+        error="proof_review_schema",
+    )
+    if (
+        review["status"] != "approved"
+        or review["action"] != "approve"
+        or review["delivery_status"] != "ready"
+    ):
+        raise ValueError("proof_review_not_approved")
+    for field in ("review_id", "decision_id", "resolution_id"):
+        _require_identifier(review[field])
+    if (
+        review["review_id"] != publication["review_id"]
+        or review["revision"] != publication["revision"]
+    ):
+        raise ValueError("proof_review_publication_mismatch")
+
+    artifact_hashes = report["artifact_hashes"]
+    if not isinstance(artifact_hashes, dict) or len(artifact_hashes) != 2:
+        raise ValueError("proof_artifact_schema")
+    artifact_fields = {
+        "media_type",
+        "logical_content_hash",
+        "byte_sha256",
+        "byte_size",
+    }
+    media_types = set()
+    byte_hashes = {}
+    for artifact_id, artifact in artifact_hashes.items():
+        if not isinstance(artifact_id, str) or not artifact_id:
+            raise ValueError("proof_artifact_schema")
+        _require_schema(artifact, artifact_fields, error="proof_artifact_schema")
+        media_types.add(artifact["media_type"])
+        if artifact["logical_content_hash"] != publication["content_hash"]:
+            raise ValueError("proof_artifact_content_hash_mismatch")
+        byte_hashes[artifact_id] = _require_hash(artifact["byte_sha256"])
+        _require_positive_int(
+            artifact["byte_size"],
+            error="proof_artifact_size_invalid",
+        )
+    if media_types != {"application/json", "text/markdown"}:
+        raise ValueError("proof_artifact_schema")
+
+    idempotency = _require_schema(
+        report["idempotency"],
+        {"finalize_replay", "publication_id", "snapshot_id"},
+        error="proof_idempotency_schema",
+    )
+    if (
+        idempotency["finalize_replay"] is not True
+        or idempotency["publication_id"] != publication["publication_id"]
+        or idempotency["snapshot_id"] != summary["snapshot_id"]
+    ):
+        raise ValueError("proof_idempotency_mismatch")
+    _require_identifier(idempotency["publication_id"])
+    _require_identifier(idempotency["snapshot_id"])
+    byte_stability = _require_schema(
+        report["byte_stability"],
+        {"stable", "rebuilt_byte_sha256"},
+        error="proof_byte_stability_schema",
+    )
+    if (
+        byte_stability["stable"] is not True
+        or byte_stability["rebuilt_byte_sha256"] != byte_hashes
+    ):
+        raise ValueError("proof_byte_stability_mismatch")
+    if (
+        not isinstance(report["limits"], list)
+        or not report["limits"]
+        or any(not isinstance(item, str) or not item for item in report["limits"])
+    ):
+        raise ValueError("proof_limits_invalid")
 
 
 def write_atomic_report(path: Path, report: dict) -> None:
@@ -329,6 +668,223 @@ def seed_real_source_run(*, manifest_path: Path, db_path: str | None = None) -> 
     }
 
 
+def _artifact_rows(
+    *,
+    db_path: str,
+    run_id: str,
+    artifact_ids: tuple[str, ...],
+) -> dict[str, dict]:
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    try:
+        placeholders = ", ".join("?" for _ in artifact_ids)
+        rows = connection.execute(
+            f"""
+            SELECT artifact_id, media_type, content, content_hash
+            FROM run_artifacts_v2
+            WHERE run_id = ? AND artifact_id IN ({placeholders})
+            """,
+            (run_id, *artifact_ids),
+        ).fetchall()
+        return {row["artifact_id"]: dict(row) for row in rows}
+    finally:
+        connection.close()
+
+
+def build_proof_report(
+    *,
+    manifest_path: Path,
+    db_path: str,
+    run_id: str,
+) -> dict:
+    manifest = load_manifest(manifest_path)
+    run = get_run(db_path=db_path, run_id=run_id)
+    if (
+        run["profile_id"] != "talent-hiring-signal"
+        or run["query"] != manifest.question
+    ):
+        raise ValueError("proof_run_manifest_mismatch")
+    publication = get_current_publication(db_path=db_path, run_id=run_id)
+    if publication is None:
+        raise ValueError("proof_publication_missing")
+    replay = finalize_verification_publication(
+        db_path=db_path,
+        run_id=run_id,
+        expected_state_version=run["state_version"],
+    )
+    if not replay.idempotent_replay:
+        raise ValueError("proof_finalize_not_idempotent")
+    review = get_review_detail(
+        db_path=db_path,
+        run_id=run_id,
+        review_id=publication.review_id,
+    )
+    if review["decision"] is None or review["resolution"] is None:
+        raise ValueError("proof_review_incomplete")
+
+    evidence_by_url = {
+        evidence["source_url"]: evidence for evidence in run["evidence"]
+    }
+    if set(evidence_by_url) != {
+        record.source_url for record in manifest.records
+    }:
+        raise ValueError("proof_manifest_evidence_mismatch")
+    source_decisions = []
+    for record in manifest.records:
+        evidence = evidence_by_url[record.source_url]
+        if evidence["snippet"] != record.observation:
+            raise ValueError("proof_manifest_evidence_mismatch")
+        detail = get_evidence_verification_detail(
+            db_path=db_path,
+            run_id=run_id,
+            evidence_id=evidence["evidence_id"],
+        )
+        if detail is None or not detail["decisions"]:
+            raise ValueError("proof_decision_missing")
+        decision = detail["decisions"][-1]
+        effective = detail["effective"]
+        if (
+            decision["evidence_fingerprint"]
+            != evidence["evidence_fingerprint"]
+            or effective["evidence_fingerprint"]
+            != evidence["evidence_fingerprint"]
+        ):
+            raise ValueError("proof_decision_fingerprint_mismatch")
+        source_decisions.append(
+            {
+                "sample_id": record.sample_id,
+                "organization": record.organization,
+                "source_type": record.source_type,
+                "source_url": record.source_url,
+                "evidence_id": evidence["evidence_id"],
+                "evidence_fingerprint": evidence["evidence_fingerprint"],
+                "verification_id": decision["verification_id"],
+                "action": decision["action"],
+                "reason_code": decision["reason_code"],
+                "revision": decision["revision"],
+                "verification_state": effective["verification_state"],
+                "verification_origin": effective["verification_origin"],
+            }
+        )
+
+    stored_artifacts = _artifact_rows(
+        db_path=db_path,
+        run_id=run_id,
+        artifact_ids=publication.artifact_ids,
+    )
+    if set(stored_artifacts) != set(publication.artifact_ids):
+        raise ValueError("proof_artifact_missing")
+    decision_record = get_decision(
+        db_path=db_path,
+        decision_id=review["decision"]["decision_id"],
+    )
+    if decision_record is None:
+        raise ValueError("proof_review_incomplete")
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    try:
+        original = build_publication_artifacts(
+            connection=connection,
+            run_id=run_id,
+            snapshot_id=publication.verification_snapshot_id,
+            revision=publication.revision,
+        )
+    finally:
+        connection.close()
+    rebuilt = build_reviewed_artifacts(
+        original_brief_json=original.brief_json,
+        decision=decision_record,
+        revision=publication.revision,
+    )
+    rebuilt_by_id = {
+        artifact["artifact_id"]: artifact for artifact in rebuilt.artifacts
+    }
+    if set(rebuilt_by_id) != set(stored_artifacts):
+        raise ValueError("proof_artifact_rebuild_mismatch")
+    artifact_hashes = {}
+    rebuilt_byte_hashes = {}
+    stable = True
+    for artifact_id in publication.artifact_ids:
+        stored = stored_artifacts[artifact_id]
+        rebuilt_artifact = rebuilt_by_id[artifact_id]
+        stored_bytes = stored["content"].encode("utf-8")
+        rebuilt_bytes = rebuilt_artifact["content"].encode("utf-8")
+        stored_byte_hash = hashlib.sha256(stored_bytes).hexdigest()
+        rebuilt_byte_hash = hashlib.sha256(rebuilt_bytes).hexdigest()
+        stable = stable and stored_bytes == rebuilt_bytes
+        artifact_hashes[artifact_id] = {
+            "media_type": stored["media_type"],
+            "logical_content_hash": stored["content_hash"],
+            "byte_sha256": stored_byte_hash,
+            "byte_size": len(stored_bytes),
+        }
+        rebuilt_byte_hashes[artifact_id] = rebuilt_byte_hash
+
+    organization_counts = Counter(
+        record.organization for record in manifest.records
+    )
+    source_type_counts = Counter(record.source_type for record in manifest.records)
+    report = {
+        "schema_version": 1,
+        "manifest_id": manifest.manifest_id,
+        "manifest_version": manifest.manifest_version,
+        "manifest_hash": canonical_manifest_hash(manifest),
+        "run_id": run_id,
+        "source_count": len(manifest.records),
+        "organization_counts": dict(sorted(organization_counts.items())),
+        "source_type_counts": dict(sorted(source_type_counts.items())),
+        "decision_mode": "human_operator",
+        "source_decisions": source_decisions,
+        "verification_summary": {
+            "state_counts": run["verification_summary"]["state_counts"],
+            "origin_counts": run["verification_summary"]["origin_counts"],
+            "unresolved_count": sum(
+                1
+                for decision in source_decisions
+                if decision["verification_state"] == "unverified"
+            ),
+            "snapshot_id": publication.verification_snapshot_id,
+            "snapshot_hash": run["verification_summary"]["snapshot_hash"],
+        },
+        "publication": {
+            "publication_id": publication.publication_id,
+            "revision": publication.revision,
+            "verification_snapshot_id": publication.verification_snapshot_id,
+            "review_id": publication.review_id,
+            "status": publication.status,
+            "is_current": publication.is_current,
+            "content_hash": publication.content_hash,
+        },
+        "review": {
+            "review_id": publication.review_id,
+            "revision": review["review_revision"],
+            "status": review["workflow"]["status"],
+            "action": review["decision"]["action"],
+            "decision_id": review["decision"]["decision_id"],
+            "resolution_id": review["resolution"]["resolution_id"],
+            "delivery_status": run["delivery_status"],
+        },
+        "artifact_hashes": artifact_hashes,
+        "idempotency": {
+            "finalize_replay": replay.idempotent_replay,
+            "publication_id": replay.publication.publication_id,
+            "snapshot_id": replay.publication.verification_snapshot_id,
+        },
+        "byte_stability": {
+            "stable": stable,
+            "rebuilt_byte_sha256": rebuilt_byte_hashes,
+        },
+        "limits": [
+            "This proves one fixed public-source sample workflow only.",
+            "Verification means the persisted observation matched the source at decision time.",
+            "It is not a crawler, source archive, or market-coverage benchmark.",
+            "It does not prove future source availability, hiring outcomes, or production readiness.",
+        ],
+    }
+    assert_complete_proof_report(report)
+    return report
+
+
 def _print_json(payload: dict, *, stream=None) -> None:
     print(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
@@ -350,6 +906,12 @@ def main(argv: list[str] | None = None) -> int:
     check_report_parser = subparsers.add_parser("check-report")
     check_report_parser.add_argument("--report", type=Path, required=True)
 
+    build_report_parser = subparsers.add_parser("build-report")
+    build_report_parser.add_argument("--manifest", type=Path, required=True)
+    build_report_parser.add_argument("--db-path", required=True)
+    build_report_parser.add_argument("--run-id", required=True)
+    build_report_parser.add_argument("--output", type=Path, required=True)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "manifest-hash":
@@ -368,7 +930,7 @@ def main(argv: list[str] | None = None) -> int:
                     db_path=args.db_path,
                 )
             )
-        else:
+        elif args.command == "check-report":
             report = json.loads(args.report.read_text(encoding="utf-8"))
             assert_complete_proof_report(report)
             _print_json(
@@ -378,8 +940,32 @@ def main(argv: list[str] | None = None) -> int:
                     "status": "valid",
                 }
             )
-    except (OSError, TypeError, ValueError, RuntimeError) as exc:
-        _print_json({"error": str(exc)}, stream=sys.stderr)
+        else:
+            report = build_proof_report(
+                manifest_path=args.manifest,
+                db_path=args.db_path,
+                run_id=args.run_id,
+            )
+            write_atomic_report(args.output, report)
+            _print_json(
+                {
+                    "manifest_id": report["manifest_id"],
+                    "run_id": report["run_id"],
+                    "report": args.output.name,
+                    "status": "written",
+                }
+            )
+    except OSError:
+        _print_json({"error": "input_unavailable"}, stream=sys.stderr)
+        return 1
+    except json.JSONDecodeError:
+        _print_json({"error": "invalid_json"}, stream=sys.stderr)
+        return 1
+    except (TypeError, ValueError, RuntimeError) as exc:
+        message = str(exc)
+        if "/" in message or "\\" in message:
+            message = "operation_failed"
+        _print_json({"error": message}, stream=sys.stderr)
         return 1
     return 0
 

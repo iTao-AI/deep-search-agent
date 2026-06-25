@@ -6,16 +6,24 @@ Executed on 2026-06-25 against the fixed
 ## Result
 
 - Manifest hash:
-  `6eef614ee58f65c10980ed48d43ad6ee52129402ad3879a678c3627b34fc7281`
-- Run: `run_3f0cd851906141fa8edff985736b7883`
+  `56dfe83dcc206d5517f94011b628744075d9676a0aaeceb4863efe30d4241dee`
+- Run: `run_2638ec8f89ee49c8b7ff2b7f506d3615`
 - Sources inspected: 6
 - Human verification: 6 verified, 0 rejected, 0 unresolved
 - Publication: revision 2, current, `ready`
 - Fresh review: revision 2, `approved`
 - Delivery: `ready`
+- Finalization replay: idempotent
+- Rebuilt artifact bytes: stable
 
-The reviewed JSON and Markdown artifacts both resolve to content hash
-`5d5b061de2bf30159b64b64e75c78a0582868a0a038f85730f289d0d9cadbb13`.
+Both reviewed artifacts resolve to logical DecisionBrief content hash
+`b79376ffaa0dbefebae28122b44e4da8f7f7de434dc6349f4a97418b62bc526a`.
+Their serialized UTF-8 bytes are intentionally distinct:
+
+- JSON SHA-256:
+  `c72dbcb53b63dd968799226c8ccb59194809505d23f2528206ae7d095d5b8f7c`
+- Markdown SHA-256:
+  `3c850d255697a83097e1c02c3e0926eeb25266e35cb3b58f269bfcfeeed23354`
 
 ## Sources
 

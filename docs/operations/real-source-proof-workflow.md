@@ -19,7 +19,27 @@ market-coverage claim.
 5. Use `evidence verify --confirm-source-match` or `evidence reject`.
 6. Use `evidence finalize`.
 7. Use `review show`, `review approve --wait`, and `review wait`.
-8. Generate and check the proof report.
+8. Generate the report from the manifest and application database:
+
+   ```bash
+   python scripts/real_source_proof.py build-report \
+     --manifest benchmarks/real-source-proof/talent-agent-hiring-signals-v1.json \
+     --db-path "$TASKS_DB_PATH" \
+     --run-id "$RUN_ID" \
+     --output docs/evidence/p2a-real-source-proof.json
+   ```
+
+9. Check the complete report schema:
+
+   ```bash
+   python scripts/real_source_proof.py check-report \
+     --report docs/evidence/p2a-real-source-proof.json
+   ```
+
+`build-report` verifies an idempotent finalization replay, rebuilds reviewed
+artifacts from the immutable verification snapshot and accepted review
+decision, and compares their UTF-8 bytes with the stored JSON and Markdown
+artifacts.
 
 ## Limits
 

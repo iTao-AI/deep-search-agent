@@ -28,6 +28,7 @@ Superpowers 文档用于沉淀设计输入和实施计划，供后续 writing pl
 | [P2A Verification Authority Plan](superpowers/plans/2026-06-22-p2a-verification-authority.md) | PR1 的不可变 baseline origin、确定性 preflight、追加式 decision ledger 与 snapshot 实施步骤 |
 | [P2A Controlled Publication Design](superpowers/specs/2026-06-23-p2a-controlled-publication-design.md) | PR2 的 revisioned publication、fresh review、current delivery 与受控 API/CLI 边界 |
 | [P2A Controlled Publication Plan](superpowers/plans/2026-06-23-p2a-controlled-publication.md) | PR2 的 schema migration、artifact rebuild、freshness state machine、API/CLI 与验证步骤 |
+| [P2A Real-Source Proof Design](superpowers/specs/2026-06-23-p2a-real-source-proof-design.md) | PR3 的真实公开来源样本、人工核验、确定性重建与受控交付证明边界 |
 | [P2A Real-Source Proof Plan](superpowers/plans/2026-06-23-p2a-real-source-proof.md) | PR3 的固定 manifest、deterministic seed、人工核验、proof report 与验证步骤 |
 | [Technical Identifier Migration Design](superpowers/specs/2026-06-18-technical-identifier-migration-design.md) | 仓库改名后的 runtime env、health、Tool Client、LangSmith 与历史兼容边界 |
 | [Technical Identifier Migration Plan](superpowers/plans/2026-06-18-technical-identifier-migration.md) | canonical-first 标识迁移、回滚和验证步骤 |

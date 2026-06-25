@@ -44,6 +44,8 @@
 - 2026-06-25 实际 proof：6 条来源均经人工核验为 `human_verified`，
   unresolved 0；publication revision 2 为 `ready`，fresh review revision 2
   为 `approved`。
+- proof-only `build-report` 从 manifest + SQLite 账本确定性生成报告；
+  JSON 与 Markdown 分别记录 UTF-8 byte SHA-256，并通过 snapshot 重建逐字节一致性检查。
 - 报告只证明小样本工作流执行，不是来源归档、抓取能力、市场覆盖率或招聘结果声明。
 
 ## 已有截图

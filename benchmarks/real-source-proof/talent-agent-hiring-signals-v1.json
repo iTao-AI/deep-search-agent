@@ -2,6 +2,11 @@
   "manifest_id": "talent-agent-hiring-signals-v1",
   "manifest_version": 1,
   "question": "What hiring signals appear in AI Agent roles?",
+  "allowed_hosts": [
+    "jobs.ashbyhq.com",
+    "openai.com",
+    "www.google.com"
+  ],
   "records": [
     {
       "sample_id": "real_source_001",

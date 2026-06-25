@@ -817,6 +817,7 @@ Add an `argparse` `main()` with these subcommands only:
 ```text
 manifest-hash --manifest PATH
 seed --manifest PATH --db-path PATH
+build-report --manifest PATH --db-path PATH --run-id ID --output PATH
 check-report --report PATH
 ```
 
@@ -826,6 +827,9 @@ Rules:
 - return non-zero on validation failure;
 - do not read env vars;
 - do not call HTTP;
+- generate reports deterministically from the manifest and application DB;
+- compute UTF-8 byte SHA-256 separately from logical DecisionBrief hashes;
+- verify idempotent finalization replay and rebuilt artifact byte stability;
 - atomically write reports through `path.with_suffix(path.suffix + ".tmp")`
   then `Path.replace()`.
 
@@ -999,11 +1003,19 @@ Expected: final review status is `approved` and current publication is `ready`.
 
 - [ ] **Step 5: Generate reports**
 
-Use the implemented report helper to write:
+Use the implemented proof-only command to write:
 
 ```text
 docs/evidence/p2a-real-source-proof.json
 docs/evidence/p2a-real-source-proof.md
+```
+
+```bash
+python scripts/real_source_proof.py build-report \
+  --manifest benchmarks/real-source-proof/talent-agent-hiring-signals-v1.json \
+  --db-path .tmp/real-source-proof/tasks.db \
+  --run-id "$RUN_ID" \
+  --output docs/evidence/p2a-real-source-proof.json
 ```
 
 The JSON report must pass:
