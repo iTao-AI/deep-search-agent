@@ -1,0 +1,164 @@
+{
+  "artifact_hashes": {
+    "decision-brief.r2.reviewed.json": {
+      "byte_sha256": "c72dbcb53b63dd968799226c8ccb59194809505d23f2528206ae7d095d5b8f7c",
+      "byte_size": 17788,
+      "logical_content_hash": "b79376ffaa0dbefebae28122b44e4da8f7f7de434dc6349f4a97418b62bc526a",
+      "media_type": "application/json"
+    },
+    "decision-brief.r2.reviewed.md": {
+      "byte_sha256": "3c850d255697a83097e1c02c3e0926eeb25266e35cb3b58f269bfcfeeed23354",
+      "byte_size": 11603,
+      "logical_content_hash": "b79376ffaa0dbefebae28122b44e4da8f7f7de434dc6349f4a97418b62bc526a",
+      "media_type": "text/markdown"
+    }
+  },
+  "byte_stability": {
+    "rebuilt_byte_sha256": {
+      "decision-brief.r2.reviewed.json": "c72dbcb53b63dd968799226c8ccb59194809505d23f2528206ae7d095d5b8f7c",
+      "decision-brief.r2.reviewed.md": "3c850d255697a83097e1c02c3e0926eeb25266e35cb3b58f269bfcfeeed23354"
+    },
+    "stable": true
+  },
+  "decision_mode": "human_operator",
+  "idempotency": {
+    "finalize_replay": true,
+    "publication_id": "publication_d34f7b18acf431a0f2696dca1599a5b1ece64c5da664b35af699183bbc00eab2",
+    "snapshot_id": "vsnap_743ba1bd558f86ad6caefdfa87effbaabfabdb1c699e593259d048e98085ea7f"
+  },
+  "limits": [
+    "This proves one fixed public-source sample workflow only.",
+    "Verification means the persisted observation matched the source at decision time.",
+    "It is not a crawler, source archive, or market-coverage benchmark.",
+    "It does not prove future source availability, hiring outcomes, or production readiness."
+  ],
+  "manifest_hash": "56dfe83dcc206d5517f94011b628744075d9676a0aaeceb4863efe30d4241dee",
+  "manifest_id": "talent-agent-hiring-signals-v1",
+  "manifest_version": 1,
+  "organization_counts": {
+    "Google": 2,
+    "LangChain": 1,
+    "OpenAI": 3
+  },
+  "publication": {
+    "content_hash": "b79376ffaa0dbefebae28122b44e4da8f7f7de434dc6349f4a97418b62bc526a",
+    "is_current": true,
+    "publication_id": "publication_d34f7b18acf431a0f2696dca1599a5b1ece64c5da664b35af699183bbc00eab2",
+    "review_id": "review_b539f3ae4dd252818e063b75268d4e23",
+    "revision": 2,
+    "status": "ready",
+    "verification_snapshot_id": "vsnap_743ba1bd558f86ad6caefdfa87effbaabfabdb1c699e593259d048e98085ea7f"
+  },
+  "review": {
+    "action": "approve",
+    "decision_id": "decision_8edeb2c3f4e55a38a694b0c5cfd6b8cf",
+    "delivery_status": "ready",
+    "resolution_id": "resolution_49a51ed7995459058519c380c091fbb5",
+    "review_id": "review_b539f3ae4dd252818e063b75268d4e23",
+    "revision": 2,
+    "status": "approved"
+  },
+  "run_id": "run_2638ec8f89ee49c8b7ff2b7f506d3615",
+  "schema_version": 1,
+  "source_count": 6,
+  "source_decisions": [
+    {
+      "action": "verify",
+      "evidence_fingerprint": "5ea3e47044ad1c88b36ae800810de757eaea0ed12442124d9f5959bcf65c6645",
+      "evidence_id": "ev_run_2638ec8f89ee49c8b7ff2b7f506d3615_5ea3e47044ad1c88b36ae800810de757eaea0ed12442124d9f5959bcf65c6645",
+      "organization": "OpenAI",
+      "reason_code": null,
+      "revision": 1,
+      "sample_id": "real_source_001",
+      "source_type": "public_job_posting",
+      "source_url": "https://openai.com/careers/software-engineer-agent-infrastructure-san-francisco/",
+      "verification_id": "verification_ed97ffe920e55fc79d63712c9fa1241d",
+      "verification_origin": "human",
+      "verification_state": "verified"
+    },
+    {
+      "action": "verify",
+      "evidence_fingerprint": "7e8a43986b54518875f6c8cb08ed59806fd746129089e46af0a22a32f44b600c",
+      "evidence_id": "ev_run_2638ec8f89ee49c8b7ff2b7f506d3615_7e8a43986b54518875f6c8cb08ed59806fd746129089e46af0a22a32f44b600c",
+      "organization": "OpenAI",
+      "reason_code": null,
+      "revision": 1,
+      "sample_id": "real_source_002",
+      "source_type": "public_job_posting",
+      "source_url": "https://openai.com/careers/applied-ai-engineer-codex-core-agent-san-francisco/",
+      "verification_id": "verification_2731f01b39165a8296824333aca16780",
+      "verification_origin": "human",
+      "verification_state": "verified"
+    },
+    {
+      "action": "verify",
+      "evidence_fingerprint": "885bf9b501f95517ea75d472a5724ce1e3f88776bd01658b7d58060d652cf367",
+      "evidence_id": "ev_run_2638ec8f89ee49c8b7ff2b7f506d3615_885bf9b501f95517ea75d472a5724ce1e3f88776bd01658b7d58060d652cf367",
+      "organization": "OpenAI",
+      "reason_code": null,
+      "revision": 1,
+      "sample_id": "real_source_003",
+      "source_type": "public_job_posting",
+      "source_url": "https://openai.com/careers/software-engineer-cloud-agents-san-francisco/",
+      "verification_id": "verification_f434861fa6c4541fa86d188a28f9dd87",
+      "verification_origin": "human",
+      "verification_state": "verified"
+    },
+    {
+      "action": "verify",
+      "evidence_fingerprint": "7910090b3a4bbf58b29402ae344be18af49f71d42f1b38857f68192413ce14c3",
+      "evidence_id": "ev_run_2638ec8f89ee49c8b7ff2b7f506d3615_7910090b3a4bbf58b29402ae344be18af49f71d42f1b38857f68192413ce14c3",
+      "organization": "LangChain",
+      "reason_code": null,
+      "revision": 1,
+      "sample_id": "real_source_004",
+      "source_type": "public_job_posting",
+      "source_url": "https://jobs.ashbyhq.com/langchain/c75915ba-a32b-4e17-873d-19b47564170d",
+      "verification_id": "verification_7137c9866bff54708097766c097f69a7",
+      "verification_origin": "human",
+      "verification_state": "verified"
+    },
+    {
+      "action": "verify",
+      "evidence_fingerprint": "4a293bbc784991badae1d2e8702e50d23596e17d08e044d38c6aeff75bdab05a",
+      "evidence_id": "ev_run_2638ec8f89ee49c8b7ff2b7f506d3615_4a293bbc784991badae1d2e8702e50d23596e17d08e044d38c6aeff75bdab05a",
+      "organization": "Google",
+      "reason_code": null,
+      "revision": 1,
+      "sample_id": "real_source_005",
+      "source_type": "public_job_posting",
+      "source_url": "https://www.google.com/about/careers/applications/jobs/results/138036920247558854-software-engineer-aiml-agentic-ai-systems-cloud-security",
+      "verification_id": "verification_e2831d533c5e5240be24373b23439095",
+      "verification_origin": "human",
+      "verification_state": "verified"
+    },
+    {
+      "action": "verify",
+      "evidence_fingerprint": "ade3cf581bedeba2e6250b54d78f80853075ef14cc3a6129ed8bc1891b7b9f7c",
+      "evidence_id": "ev_run_2638ec8f89ee49c8b7ff2b7f506d3615_ade3cf581bedeba2e6250b54d78f80853075ef14cc3a6129ed8bc1891b7b9f7c",
+      "organization": "Google",
+      "reason_code": null,
+      "revision": 1,
+      "sample_id": "real_source_006",
+      "source_type": "public_job_posting",
+      "source_url": "https://www.google.com/about/careers/applications/jobs/results/106025468234212038-senior-software-engineer-agentic-ai-systems-cloud-security",
+      "verification_id": "verification_a7389ff9bdce5256a5a36771d4531372",
+      "verification_origin": "human",
+      "verification_state": "verified"
+    }
+  ],
+  "source_type_counts": {
+    "public_job_posting": 6
+  },
+  "verification_summary": {
+    "origin_counts": {
+      "human": 6
+    },
+    "snapshot_hash": "f59df909d096f95e15fd5bce31b1da4f731555b8faf0fa3c32ce139bb7b6fcf8",
+    "snapshot_id": "vsnap_743ba1bd558f86ad6caefdfa87effbaabfabdb1c699e593259d048e98085ea7f",
+    "state_counts": {
+      "verified": 6
+    },
+    "unresolved_count": 0
+  }
+}

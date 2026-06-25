@@ -55,6 +55,12 @@ The controlled boundary remains default-disabled, single-node SQLite, and one
 backend replica. PR2 adds no source retrieval, LLM verification, UI, RBAC,
 Skills, Async Subagents, multi-instance behavior, or real-source proof.
 
+P2A PR3 adds a bounded real-source proof. It uses ordinary Evidence with
+baseline origin `none`, then relies on the existing append-only human decision
+ledger and immutable snapshot projection to establish `human` authority. The
+proof report is evidence of workflow execution for a small public sample, not a
+source archive or market coverage claim.
+
 ## Rejected Alternatives
 
 - Mutating `evidence_entries_v2.verification_status`: rejected because it erases
