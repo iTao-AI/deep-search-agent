@@ -31,6 +31,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY agent/ agent/
 COPY api/ api/
 COPY prompt/ prompt/
+COPY skills/ skills/
 COPY tools/ tools/
 COPY utils/ utils/
 COPY scripts/ scripts/
