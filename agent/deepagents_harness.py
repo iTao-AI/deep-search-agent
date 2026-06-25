@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
-from typing import Any, Literal
+from types import MappingProxyType
+from typing import Any, Literal, Mapping
 
 from deepagents import (
     GeneralPurposeSubagentProfile,
@@ -18,6 +20,7 @@ from agent.profile_middleware import build_profile_middleware
 from agent.profile_registry import profile_registry
 from agent.research_agents import compile_generic_researchers
 from agent.runtime_context import ResearchRuntimeContext
+from agent.talent_runtime import talent_recursion_limit
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_SKILLS_ROOT = _REPOSITORY_ROOT / "skills"
@@ -47,6 +50,14 @@ class DeepAgentsHarness:
     backend: CompositeBackend
     permissions: tuple[FilesystemPermission, ...]
     skills: tuple[str, ...]
+    profile_graphs: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "profile_graphs",
+            MappingProxyType(dict(self.profile_graphs)),
+        )
 
     def backend_contract(self) -> dict[str, Any]:
         skills_backend = self.backend.routes["/skills/"]
@@ -70,6 +81,43 @@ class DeepAgentsHarness:
             if any(_matches_permission_path(path, pattern) for pattern in rule.paths):
                 return rule.mode
         return "allow"
+
+    def with_profile_graph(self, profile_id: str, graph: Any) -> DeepAgentsHarness:
+        return DeepAgentsHarness(
+            graph=self.graph,
+            backend=self.backend,
+            permissions=self.permissions,
+            skills=self.skills,
+            profile_graphs={**self.profile_graphs, profile_id: graph},
+        )
+
+    async def execute(self, request, *, runtime_context, observer):
+        try:
+            graph = self.profile_graphs[request.profile_id]
+        except KeyError as exc:
+            raise KeyError(f"unknown profile: {request.profile_id}") from exc
+        content = request.query
+        if request.profile_id == "talent-hiring-signal":
+            content = (
+                f"{request.query}\n\n"
+                "【受限研究范围】\n"
+                f"{json.dumps(dict(request.scope), ensure_ascii=False, sort_keys=True)}\n"
+                "只研究上述声明范围，并返回 schema-valid ResearchPacket。"
+            )
+        config = {
+            "configurable": {"thread_id": request.thread_id},
+            "callbacks": list(observer.callbacks()),
+            "metadata": dict(request.trace_metadata),
+        }
+        if request.profile_id == "talent-hiring-signal":
+            config["recursion_limit"] = talent_recursion_limit()
+        async for chunk in graph.astream(
+            {"messages": [{"role": "user", "content": content}]},
+            config=config,
+            context=runtime_context,
+        ):
+            observer.on_stream_chunk(chunk)
+        return observer.snapshot_outcome()
 
 
 def _matches_permission_path(path: str, pattern: str) -> bool:
@@ -194,4 +242,5 @@ def build_generic_harness(
         backend=backend,
         permissions=permissions,
         skills=policy.skills,
+        profile_graphs={"generic": graph},
     )

@@ -245,6 +245,7 @@ def test_three_concurrent_runs_isolate_runtime_state_and_workspace(tmp_path):
                 snapshots[run_id] = {{
                     "thread_id": get_thread_context(),
                     "session_dir": get_session_context(),
+                    "runtime_run_id": kwargs["context"].run_id,
                     "facts": main_agent.shared_context.snapshot_facts(run_id),
                     "cache": dict(_search_cache[run_id]),
                 }}
@@ -272,7 +273,10 @@ def test_three_concurrent_runs_isolate_runtime_state_and_workspace(tmp_path):
             ]
             await asyncio.wait_for(entered.wait(), timeout=2)
             assert snapshots["run-a"]["thread_id"] == snapshots["run-b"]["thread_id"]
-            assert len({{item["session_dir"] for item in snapshots.values()}}) == 3
+            assert {{item["runtime_run_id"] for item in snapshots.values()}} == {{
+                "run-a", "run-b", "run-c"
+            }}
+            assert {{item["session_dir"] for item in snapshots.values()}} == {{None}}
             for _, run_id, _ in runs:
                 assert snapshots[run_id]["facts"][0]["fact"] == f"fact:{{run_id}}"
                 assert list(snapshots[run_id]["cache"].values()) == [f"result:{{run_id}}"]

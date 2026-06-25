@@ -53,6 +53,8 @@ class ExecutionObserver(Protocol):
 
     def callbacks(self) -> Sequence[object]: ...
 
+    def snapshot_outcome(self) -> ExecutionOutcome: ...
+
 
 class AgentHarness(Protocol):
     """Port implemented by the framework-specific Agent harness."""
