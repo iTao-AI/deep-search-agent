@@ -1,13 +1,13 @@
 # v0.1.0 Canonical Runtime And Release Design
 
-**Status:** Approved design, ready for implementation planning
+**Status:** Revised approved design, awaiting written-spec review
 
 **Date:** 2026-06-25
 
 **Release target:** `v0.1.0`
 
-**Scope:** Canonical run delivery, framework-aligned Agent composition,
-legacy runtime removal, frontend retirement, technical-identifier cleanup,
+**Scope:** DeepAgents-native research harness, canonical run delivery, legacy
+runtime removal, frontend retirement, technical-identifier cleanup,
 documentation correction, and first release hardening.
 
 ## Summary
@@ -44,14 +44,21 @@ runtime aliases for the former product identity or task model.
 
 The release also makes the framework layering explicit:
 
-- **LangChain** is the Agent framework and Middleware layer;
-- **DeepAgents** is the complex-research harness and coordinator;
-- **LangGraph** is the durable workflow runtime; and
-- the application database remains authoritative for ResearchRun, Evidence,
+- **LangChain** is the Agent framework and Middleware layer.
+- **DeepAgents** is the complex-research harness and coordinator.
+- **LangGraph** is the durable workflow runtime.
+- **LangSmith** is the privacy-first tracing and evaluation plane.
+- The application database remains authoritative for ResearchRun, Evidence,
   review, verification, publication, and delivery facts.
 
-The work is delivered through three reviewable PRs. No tag or release is
-created until all three are merged and the complete release gate passes.
+The framework adoption is deliberately bounded. The application calls an
+application-owned `AgentHarness` interface. A DeepAgents adapter implements
+that interface and returns an application-owned `ExecutionOutcome`; API,
+repositories, Evidence, review, verification, publication, and delivery code
+do not consume DeepAgents graph state.
+
+The work is delivered through four reviewable PRs. No tag or release is
+created until all four are merged and the complete release gate passes.
 
 ## Current Project Facts
 
@@ -108,6 +115,36 @@ both LangChain `create_agent` and DeepAgents accept Middleware directly.
 - the pre-design baseline is `828 passed, 5 warnings`, including four expected
   legacy-environment warnings.
 
+## Decision Basis
+
+This design distinguishes evidence types:
+
+- **Project fact:** the current code, schemas, tests, constraints, merged
+  features, and baseline listed above.
+- **Official framework fact:** current DeepAgents backend, Skills, subagent and
+  profile contracts; LangChain Agent, Middleware, runtime-context and
+  structured-output contracts; LangGraph persistence and durable-execution
+  contracts; and LangSmith environment-controlled tracing.
+- **Course and external inspiration:** planning, context engineering,
+  filesystem-as-context, narrow Skills, provenance, and storage-layer
+  separation. These sources suggest design patterns but do not prove current
+  project capability.
+- **Architecture decision:** the `AgentHarness` boundary, selected Skills,
+  explicit budgets, four-PR order, and deferred features. These are approved
+  engineering choices, not current implementation facts.
+
+Primary official references:
+
+- [DeepAgents backends](https://docs.langchain.com/oss/python/deepagents/backends)
+- [DeepAgents Skills](https://docs.langchain.com/oss/python/deepagents/skills)
+- [DeepAgents subagents](https://docs.langchain.com/oss/python/deepagents/subagents)
+- [LangChain agents](https://docs.langchain.com/oss/python/langchain/agents)
+- [LangChain Middleware](https://docs.langchain.com/oss/python/langchain/middleware)
+- [LangChain runtime context](https://docs.langchain.com/oss/python/langchain/runtime)
+- [LangGraph persistence](https://docs.langchain.com/oss/python/langgraph/persistence)
+- [LangGraph durable execution](https://docs.langchain.com/oss/python/langgraph/durable-execution)
+- [LangSmith observability](https://docs.langchain.com/langsmith/observability)
+
 ## Goals
 
 1. Establish one public execution path based on `ResearchRun`.
@@ -116,17 +153,23 @@ both LangChain `create_agent` and DeepAgents accept Middleware directly.
    code.
 4. Remove active references to the former product identity and aliases.
 5. Retire the Vue frontend instead of preserving backend contracts for it.
-6. Prefer current LangChain and DeepAgents framework contracts over custom
-   compatibility wrappers.
-7. Keep business authority, Evidence constraints, and durable workflow safety
-   in application-owned code.
-8. Publish a coherent backend-and-CLI `v0.1.0` release with current
+6. Replace custom harness plumbing with current LangChain and DeepAgents
+   contracts where the framework now provides the required primitive.
+7. Use DeepAgents-native planning, run-scoped virtual filesystem, context
+   management, selected Skills, and compiled subagents without transferring
+   business authority to the harness.
+8. Keep business authority, Evidence constraints, and durable workflow safety
+   in application-owned code behind stable interfaces.
+9. Publish a coherent backend-and-CLI `v0.1.0` release with current
    documentation and reproducible verification.
 
 ## Non-Goals
 
 - Build the React frontend.
-- Add runtime Skills, long-term memory, Async Subagents, or LLM review.
+- Add persistent long-term Agent memory, Async Subagents, or LLM review.
+- Add ContextSeek, OceanBase, SeekDB, AgentSeek, or AgentSeek API as runtime
+  dependencies.
+- Make Skills writable at runtime or allow Skills to become business authority.
 - Replace the application ledger with LangGraph checkpoints or LangSmith.
 - Replace the existing durable review system with generic HITL Middleware.
 - Add RBAC, multi-instance workers, PostgreSQL, tenancy, or public deployment.
@@ -164,6 +207,19 @@ version.
 boundaries are already coherent and tested. Rewriting them would add risk
 without removing the actual duplicated surfaces.
 
+### E. Adopt an external harness, context, or database stack
+
+**Rejected for `v0.1.0`.** AgentSeek, AgentSeek API, ContextSeek, and
+`langchain-oceanbase` contain useful design ideas, but adopting them would add a
+second harness, a second API/runtime contract, or a new storage authority before
+the current product boundary is clean. They are references, not dependencies.
+
+### F. Isolate a DeepAgents-native harness behind an application port
+
+**Adopted.** Use current DeepAgents and LangChain primitives inside one adapter,
+preserve an application-owned `ExecutionOutcome`, and prevent framework graph
+state from leaking into domain repositories or public API contracts.
+
 ## Locked Architecture
 
 ### Framework layering
@@ -171,18 +227,22 @@ without removing the actual duplicated surfaces.
 ```mermaid
 flowchart TD
     Caller["Caller / Tool Client"] --> API["FastAPI run API"]
-    API --> App["Application orchestration"]
-    App --> Coordinator["DeepAgents research coordinator"]
+    API --> App["ResearchExecutionService"]
+    App --> Port["AgentHarness interface"]
+    Port --> Adapter["DeepAgentsHarness adapter"]
+    Adapter --> Coordinator["DeepAgents coordinator"]
     Coordinator --> Researchers["LangChain compiled researchers"]
     Researchers --> Tools["Bounded source tools"]
-    Coordinator --> Result["Canonical result builder"]
+    Adapter --> Outcome["ExecutionOutcome"]
+    Outcome --> App
+    App --> Result["Canonical result builder"]
     Result --> Ledger["Application DB"]
     Ledger --> Review["Review / Verification / Publication"]
     Review --> Gate["LangGraph durable gate"]
     Coordinator -. compiled graph .-> Runtime["LangGraph runtime"]
     Researchers -. compiled graph .-> Runtime
     Gate -. checkpoint position .-> Checkpoint["LangGraph checkpoint DB"]
-    App -. privacy-first diagnostics .-> Trace["LangSmith"]
+    Adapter -. privacy-first diagnostics .-> Trace["LangSmith"]
 ```
 
 Responsibilities:
@@ -190,18 +250,71 @@ Responsibilities:
 | Layer | Authority |
 |---|---|
 | LangChain | Agent creation, Middleware, structured output, tools, model abstraction |
-| DeepAgents | coordinator harness, planning, context management, subagent dispatch |
+| DeepAgents adapter | planning, run-scoped VFS, context management, Skills, subagent dispatch |
 | LangGraph | graph execution, streaming, checkpoints, interrupt and resume |
+| Application services | run lifecycle, outcome normalization, finalization and delivery policy |
 | Application DB | ResearchRun, Evidence, artifact, review, verification, publication and delivery truth |
-| LangSmith | diagnostic traces only |
+| LangSmith | privacy-first diagnostic traces and evaluation only |
 
 LangGraph is not described as an incidental dependency. It is the durable
 workflow runtime. LangChain is not omitted as a transitive implementation
 detail because the project directly uses its Agent and Middleware APIs.
 
+### Framework isolation boundary
+
+The application depends on a narrow `AgentHarness` port, not on
+`create_deep_agent` or LangGraph state dictionaries:
+
+```text
+ResearchExecutionService.execute(ExecutionRequest)
+  -> AgentHarness.execute(HarnessRequest)
+  -> ExecutionOutcome
+```
+
+`HarnessRequest` contains only application-approved execution inputs:
+
+- query;
+- `thread_id`, `run_id`, and `segment_id`;
+- selected profile ID;
+- server-owned source and aggregate policy;
+- bounded upload/workspace references when the profile permits them; and
+- tracing metadata that contains no private payload by default.
+
+`ExecutionOutcome` remains application-owned and carries:
+
+- terminal execution status or bounded failure kind;
+- normalized final text or structured packet;
+- frozen Evidence snapshot;
+- value-free diagnostics;
+- token and call usage;
+- report candidates represented as virtual paths plus content, not host paths;
+  and
+- timestamps required by fenced finalization.
+
+`ResearchExecutionService` creates the run accumulator before invoking the
+harness. The profile compiler gives source tools a narrow application-owned
+Evidence sink; tool results are normalized into that sink during execution.
+The adapter freezes the sink into `ExecutionOutcome`, and only the application
+finalizer writes the Evidence ledger. The sink exposes no repository methods
+to the model, Skills, or DeepAgents filesystem.
+
+Only the adapter and Agent factory modules may import DeepAgents. API routes,
+repositories, result builders, Evidence services, review, verification, and
+publication modules must not:
+
+- read DeepAgents graph state directly;
+- store DeepAgents message objects as business records;
+- infer delivery state from a checkpoint;
+- write Evidence through a Skill or VFS side effect; or
+- make public contracts depend on DeepAgents internal node names.
+
+This boundary allows a future DeepAgents upgrade or replacement without
+rewriting the application ledger. It does not create a permanent dual stack:
+the legacy custom harness is deleted after parity is proven.
+
 ### Agent composition
 
-The generic coordinator remains a DeepAgent.
+The generic coordinator remains a DeepAgent created through the adapter.
 
 The three specialized generic researchers are compiled as LangChain agents and
 registered as DeepAgents `CompiledSubAgent` values:
@@ -223,19 +336,158 @@ Each researcher has:
 - stateless per-invocation execution unless a later approved design proves a
   need for subagent checkpoint state.
 
+The generic coordinator disables the injected general-purpose subagent. Only
+the three named researchers are available through the synchronous DeepAgents
+`task` dispatch contract.
+
 Delete the custom `BaseAgent`, `AgentContext`, `AgentConfig`, module-level
 subagent singleton compatibility exports, and `_resolve_subagent` adapter when
 the compiled-subagent path has equivalent tests.
 
 The Talent researcher remains a direct LangChain agent because it is a bounded
-structured-output researcher, not a general-purpose DeepAgent.
+structured-output researcher, not a general-purpose DeepAgent. It retains
+`ToolStrategy(ResearchPacket)`, receives declared Evidence through
+application-owned preloading, and has no Skills, VFS, arbitrary memory, or
+subagent dispatch.
+
+### DeepAgents backend and virtual filesystem
+
+The generic harness uses one `CompositeBackend`:
+
+```text
+CompositeBackend
+  default -> StateBackend
+  /skills/ -> read-only FilesystemBackend(virtual_mode=True)
+```
+
+`StateBackend` owns run-scoped working files, plans, intermediate notes, and
+report drafts. This keeps the virtual workspace inside graph state and prevents
+host filesystem paths from becoming application contracts.
+
+The `/skills/` route exposes only the checked-in repository Skills directory.
+The `FilesystemBackend` is created with `virtual_mode=True`; filesystem
+permissions apply first-match-wins rules in this order:
+
+1. deny writes to `/skills/**`;
+2. allow reads from `/skills/**`;
+3. allow reads and writes under `/workspace/**`;
+4. deny reads and writes for `/**`.
+
+The coordinator prompt and report builder use `/workspace/` as the only
+mutable VFS root. Permissions are a defense for DeepAgents built-in filesystem
+tools only; custom source tools continue to enforce their own domain policy.
+
+The VFS replaces the custom process-wide `SharedContext` fact store. Named
+researchers return bounded task results to the coordinator; the coordinator may
+write working notes under `/workspace/`. Source-tool results are still captured
+by the application-owned run accumulator, so removing `publish_fact` and
+`query_facts` does not remove Evidence.
+
+The built-in filesystem `write_file` contract replaces the host-writing
+`generate_markdown` Agent tool. PDF conversion is removed from the Agent tool
+surface for `v0.1.0`; the canonical deliverable is Markdown. A future PDF
+export, if required, is a deterministic application service over a ready
+artifact, not an autonomous Agent side effect.
+
+Generic uploads are ingested before graph execution:
+
+1. the application validates the upload identity and filename;
+2. bounded parsers extract supported content without exposing a host path;
+3. the adapter seeds normalized content under `/workspace/uploads/`; and
+4. the Agent reads it with the built-in filesystem tools.
+
+The host-reading `read_file_content` Agent tool is removed after equivalent
+Markdown, text, PDF, Word, and spreadsheet ingest tests pass. Talent continues
+to receive no uploads.
+
+No persistent `StoreBackend` is introduced in `v0.1.0`. Cross-run memory,
+user-scoped namespaces, semantic retrieval, and automatic memory evolution
+require a separate authority and privacy design.
+
+The application finalizer reads report candidates from the adapter outcome.
+It never scans arbitrary host directories and never treats VFS content as
+Evidence unless a bounded source tool already published the corresponding
+Evidence entry through the application accumulator.
+
+### Runtime context
+
+Define one immutable runtime context schema for framework-facing execution:
+
+```text
+ResearchRuntimeContext
+  thread_id
+  run_id
+  segment_id
+  profile_id
+  allowed_source_domains
+  allowed_source_types
+  allowed_aggregate_ids
+```
+
+The adapter passes this object through `context_schema`. Tools and Middleware
+read it through `ToolRuntime` or the LangGraph runtime rather than module-level
+lookups.
+
+This replaces ContextVars only for framework invocation context. ContextVars
+that still bridge non-framework callbacks or compatibility-free monitoring may
+remain temporarily until their consumers accept explicit run identity. The
+release criterion is no cross-run leakage, not a mechanical ban on
+`ContextVar`.
+
+Request payloads cannot widen runtime context. The profile compiler derives
+source domains, source types, aggregates, tools, Skills, permissions, and
+budgets from server-owned policy.
+
+### Controlled Skills
+
+`v0.1.0` introduces two checked-in, read-only DeepAgents Skills for the generic
+coordinator:
+
+```text
+skills/research-planning/SKILL.md
+skills/evidence-synthesis-and-reporting/SKILL.md
+```
+
+`research-planning` teaches decomposition, source-selection discipline, and
+when to delegate to each named researcher.
+
+`evidence-synthesis-and-reporting` teaches how to organize findings, expose
+gaps and limitations, and write the canonical Markdown report candidate to
+`/workspace/research-report.md`.
+
+Skills may influence planning and presentation. They may not:
+
+- create or mutate ResearchRun, Evidence, review, verification, publication, or
+  delivery records;
+- declare a source verified;
+- override profile tools, permissions, or call budgets;
+- write to their own Skill files;
+- contain private Career context, credentials, local absolute paths, or
+  unverified metrics; or
+- become the only definition of a public contract.
+
+Skill content is versioned with the repository and covered by tests that load
+the real files through the configured backend.
 
 ### Middleware policy
 
 Framework Middleware is preferred for provider-agnostic Agent mechanics.
 Application code remains responsible for domain authority.
 
-Adopt for `v0.1.0`:
+The generic DeepAgent explicitly relies on and compatibility-tests the
+DeepAgents built-in harness stack provided by the pinned version:
+
+- `TodoListMiddleware` for planning state;
+- `FilesystemMiddleware` for VFS tools;
+- `SummarizationMiddleware` for long-context compression;
+- `SubAgentMiddleware` for synchronous named-researcher dispatch; and
+- `PatchToolCallsMiddleware` for incomplete tool-call repair.
+
+The adapter does not reimplement these capabilities. A dependency upgrade must
+pass a compatibility test for their presence, relative ordering, exposed tools,
+and profile exclusions before the constraints file changes.
+
+Application-owned profile assembly adds:
 
 - existing malformed structured-output recovery Middleware;
 - `ModelCallLimitMiddleware` for run-level model budgets;
@@ -253,7 +505,7 @@ only in server-owned policy:
 | network researcher | 20 | `internet_search` 12 |
 | database researcher | 20 | SQL/data tools 12 global |
 | knowledge-base researcher | 20 | RAG tools 12 global |
-| Talent researcher | 12 | 0 |
+| Talent researcher | 12 | no tools exposed |
 
 These values exceed the highest checked-in historical successful generic model
 call count while creating an explicit failure boundary. They are release
@@ -262,7 +514,7 @@ defaults, not performance claims.
 `recursion_limit` remains only as a final graph safety ceiling. It does not
 duplicate normal model/tool budgeting.
 
-Both call-limit Middleware instances use fail-closed error behavior. The
+Call-limit Middleware uses `exit_behavior="error"`. The
 application maps framework limit failures to a stable
 `call_budget_exceeded` failure kind and persists the terminal run through the
 same fenced failure path as other execution failures.
@@ -272,10 +524,68 @@ tool-specific retry and backoff. Do not add model fallback Middleware over the
 existing provider compatibility wrapper until it can preserve the
 `thinking × tool_choice` contract.
 
-Defer `SummarizationMiddleware`, `ContextEditingMiddleware`, `PIIMiddleware`,
-and dynamic tool selection until a benchmark demonstrates a specific problem.
-Do not use generic `HumanInTheLoopMiddleware` to replace the durable review
-ledger and gate.
+Defer additional `ContextEditingMiddleware`, `PIIMiddleware`, dynamic tool
+selection, and generic retry/fallback Middleware until a measured problem
+justifies them. Do not use generic `HumanInTheLoopMiddleware` to replace the
+durable review ledger and gate.
+
+### Long-task and durability semantics
+
+For `v0.1.0`, "long-task research Agent" means:
+
+- asynchronous run execution;
+- bounded multi-agent delegation;
+- planning and run-scoped VFS;
+- automatic context summarization;
+- frozen Evidence on failure, timeout, or cancellation;
+- durable application-owned terminal state; and
+- auditable result/review/verification/publication state.
+
+It does not mean that an interrupted generic research graph resumes from the
+exact last model or tool call after process death. The existing durable
+LangGraph gate remains specific to controlled review. Main-research
+kill-and-resume requires a later design covering side-effect replay,
+idempotency, checkpointer ownership, and tool re-execution.
+
+Async Subagents are deferred. In the current DeepAgents contract they target
+deployed or remote graph IDs, add another operations surface, and increase
+parallel model cost. Synchronous compiled researchers remain the replacement
+boundary for the current custom subagents.
+
+### External design references
+
+The following projects are reviewed as design references only:
+
+| Project | Borrow | Do not adopt for `v0.1.0` |
+|---|---|---|
+| [AgentSeek](https://github.com/ob-labs/agentseek) | harness/plugin separation, runtime tape concepts | second harness, Bub runtime, package dependency |
+| [AgentSeek API](https://github.com/ob-labs/agentseek-api) | thread/run API ergonomics | overlapping server/runtime and not-production-ready surface |
+| [ContextSeek](https://github.com/ob-labs/contextseek) | scope isolation, provenance, controlled memory evolution | semantic memory authority or automatic store/compact/dream |
+| [langchain-oceanbase](https://github.com/oceanbase/langchain-oceanbase) | Checkpointer/Store/Vector separation | new database infrastructure without a proven requirement |
+
+No external reference may become a transitive business authority. Future
+adoption requires an ADR, a benchmark or operational requirement, migration
+and rollback design, and proof that Evidence and publication authority remain
+application-owned.
+
+### LangSmith observability boundary
+
+LangSmith tracing remains environment-controlled and privacy-first by default:
+
+```text
+LANGSMITH_HIDE_INPUTS=true
+LANGSMITH_HIDE_OUTPUTS=true
+```
+
+Trace metadata may include opaque run identity, profile ID, timing, model/tool
+names, bounded failure codes, and Middleware hierarchy. It must not include
+query text, Evidence content, review reasons, uploaded content, credentials, or
+host paths.
+
+Tracing failure never changes execution, review, verification, publication, or
+delivery state. Evaluations may read canonical artifacts and bounded run
+projections, but they do not write business authority back through LangSmith.
+Historical trace projects remain historical records and are not migrated.
 
 ### Canonical execution API
 
@@ -316,14 +626,17 @@ application policy.
 
 The canonical finalizer:
 
-1. selects the newest non-empty Markdown report created during the run;
-2. otherwise builds a bounded fallback Markdown artifact from
+1. reads the exact `/workspace/research-report.md` candidate captured in
+   `ExecutionOutcome`;
+2. rejects empty, non-text, or UTF-8 content larger than 1 MiB;
+3. if the candidate is absent or rejected, builds a bounded fallback Markdown
+   artifact from
    `last_agent_text`, query, and value-free diagnostics;
-3. never exposes an absolute workspace path;
-4. stores the content in `run_artifacts_v2`;
-5. computes a SHA-256 content hash;
-6. writes artifact and terminal run state in the same fenced transaction; and
-7. emits the result artifact ID in the run projection.
+4. never scans a host directory or exposes a workspace path;
+5. stores the content in `run_artifacts_v2`;
+6. computes a SHA-256 content hash;
+7. writes artifact and terminal run state in the same fenced transaction; and
+8. emits the result artifact ID in the run projection.
 
 Artifact IDs and kinds:
 
@@ -534,7 +847,7 @@ that could hide new runtime compatibility.
 
 Consumer cutover is a hard prerequisite for removing provider compatibility.
 
-Before PR2 removes the old runtime:
+Before PR3 removes the old runtime:
 
 1. rotate the local API key without printing it;
 2. update the first-party integration to the canonical repository, Tool
@@ -551,8 +864,8 @@ Before PR2 removes the old runtime:
 Consumer migration is private operational work. Private paths, credentials, or
 job-search context never enter the public repository.
 
-If the smoke fails, do not merge PR2. Fix the canonical consumer or result
-contract; do not reintroduce legacy aliases.
+If the smoke fails, do not merge PR2 or start PR3. Fix the canonical consumer
+or result contract; do not reintroduce legacy aliases.
 
 ## State Machine
 
@@ -583,29 +896,63 @@ Talent + blocked -> no delivery
 
 ## Delivery Plan
 
-### PR1: Canonical Run Delivery And Framework Alignment
+### PR1: DeepAgents-Native Harness
 
-Purpose: make the canonical path complete before deleting the old path.
+Purpose: replace custom harness plumbing behind a stable application boundary
+without changing public API, persistence, or delivery semantics.
+
+Key changes:
+
+- introduce `AgentHarness`, `HarnessRequest`, and `ExecutionOutcome`;
+- implement the DeepAgents adapter and route `ResearchExecutionService`
+  through the port;
+- compile the three researchers with LangChain `create_agent` and register
+  them as DeepAgents `CompiledSubAgent` values;
+- configure the run-scoped `CompositeBackend`, immutable runtime context,
+  permissions, built-in DeepAgents Middleware, and profile call budgets;
+- add the two read-only generic Skills;
+- disable the injected general-purpose subagent;
+- replace `SharedContext`, host report writes, and the upload-reading Agent tool
+  with VFS task results, built-in filesystem tools, and bounded upload ingest;
+- keep Talent on its direct bounded LangChain path;
+- prove output, Evidence, timeout, cancellation, telemetry, and tool-boundary
+  parity; and
+- delete custom subagent wrappers and singleton compatibility exports after
+  parity passes.
+
+PR1 must not change the public API or application database schema. The old
+task runtime remains temporarily available, but both canonical and legacy
+callers use the same application-owned execution outcome boundary.
+
+During PR1 and PR2 only, the legacy task finalizer may materialize its existing
+task output from the normalized report content in `ExecutionOutcome`. It may
+not restore host workspace access to the Agent. This transition ends when PR3
+deletes the legacy finalizer and task persistence.
+
+### PR2: Canonical Run Delivery And Consumer Cutover
+
+Purpose: make the canonical run path complete and prove first-party consumers
+before deleting the old path.
 
 Key changes:
 
 - generic run result artifact and result resolver;
 - `GET /api/runs/{run_id}/result`;
 - canonical Tool Client `run` and `result`;
-- LangChain Middleware budgets;
-- LangChain compiled researchers registered as DeepAgents
-  `CompiledSubAgent`;
-- removal of custom subagent compatibility wrappers after parity tests;
-- first-party consumer migration and smoke completed before PR readiness.
+- atomic artifact and terminal-state finalization;
+- first-party consumer migration, key rotation, focused tests, and bounded
+  smoke completed before PR readiness; and
+- current API, Tool Client, and integration documentation updated with the
+  canonical result contract.
 
-PR1 does not remove old endpoints, legacy aliases, or Vue. This keeps every
-commit deployable while the canonical replacement is proven. PR1 continues to
-use the repository's existing application-database setting so it does not
-create split-brain storage while the old runtime remains present.
+PR2 does not remove old endpoints, legacy aliases, or Vue. It continues to use
+the existing application-database setting so it does not create split-brain
+storage while the old runtime remains present.
 
-### PR2: Legacy Runtime And Frontend Removal
+### PR3: Legacy Runtime And Frontend Removal
 
-Purpose: remove all duplicated runtime and active old identity surfaces.
+Purpose: remove all duplicated runtime and active old identity surfaces after
+the canonical replacement and consumer smoke are proven.
 
 Key changes:
 
@@ -623,9 +970,10 @@ Key changes:
 - provide explicit database archive/drop tooling; and
 - update active contracts and ADRs.
 
-PR2 must not add a compatibility tombstone.
+PR3 must not add a compatibility tombstone or retain a hidden legacy feature
+flag.
 
-### PR3: Release Hardening And Documentation
+### PR4: Release Hardening And Documentation
 
 Purpose: prove the clean architecture and publishable repository state.
 
@@ -637,6 +985,8 @@ Key changes:
   prove they are unused;
 - update README, architecture, state machine, data model, Tool Client guide,
   operations docs, PRD, OpenSpec config, and docs index;
+- document the LangChain/DeepAgents/LangGraph/LangSmith layering and the
+  `AgentHarness` isolation boundary;
 - update `VERSION` to `0.1.0`;
 - rewrite `CHANGELOG` Unreleased as the `v0.1.0` release entry;
 - update security and installation instructions;
@@ -644,7 +994,7 @@ Key changes:
 - run documentation drift and legacy scans; and
 - produce release notes and migration instructions.
 
-PR3 contains no React implementation.
+PR4 contains no React implementation.
 
 ## File-Level Change Boundary
 
@@ -652,14 +1002,31 @@ PR3 contains no React implementation.
 
 ```text
 agent/runtime_env.py
+agent/shared_context.py
 agent/sub_agents/base.py
+agent/sub_agents/database_query_agent.py
+agent/sub_agents/knowledge_base_agent.py
+agent/sub_agents/network_search_agent.py
 api/persistence.py
 api/task_finalizer.py
+tools/markdown_tools.py
+tools/pdf_tools.py
+tools/shared_context_tools.py
+tools/upload_file_read_tool.py
 tools/deep_search_agent_tool.py
 tests/unit/test_runtime_env.py
 tests/unit/test_deep_search_agent_tool.py
+tests/unit/test_agent_context.py
+tests/unit/test_database_query_agent.py
+tests/unit/test_knowledge_base_agent.py
+tests/unit/test_network_search_agent.py
 tests/unit/test_persistence.py
+tests/unit/test_shared_context.py
+tests/unit/test_shared_context_integration.py
+tests/unit/test_sub_agent_shared_context.py
 tests/unit/test_task_finalizer.py
+tests/integration/test_agent_delegation.py
+tests/integration/test_report_generation.py
 tests/integration/test_task_finalization_flow.py
 tests/integration/test_research_api.py
 frontend/
@@ -674,12 +1041,28 @@ test a removed contract or a still-authoritative run contract.
 
 | File | Required responsibility |
 |---|---|
+| `agent/harness_contracts.py` | define application-owned `AgentHarness`, request and outcome contracts with no DeepAgents imports |
+| `agent/deepagents_harness.py` | implement the only DeepAgents adapter and normalize framework output |
+| `agent/runtime_context.py` | define immutable `ResearchRuntimeContext` for `context_schema` and `ToolRuntime` |
 | `agent/profile_middleware.py` | construct profile-owned framework Middleware, with no API imports |
 | `agent/research_agents.py` | compile LangChain researchers and DeepAgents `CompiledSubAgent` registrations |
+| `api/research_execution_service.py` | own run execution orchestration through `AgentHarness` |
+| `api/upload_ingest.py` | validate and extract approved uploads into bounded VFS seed content |
 | `api/database.py` | resolve the single canonical application database path |
 | `api/run_result_service.py` | build generic artifacts and resolve deliverable results without HTTP concerns |
 | `scripts/retire_legacy_database.py` | verify, back up, export, optionally drop, and restore legacy database tables |
 | `scripts/check_canonical_identity.py` | enforce active-surface identifier and removed-contract rules in CI |
+
+### Expected checked-in Skills
+
+```text
+skills/research-planning/SKILL.md
+skills/evidence-synthesis-and-reporting/SKILL.md
+```
+
+These files are public product instructions, not private career prompts. They
+are loaded read-only by the generic DeepAgents harness and are absent from the
+Talent profile.
 
 ### Expected current-document updates
 
@@ -753,15 +1136,36 @@ dual-write or alias behavior.
 
 | Test | Required result |
 |---|---|
+| application service uses `AgentHarness` port | no DeepAgents import outside adapter/factory modules |
+| adapter returns `ExecutionOutcome` | application-owned schema, no leaked graph state |
 | coordinator compiles through DeepAgents | pass |
 | researchers compile through LangChain `create_agent` | pass |
 | researchers are registered as `CompiledSubAgent` | pass |
-| profile tools and filesystem boundaries | unchanged or stricter |
-| Middleware order and configured limits | exact contract assertions |
+| injected general-purpose subagent | disabled |
+| `CompositeBackend` routes | `StateBackend` default and read-only virtual `/skills/` route |
+| VFS isolation | concurrent runs cannot read or overwrite each other's files |
+| VFS report creation | built-in filesystem tools create the report candidate without host writes |
+| Skill loading | both generic Skills load from real checked-in files |
+| Skill immutability | writes to `/skills/**` fail closed |
+| upload ingest | supported files seed bounded `/workspace/uploads/` content |
+| upload path privacy | Agent messages, outcome and telemetry contain no host path |
+| unsupported or malformed upload | bounded failure, no partial VFS seed |
+| Talent Skill/VFS boundary | no Skills, filesystem tools, memory or subagent dispatch |
+| runtime context | correct identity/policy through `context_schema` and `ToolRuntime` |
+| runtime context concurrency | no cross-run policy or identity leakage |
+| built-in DeepAgents Middleware | expected presence, order and exposed tools for pinned version |
+| profile tools and filesystem boundaries | exact server-owned allowlist and catch-all deny behavior |
+| profile call limits | exact contract assertions with server-owned values |
 | model limit exceeded | bounded failure outcome, later runs unaffected |
 | tool limit exceeded | bounded failure outcome, no silent continuation |
 | structured-output recovery | existing RED/GREEN behavior retained |
 | retries | no duplicate generic and tool-specific retry layers |
+| custom subagent wrappers | absent after parity tests pass |
+| custom `SharedContext` | absent; task outputs and VFS cover working context |
+| Evidence authority | no Skill, VFS or checkpoint writes Evidence directly |
+| LangSmith disabled | execution and business persistence remain correct |
+| LangSmith privacy defaults | inputs and outputs hidden |
+| trace metadata | no query, Evidence, review reason, upload content, secret or host path |
 
 ### Canonical run delivery
 
@@ -839,25 +1243,35 @@ No frontend build is required because the frontend is intentionally removed.
 
 `v0.1.0` may be tagged only when all conditions hold:
 
-1. `POST /api/runs` is the only execution creation endpoint.
-2. every successful run has one resolvable canonical result artifact.
-3. generic and Talent delivery behavior is explicitly tested.
-4. task persistence and task finalization code are absent.
-5. thread-scoped execution, telemetry, token, research, and WebSocket routes
+1. application orchestration depends on `AgentHarness`, and DeepAgents imports
+   are confined to adapter/factory modules.
+2. the generic harness uses the approved DeepAgents VFS, built-in Middleware,
+   named compiled researchers, immutable runtime context, and two read-only
+   Skills.
+3. custom `SharedContext`, host-writing report tools, and the host-reading
+   upload Agent tool are absent from the active harness.
+4. Talent remains bounded with no Skills, filesystem, memory, or subagents.
+5. framework output is normalized to application-owned `ExecutionOutcome`
+   before persistence or delivery decisions.
+6. `POST /api/runs` is the only execution creation endpoint.
+7. every successful run has one resolvable canonical result artifact.
+8. generic and Talent delivery behavior is explicitly tested.
+9. task persistence and task finalization code are absent.
+10. thread-scoped execution, telemetry, token, research, and WebSocket routes
    are absent.
-6. the Vue frontend and its build/deployment pipeline are absent.
-7. active runtime and current docs contain no unapproved former identity.
-8. canonical Tool Client and first-party consumer smoke pass.
-9. LangChain, DeepAgents, and LangGraph responsibilities are accurately
-   documented.
-10. framework Middleware owns generic call budgets without duplicate manual
+11. the Vue frontend and its build/deployment pipeline are absent.
+12. active runtime and current docs contain no unapproved former identity.
+13. canonical Tool Client and first-party consumer smoke pass.
+14. LangChain, DeepAgents, LangGraph, and LangSmith responsibilities are
+    accurately documented.
+15. framework Middleware owns generic call budgets without duplicate manual
     counters.
-11. application-owned Evidence, review, verification, publication, and
+16. application-owned Evidence, review, verification, publication, and
     delivery authority remains unchanged.
-12. existing historical data is protected by backup and explicit migration.
-13. clean constraints installation and the full test matrix pass.
-14. `VERSION` and release notes identify `0.1.0`.
-15. the user separately authorizes push, merge, tag, and GitHub Release.
+17. existing historical data is protected by backup and explicit migration.
+18. clean constraints installation and the full test matrix pass.
+19. `VERSION` and release notes identify `0.1.0`.
+20. the user separately authorizes push, merge, tag, and GitHub Release.
 
 ## Documentation And Career Boundary
 
@@ -880,9 +1294,11 @@ authoritative.
 
 ## Final Decision
 
-Proceed with the three-PR canonical runtime reset and publish no release until
+Proceed with the four-PR canonical runtime reset and publish no release until
 the final release gate passes.
 
 The design explicitly refuses compatibility code for the former product
 identity, task runtime, or Vue frontend. Historical records are preserved as
-history, not kept alive as active runtime branches.
+history, not kept alive as active runtime branches. The DeepAgents-native
+harness is adopted behind an application boundary so framework upgrades do not
+rewrite the Evidence-governed business architecture.
