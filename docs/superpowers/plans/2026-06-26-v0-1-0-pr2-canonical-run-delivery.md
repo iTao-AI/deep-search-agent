@@ -163,6 +163,39 @@ Assert:
 - timeout/failure writes no ready result;
 - retrying the same fenced finalization does not duplicate artifacts.
 
+The stale-writer test must use two connections against the same WAL database:
+
+```python
+first = finalize_run_transaction(
+    run_id=run_id,
+    segment_id=segment_id,
+    expected_state_version=0,
+    allowed_previous_statuses={"running"},
+    execution_status="completed",
+    delivery_status="ready",
+    evidence_entries=[],
+    artifacts=[artifact],
+)
+second = finalize_run_transaction(
+    run_id=run_id,
+    segment_id=segment_id,
+    expected_state_version=0,
+    allowed_previous_statuses={"running"},
+    execution_status="completed",
+    delivery_status="ready",
+    evidence_entries=[],
+    artifacts=[different_artifact],
+)
+assert first is True
+assert second is False
+assert stored_artifact_ids(db_path, run_id) == ["research-report.md"]
+assert run_state_version(db_path, run_id) == 1
+```
+
+This locks the mechanism to the existing
+`UPDATE ... WHERE state_version = ? AND execution_status IN (...)` fence and
+the surrounding SQLite transaction.
+
 - [ ] **Step 2: Run RED**
 
 ```bash

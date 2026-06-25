@@ -265,7 +265,19 @@ Expected health:
 Run durable Docker compatibility and Evidence verification canary tests
 serially to avoid Compose resource/report races.
 
-- [ ] **Step 4: Tool Client and consumer**
+- [ ] **Step 4: Add clean-install CI smoke**
+
+Extend `.github/workflows/ci.yml` with a separate job that:
+
+1. checks out the repository;
+2. installs Python 3.11 from `requirements.txt` plus `constraints.txt`;
+3. runs `scripts/report_runtime_versions.py`;
+4. imports `api.server:app`;
+5. runs the documentation contract and release metadata tests.
+
+Do not reuse a pre-populated developer `.venv` or Docker image layer.
+
+- [ ] **Step 5: Tool Client and consumer**
 
 Run:
 
@@ -276,7 +288,7 @@ Run:
 Then repeat the bounded first-party run/result smoke with a non-printed key.
 Verify no secret in stdout, stderr, logs, or diff.
 
-- [ ] **Step 5: Documentation and security**
+- [ ] **Step 6: Documentation and security**
 
 Run the repository link checker or add one if absent. Run:
 
@@ -288,7 +300,7 @@ git grep -nE '(API_KEY|SECRET|TOKEN)=([^.$<{].+)' -- ':!*.example'
 Inspect Dependabot/security alerts separately; do not bundle unrelated major
 dependency upgrades into this PR.
 
-- [ ] **Step 6: Record exact evidence**
+- [ ] **Step 7: Record exact evidence**
 
 Update README/release notes only with fresh command output:
 
@@ -298,7 +310,7 @@ Update README/release notes only with fresh command output:
 - proof checker;
 - installed framework versions.
 
-- [ ] **Step 7: Commit generated release evidence**
+- [ ] **Step 8: Commit generated release evidence**
 
 ```bash
 git commit -m "test(release): record v0.1.0 verification"

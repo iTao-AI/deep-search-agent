@@ -120,6 +120,7 @@ def test_harness_request_is_immutable():
         segment_id="segment_1",
         profile_id="generic",
         scope={},
+        trace_metadata={"research_run_id": "run_1"},
     )
     with pytest.raises(FrozenInstanceError):
         request.run_id = "other"
@@ -169,6 +170,7 @@ class HarnessRequest:
     segment_id: str
     profile_id: str
     scope: Mapping[str, Any]
+    trace_metadata: Mapping[str, str]
 
 
 @dataclass(frozen=True)
@@ -176,6 +178,12 @@ class ReportCandidate:
     path: PurePosixPath
     content: str
 ```
+
+Add an application-owned `ExecutionObserver` protocol with bounded
+`on_stream_chunk`, `on_error`, and `callbacks()` hooks. The adapter constructs
+the LangChain `config` dictionary from request identity, bounded
+`trace_metadata`, and observer callbacks. Do not put LangChain callback,
+RunnableConfig, or graph objects in `HarnessRequest`.
 
 Keep `ExecutionOutcome` application-owned in `agent/run_result.py`; extend it
 with `report_candidate: ReportCandidate | None` and remove `session_dir` only
@@ -236,6 +244,22 @@ def test_network_researcher_has_only_network_tools():
 Add equivalent exact assertions for database and knowledge researchers. Assert
 the generic profile excludes `general-purpose`, uses the two Skills, and has
 the first-match-wins filesystem permission contract from the spec.
+
+Add exact migration assertions:
+
+```python
+def test_generic_manifest_removes_host_tools_and_general_purpose():
+    manifest = profile_registry.manifest("generic")["harness_policy"]
+    assert "generate_markdown" not in manifest["allowed_tools"]
+    assert "convert_md_to_pdf" not in manifest["allowed_tools"]
+    assert "read_file_content" not in manifest["allowed_tools"]
+    assert "general-purpose" not in manifest["subagents"]
+
+
+def test_unknown_profile_fails_at_registry_boundary():
+    with pytest.raises(KeyError, match="unknown profile"):
+        profile_registry.get("missing-profile")
+```
 
 - [ ] **Step 2: Run RED**
 
@@ -332,6 +356,36 @@ def test_generic_backend_routes_skills_read_only():
     assert not harness.can_read("/etc/passwd")
 
 
+def test_filesystem_permissions_are_enforced_by_real_tools():
+    harness = build_generic_harness(model=FakeModel())
+    with pytest.raises(PermissionError):
+        harness.invoke_filesystem_tool(
+            "write_file",
+            path="/skills/research-planning/SKILL.md",
+            content="overwrite",
+        )
+    harness.invoke_filesystem_tool(
+        "write_file",
+        path="/workspace/test.md",
+        content="ok",
+    )
+    assert harness.invoke_filesystem_tool(
+        "read_file",
+        path="/workspace/test.md",
+    ) == "ok"
+
+
+def test_missing_skills_directory_fails_closed():
+    with pytest.raises(
+        HarnessConfigurationError,
+        match="harness_assets_missing",
+    ):
+        build_generic_harness(
+            model=FakeModel(),
+            skills_root=Path("/missing/skills"),
+        )
+
+
 def test_generic_skills_are_real_and_talent_has_none():
     assert load_skill_names("generic") == {
         "research-planning",
@@ -391,6 +445,11 @@ harness profile contract. Explicitly compatibility-test the built-in
 `TodoListMiddleware`, `FilesystemMiddleware`, `SummarizationMiddleware`,
 `SubAgentMiddleware`, and `PatchToolCallsMiddleware`.
 
+Validate the Skills root before compiling the graph. Missing, unreadable, or
+incomplete required Skill files raise the stable
+`HarnessConfigurationError("harness_assets_missing")`; do not degrade to a
+different prompt/harness configuration.
+
 - [ ] **Step 5: Package Skills**
 
 Add `COPY skills/ skills/` to `Dockerfile.backend`. Ensure `.dockerignore`
@@ -433,8 +492,14 @@ Use a fake `AgentHarness` to prove:
 - timeout/cancellation publish the latest outcome;
 - `call_budget_exceeded` remains stable;
 - report candidate is exact `/workspace/research-report.md`;
+- bounded trace metadata reaches the adapter while application-owned observer
+  callbacks remain outside `HarnessRequest`;
 - legacy finalization consumes outcome content rather than scanning a host
   directory.
+
+Add a regression test that patches `Path.glob`, `Path.iterdir`, and
+`os.scandir` to raise if the legacy finalizer touches `session_dir`; finalizing
+from `report_candidate.content` must still pass.
 
 - [ ] **Step 2: Run RED**
 
