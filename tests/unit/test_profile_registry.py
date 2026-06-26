@@ -29,10 +29,7 @@ def test_generic_manifest_uses_deepagents_native_harness_policy():
         "database_query",
         "network_search",
     ]
-    assert manifest["skills"] == [
-        "/skills/research-planning/",
-        "/skills/evidence-synthesis-and-reporting/",
-    ]
+    assert manifest["skills"] == ["/skills/"]
     assert manifest["filesystem_permissions"] == [
         "deny:write:/skills/**",
         "allow:read:/skills/**",

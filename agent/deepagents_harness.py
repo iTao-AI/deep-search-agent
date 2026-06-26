@@ -197,6 +197,7 @@ def _register_generic_harness_profile(model: Any) -> None:
     register_harness_profile(
         provider,
         HarnessProfile(
+            excluded_tools=frozenset({"execute"}),
             general_purpose_subagent=GeneralPurposeSubagentProfile(
                 enabled=False,
             ),

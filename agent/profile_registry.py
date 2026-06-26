@@ -45,10 +45,7 @@ GENERIC_POLICY = AgentHarnessPolicy(
         "task",
     ),
     subagents=("knowledge_base", "database_query", "network_search"),
-    skills=(
-        "/skills/research-planning/",
-        "/skills/evidence-synthesis-and-reporting/",
-    ),
+    skills=("/skills/",),
     filesystem_permissions=(
         "deny:write:/skills/**",
         "allow:read:/skills/**",

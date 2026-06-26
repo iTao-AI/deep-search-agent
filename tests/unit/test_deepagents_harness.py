@@ -162,6 +162,65 @@ def test_generic_skills_are_real_and_talent_has_none():
     assert load_skill_names("talent-hiring-signal") == set()
 
 
+def test_generic_skills_source_loads_required_skills_with_deepagents_loader(
+    monkeypatch,
+):
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+    from langgraph.runtime import Runtime
+
+    from agent.deepagents_harness import build_generic_harness
+
+    captured = _capture_framework_assembly(monkeypatch)
+    harness = build_generic_harness(model=FakeListChatModel(responses=["done"]))
+
+    skills_middleware = next(
+        item
+        for item in captured["middleware"]
+        if type(item).__name__ == "SkillsMiddleware"
+    )
+    update = skills_middleware.before_agent({}, Runtime(), {})
+
+    assert {skill["name"] for skill in update["skills_metadata"]} == {
+        "research-planning",
+        "evidence-synthesis-and-reporting",
+    }
+    assert {
+        skill["path"]
+        for skill in update["skills_metadata"]
+    } == {
+        "/skills/research-planning/SKILL.md",
+        "/skills/evidence-synthesis-and-reporting/SKILL.md",
+    }
+    assert harness.skills == ("/skills/",)
+
+
+def test_harness_profile_disables_general_purpose_and_execute(monkeypatch):
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
+    import agent.deepagents_harness as deepagents_harness
+
+    registered = {}
+
+    def capture_register(provider, profile):
+        registered["provider"] = provider
+        registered["profile"] = profile
+
+    _capture_framework_assembly(monkeypatch)
+    monkeypatch.setattr(
+        deepagents_harness,
+        "register_harness_profile",
+        capture_register,
+    )
+
+    deepagents_harness.build_generic_harness(
+        model=FakeListChatModel(responses=["done"]),
+    )
+
+    profile = registered["profile"]
+    assert profile.general_purpose_subagent.enabled is False
+    assert profile.excluded_tools == frozenset({"execute"})
+
+
 def test_pinned_deepagents_middleware_stack_and_subagents(monkeypatch):
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
@@ -174,7 +233,10 @@ def test_pinned_deepagents_middleware_stack_and_subagents(monkeypatch):
         getattr(type(item), "serialized_name", None) or type(item).__name__
         for item in captured["middleware"]
     ]
-    assert names == [
+    assert any(name.endswith("ToolExclusionMiddleware") for name in names)
+    assert [
+        name for name in names if not name.endswith("ToolExclusionMiddleware")
+    ] == [
         "TodoListMiddleware",
         "SkillsMiddleware",
         "FilesystemMiddleware",
