@@ -7,12 +7,14 @@
 
 **Goal:** Make `/api/runs` the complete first-party execution path by
 persisting a canonical generic result artifact, exposing `/result`, and moving
-the Tool Client and known consumer to run/result.
+the public Tool Client to run/result. Private first-party consumer migration is
+deferred unless completed and verified in that consumer's own repository.
 
 **Architecture:** Build result artifacts from `ExecutionOutcome` in an
 application service, persist them atomically with terminal run state, and
 resolve deliverability from application-owned publication state. Keep legacy
-routes temporarily alive until the consumer smoke succeeds.
+routes temporarily alive through the rollback window; public repository smoke
+covers Tool Client/API run/result only.
 
 **Tech Stack:** Python 3.11, FastAPI, SQLite WAL, Pydantic, pytest, Docker
 Compose.
@@ -347,7 +349,7 @@ git add tools/decision_research_agent_tool.py \
 git commit -m "feat(cli): retrieve canonical run results"
 ```
 
-## Task 5: Migrate and Prove the First-Party Consumer
+## Task 5: Prove Public Tool Client And Defer Private Consumer
 
 **Public repository files:** none unless current integration docs require
 correction.
@@ -357,7 +359,7 @@ correction.
 Generate and install a replacement without printing it. Do not place it in a
 command argument, diff, test fixture, or transcript.
 
-- [ ] **Step 2: Update the known consumer**
+- [ ] **Step 2: Update the known private consumer, if available**
 
 Change it to:
 
@@ -369,9 +371,11 @@ health service: decision-research-agent only after PR3
 ```
 
 During PR2 the consumer must tolerate the still-legacy health service value
-without using it as routing authority.
+without using it as routing authority. If the private consumer repository is
+not in scope, mark this gate deferred and do not claim it complete from public
+repository tests.
 
-- [ ] **Step 3: Run consumer-focused tests**
+- [ ] **Step 3: Run private consumer-focused tests, if available**
 
 Use the consumer repository's documented command. Record only pass/fail counts
 and command names in the handoff; never copy private paths or secrets into this
@@ -388,9 +392,10 @@ repository.
 
 - [ ] **Step 5: Add public-neutral smoke evidence**
 
-Update `docs/AGENT_INTEGRATION.md` with the canonical sequence and state that a
-first-party consumer smoke passed. Do not name private workspace paths or
-career motivation.
+Update `docs/AGENT_INTEGRATION.md` with the public Tool Client canonical
+sequence. State private consumer migration as deferred unless the separate
+consumer repository smoke actually passed. Do not name private workspace paths
+or career motivation.
 
 - [ ] **Step 6: Commit documentation, if changed**
 
@@ -419,6 +424,7 @@ Required manual evidence:
   marked deferred;
 - bounded run/result smoke passes;
 - rotated key is absent from logs, diff, and committed files;
-- legacy routes remain temporarily available but are no longer used by
-  first-party consumers;
+- legacy routes remain temporarily available; the public Tool Client uses
+  run/result, while private consumers remain deferred unless separately
+  verified;
 - worktree is clean after commits.

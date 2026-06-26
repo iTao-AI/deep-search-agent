@@ -153,6 +153,13 @@ def _safe_excerpt(value: str, *, limit: int = 4000) -> str:
     return _sanitize_result_content(value, limit=limit)
 
 
+def _contains_unsafe_result_content(value: str) -> bool:
+    return bool(
+        _HOST_ABSOLUTE_PATH_RE.search(value)
+        or _CHECKPOINT_OR_TRACEBACK_RE.search(value)
+    )
+
+
 def resolve_run_result(
     *,
     run_id: str,
@@ -266,6 +273,8 @@ def _valid_artifact(artifact: dict[str, Any] | None) -> bool:
     if not re.fullmatch(r"[0-9a-f]{64}", content_hash):
         return False
     if str(artifact.get("kind", "")).startswith("research_report_"):
+        if _contains_unsafe_result_content(content):
+            return False
         return hashlib.sha256(content.encode("utf-8")).hexdigest() == content_hash
     return True
 
