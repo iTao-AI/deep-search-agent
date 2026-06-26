@@ -24,7 +24,7 @@ market-coverage claim.
    ```bash
    python scripts/real_source_proof.py build-report \
      --manifest benchmarks/real-source-proof/talent-agent-hiring-signals-v1.json \
-     --db-path "$TASKS_DB_PATH" \
+     --db-path "$DECISION_RESEARCH_AGENT_DB_PATH" \
      --run-id "$RUN_ID" \
      --output docs/evidence/p2a-real-source-proof.json
    ```

@@ -7,7 +7,7 @@ def get_allowed_origins() -> list:
     获取允许的 CORS 源列表。
 
     通过 FRONTEND_ORIGIN 环境变量配置前端地址。
-    如果未设置，默认允许 localhost:5173（Vite 开发服务器）。
+    如果未设置，默认允许 localhost:5173（本地 UI 开发服务器）。
 
     Returns:
         list: 允许的源地址列表

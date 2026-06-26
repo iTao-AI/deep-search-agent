@@ -1,68 +1,85 @@
-# PRD：Deep Search Agent
+# PRD: Decision Research Agent
 
-## 产品概述
+## Product Overview
 
-Deep Search Agent 是一个自主规划的信息检索与报告生成智能体。用户用自然语言提问开放性问题，主 Agent 自主拆解任务、委派给专业子 Agent（网络搜索/数据库查询/RAGFlow 知识库），汇总结果并生成 Markdown/PDF 格式的报告。
+Decision Research Agent is a long-running, evidence-driven research agent built
+on LangChain, LangGraph, DeepAgents, and LangSmith diagnostics. It turns
+open-ended research questions into auditable runs, source-backed evidence,
+controlled review decisions, and canonical delivery artifacts.
 
-## 目标用户
+The v0.1.0 product surface is backend-first: HTTP API, WebSocket monitoring,
+Python Tool Client, operator scripts, tests, and documentation. It does not
+ship a bundled frontend.
 
-- **企业知识工作者**：需要跨多个数据源（网络、企业内部数据库、知识库）进行深度调研
-- **数据分析师**：需要快速生成结构化研究报告
-- **决策支持场景**：需要基于多源信息的综合分析输出
+## Target Users
 
-## 核心价值
+- Agent and LLM application engineers who need a reference implementation for
+  evidence-governed long-task research.
+- Operators or first-party automation that need run-scoped research execution
+  and bounded result retrieval.
+- HR or hiring-intelligence workflows that need traceable capability signals
+  from declared evidence.
 
-1. **多源统一**：一次查询覆盖网络搜索、数据库、企业知识库三个数据源
-2. **自主规划**：用户只需提问，Agent 自行决定调用哪些工具、按什么顺序
-3. **结构化输出**：自动生成标准化 Markdown/PDF 报告，包含引用和参考文献
+## Core Value
 
-## 核心功能
+1. **Evidence-governed delivery**: findings, claims, review bundles, and
+   DecisionBrief outputs bind to persisted evidence snapshots instead of raw
+   prompt text.
+2. **Framework-native execution**: DeepAgents handles harness behavior, skills,
+   middleware, runtime context, and tool filtering while the service layer owns
+   business state.
+3. **Auditable run lifecycle**: `ResearchRun`, evidence, review, verification,
+   publication, and canonical result state are persisted in the application DB.
+4. **Operator-safe gates**: durable HITL and evidence verification are
+   default-disabled and require explicit readiness checks before use.
 
-| 功能 | 描述 | 优先级 |
-|------|------|--------|
-| 自然语言任务提交 | 用户输入研究问题，Agent 自主规划 | P0 |
-| 子 Agent 协作 | 网络搜索、数据库查询、知识库检索三个子 Agent | P0 |
-| 实时进度推送 | WebSocket 实时展示 Agent 推理过程 | P0 |
-| 报告生成 | 自动生成 Markdown 和 PDF 格式报告 | P0 |
-| 文件上传分析 | 上传文件作为分析上下文 | P1 |
-| 会话工作空间隔离 | 每次任务独立工作目录，互不干扰 | P0 |
-| Token 用量追踪 | 记录每次调用的 token 消耗 | P1 |
-| 工具韧性 | 外部服务不稳定时自动降级/重试 | P1 |
+## Core Capabilities
 
-## 成功指标
+| Capability | Description | Status |
+|---|---|---|
+| Canonical run execution | `POST /api/runs` creates a run-scoped execution with `thread_id`, `run_id`, and `segment_id` | Implemented |
+| Canonical result delivery | `GET /api/runs/{run_id}/result` returns bounded deliverable artifacts only when ready | Implemented |
+| Generic research profile | DeepAgents-native generic harness with read-only skills and approved tools | Implemented |
+| Talent Hiring Signal profile | Restricted profile, declared evidence scope, deterministic review bundle and DecisionBrief | Implemented |
+| Evidence preservation | Timeout, cancellation, and completion paths preserve frozen evidence through fenced finalization | Implemented |
+| Durable HITL feasibility | Single-node SQLite review gate, disabled by default, with 13-gate safety report | Implemented |
+| Evidence verification authority | Append-only human verification decisions and revisioned publications | Implemented |
+| Tool Client integration | Canonical Python client for health, run, result, review, and evidence commands | Implemented |
 
-- 单次任务端到端完成率 > 80%
-- PDF 报告中文字体正常渲染
-- 多源查询结果有效去重
-- 外部服务不可用时核心功能仍可工作
+## Success Criteria
 
-## 技术约束
+- Backend test suite passes on clean checkout.
+- Active files use the canonical technical identifier
+  `decision-research-agent`.
+- Canonical identity scanner returns no violations.
+- `docker compose config --quiet` succeeds with a generated `.env`.
+- Durable review and evidence verification remain disabled by default.
+- API and Tool Client docs describe only active public contracts.
 
-- LLM：DeepSeek V4 Pro（通过官方 OpenAI 兼容接口，fallback 为 DeepSeek V4 Flash）
-- 框架：LangGraph + DeepAgents SDK
-- 前端：Vue 3 + Vite + TypeScript
-- 数据库：MySQL（业务数据）+ RAGFlow（知识库）
-- 部署目标：Docker Compose
+## Technical Constraints
 
-## 里程碑
+- Agent framework: LangChain.
+- Runtime foundation: LangGraph.
+- Research harness: DeepAgents.
+- Trace diagnostics: LangSmith, privacy-first, not a business ledger.
+- Business ledger: application SQLite database through service-owned
+  repositories.
+- Deployment target: backend Docker service plus optional MySQL dependency.
+- UI: no bundled frontend in v0.1.0; future React UI must consume the same
+  canonical API/result contracts.
 
-| Phase | 目标 | 状态 |
-|-------|------|------|
-| Phase 6A | 跨平台 PDF 生成（摆脱 pywin32） | 规划中 |
-| Phase 6B | Docker 部署（一键启动） | 规划中 |
-| Phase 7a | Prompt 层补强（四阶段门控、报告大纲） | 规划中 |
-| Phase 7b | 工具韧性增强（超时、重试、降级） | 规划中 |
-| Phase 7c | 可观测性增强（Token 追踪、缓存） | 规划中 |
+## Non-Goals For v0.1.0
 
-## 已知限制
+- Multi-tenant deployment, RBAC, Postgres, or multi-replica coordination.
+- Runtime Async Subagents beyond the approved profile architecture.
+- LLM-based evidence verification authority.
+- Browser automation or automatic real-source proof fetching.
+- Bundled Vue or React UI.
+- Legacy task/thread API compatibility.
 
-- PDF 生成目前依赖 pywin32/Word，仅 Windows 可用
-- 无 token 用量追踪，无法评估成本
-- 外部服务（RAGFlow、Tavily）无重试/超时控制
-- 无 Docker 部署方案，新环境配置复杂
+## Change Log
 
-## 变更记录
-
-| 日期 | 变更 |
-|------|------|
-| 2026-05-19 | 初始 PRD 创建 |
+| Date | Change |
+|---|---|
+| 2026-05-19 | Initial PRD created |
+| 2026-06-26 | Rewritten for v0.1.0 canonical backend, DeepAgents-native harness, and legacy runtime removal |

@@ -24,7 +24,7 @@ from scripts.durable_hitl_fixture import create_required_review_fixture
 def seed() -> dict:
     fixture_suffix = uuid.uuid4().hex[:12]
     fixture = create_required_review_fixture(
-        db_path=os.environ["TASKS_DB_PATH"],
+        db_path=os.environ["DECISION_RESEARCH_AGENT_DB_PATH"],
         checkpoint_path=os.environ[
             "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH"
         ],

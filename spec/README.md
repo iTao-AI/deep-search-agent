@@ -1,6 +1,6 @@
 # 技术参考文档 (spec/)
 
-本目录包含 Deep Search Agent 系统的技术参考文档。与 `openspec/specs/` 不同，这里是**系统当前状态的完整快照**，不随 OpenSpec 变更流程自动管理。
+本目录包含 Decision Research Agent 系统的技术参考文档。与 `openspec/specs/` 不同，这里是**系统当前状态的完整快照**，不随 OpenSpec 变更流程自动管理。
 
 ## 文档清单
 

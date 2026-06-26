@@ -13,7 +13,7 @@ AUTH_HEADERS = {"X-API-Key": "test-integration-key"}
 
 
 def _client(tmp_path, monkeypatch):
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
     return TestClient(app)
 

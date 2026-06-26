@@ -32,8 +32,8 @@ langsmith project list
 langsmith trace list --project decision-research-agent-dev --limit 5 --show-hierarchy
 ```
 
-`deep-search-agent-dev` 保留历史 Trace，不进行复制、删除或迁移。已有未跟踪
-`.env` 不会自动修改；操作者需要显式切换 `LANGSMITH_PROJECT`。
+已有未跟踪 `.env` 不会自动修改；操作者需要显式设置
+`LANGSMITH_PROJECT=decision-research-agent-dev`。
 
 如果 `langsmith project list` 返回 `401 Unauthorized`，检查本地 API Key 是否有效。不得通过 `--api-key` 参数传递密钥。
 

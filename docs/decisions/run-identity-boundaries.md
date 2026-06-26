@@ -7,12 +7,11 @@ and scripts. These references must not be mechanically renamed.
 
 - LangGraph `configurable.thread_id` and future checkpoint resume cursor.
 - Caller conversation/session grouping.
-- Legacy `/api/task`, `/api/tasks/{thread_id}`, and `/ws/{thread_id}` compatibility.
+- Caller conversation/session grouping for canonical run APIs.
 
 ## Use `run_id`
 
-- Workspace directory for `/api/runs`.
-- SharedContext snapshot/cleanup key.
+- Workspace directory and runtime context for `/api/runs`.
 - Search de-duplication cache key.
 - Token collection key.
 - New ResearchRun, segment, and evidence persistence.
@@ -22,8 +21,7 @@ and scripts. These references must not be mechanically renamed.
 
 - LangSmith metadata and future monitor/telemetry events.
 - Logs and diagnostics needed to correlate caller sessions with executions.
-- Migration responses and legacy compatibility projections.
+- Migration responses and operational diagnostics.
 
 `POST /api/runs` permits same-thread concurrency after telemetry, WebSocket routing,
-token collection, workspace, SharedContext, and search cache passed run-isolation tests.
-Legacy `POST /api/task` remains protected by `409 thread_already_active`.
+token collection, workspace, harness context, and search cache passed run-isolation tests.

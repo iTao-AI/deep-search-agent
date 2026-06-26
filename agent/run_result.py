@@ -308,7 +308,7 @@ def _normalize_research_packet_evidence_refs(
 def process_stream_chunk(
     chunk: dict[str, Any], accumulator: AgentRunAccumulator, monitor
 ) -> None:
-    """Process LangGraph stream output and report events to frontend."""
+    """Process LangGraph stream output and report events to API/WebSocket consumers."""
     for node_name, state in chunk.items():
         if not state:
             continue

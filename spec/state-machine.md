@@ -1,120 +1,137 @@
-# Agent 状态机文档
+# State Machines
 
-## LangGraph 图结构
+Decision Research Agent uses service-owned state machines around a
+DeepAgents-native execution harness. LangGraph drives runtime execution, but
+application database tables are the authority for run, evidence, review,
+verification, publication, and delivery state.
 
-Deep Search Agent 使用 **星型协调图（Star Coordinator Graph）**。
+## Execution Path
 
 ```mermaid
-graph LR
-    START([START]) --> Planner[规划节点]
-    Planner --> Router{路由决策}
-    Router -->|网络搜索| NetworkAgent[网络搜索子 Agent]
-    Router -->|数据库查询| DBAgent[数据库查询子 Agent]
-    Router -->|知识库检索| RAGAgent[知识库检索子 Agent]
-    Router -->|合成报告| Synthesizer[综合合成节点]
-    NetworkAgent --> Router
-    DBAgent --> Router
-    RAGAgent --> Router
-    Synthesizer --> ReportGen[报告生成节点]
-    ReportGen --> END([END])
+stateDiagram-v2
+    [*] --> pending: POST /api/runs
+    pending --> running: fenced transition
+    running --> completed: harness outcome accepted
+    running --> failed: exception, timeout, cancellation
+    pending --> failed: startup/scheduling failure
+    completed --> [*]
+    failed --> [*]
 ```
 
-## 节点定义
+Execution identity:
 
-### 规划节点（Planner）
+- `thread_id` groups the caller conversation and LangGraph runtime context.
+- `run_id` owns one isolated execution, workspace, telemetry, token usage,
+  monitor route, cache partition, evidence ledger, and delivery result.
+- `segment_id` identifies the terminal write segment used for fenced
+  finalization.
 
-- **输入**: 用户自然语言查询
-- **输出**: 任务分解计划（子任务列表 + 每个任务的执行策略）
-- **LLM**: DeepSeek V4 Pro（fallback: DeepSeek V4 Flash）
-- **决策内容**: 需要哪些数据源？子任务之间的依赖关系？
+Terminal writes use `state_version` and allowed previous statuses. A stale
+writer, timeout callback, cancellation handler, or normal completion cannot
+silently overwrite a terminal run written by another path.
 
-### 路由决策节点（Router）
+## Harness Boundary
 
-- **输入**: 当前待执行的子任务
-- **输出**: 选择哪个子 Agent 执行
-- **决策内容**: 该子任务需要网络搜索、数据库查询还是知识库检索？
-
-### 子 Agent 节点
-
-每个子 Agent 是独立的 LangGraph 子图：
-
-| 节点 | 内部状态 |
-|------|----------|
-| 网络搜索子 Agent | 查询构建 → Tavily 调用 → 结果过滤 → 返回 |
-| 数据库查询子 Agent | SQL 生成 → 执行查询 → 结果格式化 → 返回 |
-| 知识库检索子 Agent | 查询编码 → RAGFlow 调用 → 结果排序 → 返回 |
-
-### 综合合成节点（Synthesizer）
-
-- **输入**: 所有子 Agent 的返回结果
-- **输出**: 结构化报告数据
-- **决策内容**: 去重、冲突解决、信息优先级排序
-
-### 报告生成节点（ReportGen）
-
-- **输入**: 结构化报告数据
-- **输出**: Markdown + PDF 文件写入 workspace
-- **步骤**: 生成 Markdown → 转换为 PDF → 写入 workspace
-
-## SharedContext 字段
-
-Agent 间共享的事实层（Phase 3 引入）：
-
-**模块位置**: `agent/shared_context.py`（SharedContext 类），工具封装在 `tools/shared_context_tools.py`
-**初始化**: `agent/main_agent.py:38` 创建模块级单例 `shared_context`
-**清理**: 任务结束时 `finally` 块调用 `shared_context.clear_facts(thread_id)`
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `task_query` | string | 用户原始查询 |
-| `research_results` | array | 所有子 Agent 的研究结果 |
-| `task_plan` | object | 任务分解计划 |
-| `current_phase` | string | 当前执行阶段标识 |
-| `findings` | object | 已发现的事实汇总 |
-
-## 状态流转
-
-1. `planning` → 规划节点执行，输出任务计划
-2. `routing` → 路由节点选择下一个子 Agent
-3. `executing` → 子 Agent 执行，结果写入 SharedContext
-4. `synthesizing` → 综合所有结果，生成报告结构
-5. `generating` → 生成 Markdown/PDF 文件
-6. `complete` → 任务结束
-
-## Canonical Run Delivery 状态
-
-v0.1.0 的 canonical path 以 `run_id` 为执行身份。Legacy task/thread
-状态机暂时保留到后续 removal 阶段，但第一方 run/result consumer 使用以下
-application-owned 状态：
-
-```text
-pending -> running -> completed
-pending -> running -> failed
-
-completed + generic artifact persisted -> delivery ready
-completed + Talent review required -> delivery review_required
-review approve/resolution -> delivery ready
-review reject/resolution -> delivery blocked
-failed/timeout/cancelled -> delivery failed
+```mermaid
+flowchart TD
+    API["FastAPI /api/runs"] --> Service["ResearchExecutionService"]
+    Service --> Harness["DeepAgents harness adapter"]
+    Harness --> Framework["LangChain agent framework"]
+    Framework --> Graph["LangGraph runtime"]
+    Harness --> Tools["Approved tools"]
+    Service --> Ledger[("Application DB")]
+    Service --> Result["Canonical artifacts"]
 ```
 
-Generic completed run 在 fenced terminal transaction 内持久化
-`research-report.md`。`GET /api/runs/{run_id}/result` 只在
-`execution_status=completed` 且 `delivery_status=ready` 时返回 artifact；
-非终态、失败、review required、blocked 或 artifact 缺失均返回稳定 409/404
-错误码。
+DeepAgents owns agent execution, tool filtering, middleware, skills loading,
+and runtime context injection. The service layer owns evidence capture,
+terminal transactions, review decisions, verification snapshots, publications,
+and canonical result delivery.
 
-## 异常路径
+## Generic Delivery
 
-| 异常 | 处理方式 |
-|------|----------|
-| 子 Agent 返回空结果 | 记录为"无数据"，继续其他子任务 |
-| 子 Agent 超时/失败 | 错误记录到 SharedContext，标记失败，继续 |
-| LLM 调用失败 | 重试 3 次后返回错误信息 |
-| 所有子 Agent 失败 | 生成包含错误说明的报告 |
+```mermaid
+stateDiagram-v2
+    completed --> ready: research-report.md persisted
+    ready --> delivered: GET /api/runs/{run_id}/result
+```
 
-## 变更记录
+A completed generic run persists `research-report.md` in
+`run_artifacts_v2` during the same terminal transaction. `GET
+/api/runs/{run_id}/result` returns that artifact only when execution is
+completed, delivery is ready, the artifact is safe, and the content hash
+matches the persisted payload.
 
-| 日期 | 变更 |
-|------|------|
-| 2026-05-19 | 初始状态机文档 |
+## Talent Review And Publication
+
+```mermaid
+stateDiagram-v2
+    completed --> review_required: ReviewBundle requires delivery gate
+    review_required --> ready: approve resolution
+    review_required --> blocked: reject resolution
+    ready --> stale: accepted verification change
+    blocked --> stale: accepted verification change
+    stale --> review_required: new snapshot finalization
+```
+
+Talent outputs must satisfy the structured contract:
+
+- research packet schema is valid;
+- findings and claims contain non-empty evidence references;
+- every evidence reference resolves to the current run snapshot;
+- review bundle and canonical DecisionBrief artifacts are deterministic.
+
+Approval permits delivery. It does not verify evidence. Rejection blocks
+delivery and does not start a new research run.
+
+## Durable Review Workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> checkpoint_pending
+    checkpoint_pending --> waiting_decision
+    waiting_decision --> resume_pending: approve/reject accepted
+    resume_pending --> resuming: worker lease
+    resuming --> resolution_pending
+    resolution_pending --> approved
+    resolution_pending --> rejected
+    waiting_decision --> superseded: newer verification snapshot
+    resume_pending --> manual_recovery: ambiguous or exhausted recovery
+    resuming --> manual_recovery: ambiguous or exhausted recovery
+```
+
+The application DB stores decisions, workflows, leases, resume attempts, and
+resolutions. The separate checkpoint DB stores only the LangGraph review-gate
+checkpoint. Ambiguous state becomes `manual_recovery` instead of being guessed.
+
+## Evidence Verification
+
+```mermaid
+stateDiagram-v2
+    unverified --> human_verified: verify decision
+    unverified --> human_rejected: reject decision
+    human_verified --> human_rejected: newer reject revision
+    human_rejected --> human_verified: newer verify revision
+```
+
+Evidence rows are immutable. Human verification is an append-only decision for
+the exact persisted fingerprint. Finalization creates or reuses a deterministic
+snapshot and may create a new publication revision.
+
+## Result Endpoint States
+
+| Run state | Result endpoint |
+|---|---|
+| `pending` / `running` | `409 run_not_terminal` |
+| `failed` | `409 run_failed` |
+| `delivery_status=review_required` | `409 run_review_required` |
+| `delivery_status=blocked` | `409 run_delivery_blocked` |
+| missing, empty, unsafe, too-large, or hash-mismatched artifact | `409 run_result_unavailable` |
+| `completed` + `delivery_status=ready` + valid artifact | `200` canonical artifact |
+
+## Change Log
+
+| Date | Change |
+|---|---|
+| 2026-05-19 | Initial state-machine document |
+| 2026-06-26 | Replaced removed coordinator/workspace model with canonical run, review, verification, and delivery state machines |

@@ -9,8 +9,8 @@ configured API credential.
 
 This is not a multi-user or multi-instance deployment contract. The application
 database remains the business ledger; the checkpoint database stores only the
-LangGraph review-gate execution position. The existing Vue frontend does not
-provide review controls.
+LangGraph review-gate execution position. This repository does not ship
+frontend review controls.
 
 ## Configure
 
@@ -18,7 +18,7 @@ Set all four variables through the deployment environment:
 
 - `DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL`
 - `API_SECRET`
-- `TASKS_DB_PATH`
+- `DECISION_RESEARCH_AGENT_DB_PATH`
 - `DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH`
 
 The feature flag must be explicitly `true`. Both database paths must be

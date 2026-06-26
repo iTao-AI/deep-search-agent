@@ -15,7 +15,7 @@ def test_create_and_get_run_returns_distinct_thread_and_run_identity(
 ):
     import api.server as server
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
     scheduled = []
 
@@ -42,13 +42,12 @@ def test_create_and_get_run_returns_distinct_thread_and_run_identity(
     fetched = client.get(f"/api/runs/{created['run_id']}", headers=AUTH_HEADERS)
     assert fetched.status_code == 200
     assert fetched.json()["run_id"] == created["run_id"]
-    server.active_run_threads.clear()
 
 
 def test_create_run_registers_run_scoped_timeout_callback(tmp_path, monkeypatch):
     import api.server as server
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
     scheduled = []
 
@@ -73,12 +72,11 @@ def test_create_run_registers_run_scoped_timeout_callback(tmp_path, monkeypatch)
         coroutine.close()
 
 
-def test_create_run_does_not_depend_on_legacy_thread_guard(tmp_path, monkeypatch):
+def test_create_run_allows_same_thread_without_legacy_guard(tmp_path, monkeypatch):
     import api.server as server
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
-    server.active_run_threads.add("thread-active")
     scheduled = []
 
     def capture_task(coroutine, task_id, **kwargs):
@@ -89,21 +87,28 @@ def test_create_run_does_not_depend_on_legacy_thread_guard(tmp_path, monkeypatch
 
     response = client.post(
         "/api/runs",
-        json={"query": "research", "thread_id": "thread-active"},
+        json={"query": "research", "thread_id": "shared-thread"},
+        headers=AUTH_HEADERS,
+    )
+    second = client.post(
+        "/api/runs",
+        json={"query": "research again", "thread_id": "shared-thread"},
         headers=AUTH_HEADERS,
     )
 
     assert response.status_code == 200
-    assert response.json()["thread_id"] == "thread-active"
-    assert "thread-active" in server.active_run_threads
-    scheduled[0].close()
-    server.active_run_threads.clear()
+    assert second.status_code == 200
+    assert response.json()["thread_id"] == "shared-thread"
+    assert second.json()["thread_id"] == "shared-thread"
+    assert response.json()["run_id"] != second.json()["run_id"]
+    for coroutine in scheduled:
+        coroutine.close()
 
 
 def test_create_run_rejects_unknown_profile_fail_closed(tmp_path, monkeypatch):
     import api.server as server
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
     client = TestClient(app)
 
@@ -115,7 +120,6 @@ def test_create_run_rejects_unknown_profile_fail_closed(tmp_path, monkeypatch):
 
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "unknown_profile"
-    server.active_run_threads.clear()
 
 
 def test_create_talent_run_rejects_invalid_scope_before_scheduling(
@@ -123,7 +127,7 @@ def test_create_talent_run_rejects_invalid_scope_before_scheduling(
 ):
     import api.server as server
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
     scheduled = []
     monkeypatch.setattr(server, "create_tracked_task", scheduled.append)
@@ -142,7 +146,6 @@ def test_create_talent_run_rejects_invalid_scope_before_scheduling(
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "invalid_research_scope"
     assert scheduled == []
-    server.active_run_threads.clear()
 
 
 def test_profile_manifest_exposes_policy_without_runtime_secrets():
@@ -165,9 +168,8 @@ async def test_run_v2_cancellation_without_outcome_still_finalizes_failed(
     import api.server as server
     from api.run_repository import create_run, get_run
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     created = create_run(thread_id="cancel-thread", query="query")
-    server.active_run_threads.add("cancel-thread")
 
     async def cancelled(*args, **kwargs):
         raise asyncio.CancelledError
@@ -186,8 +188,6 @@ async def test_run_v2_cancellation_without_outcome_still_finalizes_failed(
     run = get_run(run_id=created["run_id"])
     assert run["execution_status"] == "failed"
     assert run["delivery_status"] == "failed"
-    assert "cancel-thread" in server.active_run_threads
-    server.active_run_threads.clear()
 
 
 @pytest.mark.asyncio
@@ -197,7 +197,7 @@ async def test_run_v2_routes_profile_id_to_agent_execution(tmp_path, monkeypatch
     from agent.talent_contracts import ResearchPacket
     from api.run_repository import create_run
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     created = create_run(
         thread_id="talent-thread",
         query="query",
@@ -255,7 +255,7 @@ async def test_talent_run_persists_review_and_canonical_artifacts(tmp_path, monk
     from agent.talent_contracts import ResearchPacket
     from api.run_repository import create_run, get_run
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "false")
     scope = {
         "target_roles": ["AI Agent Engineer"],
@@ -327,7 +327,7 @@ async def test_generic_run_persists_canonical_result_artifact(tmp_path, monkeypa
     from api.run_repository import create_run, get_artifact, get_run
     from pathlib import PurePosixPath
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     created = create_run(
         thread_id="generic-thread",
         query="query",
@@ -379,7 +379,7 @@ async def test_generic_run_persists_canonical_result_artifact(tmp_path, monkeypa
 def test_run_artifact_api_resolves_by_run_and_artifact_id(tmp_path, monkeypatch):
     from api.run_repository import create_run, finalize_run_transaction
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
     created = create_run(thread_id="thread-1", query="query")
     finalize_run_transaction(
@@ -422,7 +422,7 @@ def test_run_projection_exposes_current_publication_and_artifacts(
             run_id=seeded.run_id,
         )["state_version"],
     )
-    monkeypatch.setenv("TASKS_DB_PATH", seeded.db_path)
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", seeded.db_path)
     monkeypatch.setenv("API_SECRET", "test-integration-key")
 
     response = TestClient(app).get(
@@ -454,7 +454,7 @@ async def test_mark_run_timeout_finalizes_nonterminal_run_with_frozen_evidence(
     from agent.run_result import AgentRunResult
     from api.run_repository import create_run, get_run, transition_run
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     events = []
     monkeypatch.setattr(
         server.monitor,
@@ -516,7 +516,7 @@ async def test_tracked_run_timeout_reaches_persisted_failed_state(tmp_path, monk
     from api.run_repository import create_run, get_run
     from api.task_tracker import create_tracked_task
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     created = create_run(thread_id="timeout-thread", query="query")
 
     async def hangs(*args, **kwargs):
@@ -556,9 +556,8 @@ def test_create_run_scheduler_failure_releases_guard_and_marks_run_failed(
     import api.server as server
     from api.run_repository import create_run as real_create_run, get_run
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
-    server.active_run_threads.clear()
     created_runs = []
 
     def capture_create_run(**kwargs):
@@ -580,6 +579,5 @@ def test_create_run_scheduler_failure_releases_guard_and_marks_run_failed(
     )
 
     assert response.status_code == 500
-    assert "schedule-failure" not in server.active_run_threads
     runs = get_run(run_id=created_runs[0]["run_id"])
     assert runs["execution_status"] == "failed"

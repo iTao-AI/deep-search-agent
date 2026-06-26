@@ -23,7 +23,8 @@ from api.review_models import (
     post_review_segment_id,
     review_workflow_id,
 )
-from api.run_repository import _get_db_path, _now
+from api.database import sqlite_db_path
+from api.run_repository import _now
 
 
 PUBLICATION_MIGRATION_VERSION = "006_revisioned_publication"
@@ -103,7 +104,7 @@ def evidence_verification_enabled() -> bool:
 
 
 def _connect_for_migration(db_path: str) -> sqlite3.Connection:
-    connection = sqlite3.connect(_get_db_path(db_path))
+    connection = sqlite3.connect(sqlite_db_path(db_path))
     connection.row_factory = sqlite3.Row
     return connection
 

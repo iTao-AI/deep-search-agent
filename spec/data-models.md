@@ -1,140 +1,84 @@
 # 数据模型文档
 
-## Session Workspace 结构
+## ResearchRun 身份模型
 
-每次任务执行时，系统创建一个独立的 session workspace 目录。
+当前业务身份由 application DB 持久化：
 
-```
-workspace/
-├── session-<uuid>/
-│   ├── task_input.md          # 用户输入的原始问题
-│   ├── research_notes.md      # Agent 研究笔记
-│   ├── draft_report.md        # 草稿报告
-│   ├── final_report.md        # 最终 Markdown 报告
-│   ├── final_report.pdf       # 最终 PDF 报告
-│   └── uploads/               # 上传的文件
-│       └── <filename>
-```
+| 字段 | 作用 |
+|---|---|
+| `thread_id` | 调用方会话/对话分组，也用于 LangGraph runtime config correlation |
+| `run_id` | 单次隔离研究执行的主身份 |
+| `segment_id` | terminal write segment，用于 fenced finalization |
+| `state_version` | 乐观锁版本，防止 stale writer 覆盖终态 |
 
-## 子 Agent 输入输出
+`thread_id` 不再代表单个任务执行；同一 `thread_id` 可以并发创建多个
+`run_id`。辅助状态（workspace、telemetry、token usage、monitor channel、
+search cache）必须按 `run_id` 隔离。
 
-### Network Search Agent
+## Execution Outcome
 
-**输入：**
-```json
-{
-  "query": "搜索查询（自然语言）",
-  "max_results": 5
-}
-```
+Agent harness 输出在进入业务账本前被 service 层冻结为 outcome snapshot：
 
-**输出：**
-```json
-{
-  "results": [
-    {
-      "title": "网页标题",
-      "url": "https://...",
-      "content": "摘要内容",
-      "score": 0.95
-    }
-  ],
-  "summary": "搜索结果的简要总结"
-}
-```
+| 字段 | 说明 |
+|---|---|
+| `answer` | 研究输出文本或 fallback 说明 |
+| `evidence_entries` | 当前 run 捕获的不可变证据条目 |
+| `research_packets` | Talent profile 的结构化 ResearchPacket |
+| `failure_kind` | schema、contract、runtime 或 provider failure 分类 |
+| `diagnostics` | 有界诊断，不应包含 secret、绝对路径或 traceback |
 
-### Database Query Agent
+Outcome 不是业务权威。只有 fenced terminal transaction 写入
+`research_runs_v2`、`evidence_entries_v2`、artifact/review/publication tables
+之后，才成为可查询状态。
 
-**输入：**
-```json
-{
-  "query": "自然语言查询描述",
-  "tables": ["可选：指定查询的表名"]
-}
-```
+## Evidence Entry
 
-**输出：**
-```json
-{
-  "sql": "生成的 SQL 语句",
-  "results": [
-    { "column1": "value1", "column2": "value2" }
-  ],
-  "summary": "查询结果的简要总结"
-}
-```
+证据条目是 append-only snapshot。核心字段包括：
 
-### Knowledge Base Agent (RAGFlow)
+| 字段 | 说明 |
+|---|---|
+| `evidence_id` | run 内稳定引用 ID |
+| `run_id` | 所属执行 |
+| `source_type` | public web、provided aggregate、database 等来源类型 |
+| `source_url` / `source_id` | 有界来源标识 |
+| `snippet` | 持久化证据片段 |
+| `fingerprint` | 内容和来源语义的稳定指纹 |
+| `baseline_verification_origin` | collection-time origin，不表示人工验证 |
 
-**输入：**
-```json
-{
-  "query": "检索查询（自然语言）",
-  "top_k": 5
-}
-```
+Talent findings and claims must reference evidence IDs from the same run.
+Missing or invented references fail closed.
 
-**输出：**
-```json
-{
-  "results": [
-    {
-      "content": "检索到的知识片段",
-      "source": "知识库来源",
-      "score": 0.88
-    }
-  ],
-  "summary": "检索结果的简要总结"
-}
-```
+## Run Artifact
 
-## 报告 Markdown Schema
+`run_artifacts_v2` 保存可交付或审计 artifact。
 
-生成的报告遵循以下结构：
+| 字段 | Generic contract |
+|---|---|
+| `artifact_id` | `research-report.md` |
+| `kind` | `research_report_markdown` 或 `research_report_fallback_markdown` |
+| `media_type` | `text/markdown` |
+| `content_hash` | artifact `content` 的 SHA-256 hex |
 
-```markdown
-# [报告标题]
-
-## 概述
-[任务概述 + 核心发现摘要]
-
-## 任务详情
-
-### 子任务 1：[任务名称]
-- **目标**：[子任务目标]
-- **过程**：[执行过程]
-- **结果**：[子任务结果]
-
-### 子任务 2：[任务名称]
-...
-
-## 综合结论
-[跨子任务综合分析]
-
-## 参考文献
-1. [标题](URL)
-2. ...
-```
+Talent runs additionally persist canonical DecisionBrief and reviewed
+publication artifacts. `GET /api/runs/{run_id}/result` only resolves the
+current deliverable artifact and rejects missing, empty, unsafe, too-large, or
+hash-mismatched content.
 
 ## Telemetry 数据结构
 
+Telemetry is run-scoped and returned by `GET /api/telemetry/runs/{run_id}`:
+
 ```json
 {
-  "thread_id": "string",
-  "model": "qwen-max",
-  "total_tokens": 12345,
-  "prompt_tokens": 8000,
-  "completion_tokens": 4345,
-  "tool_calls": [
-    {
-      "tool": "tavily_search",
-      "duration_ms": 1500,
-      "tokens_used": 500,
-      "status": "success"
-    }
-  ],
-  "started_at": "2026-05-19T10:00:00Z",
-  "completed_at": "2026-05-19T10:05:00Z"
+  "thread_id": "caller-session",
+  "run_id": "run_...",
+  "segment_id": "run_..._seg_...",
+  "agent_name": "researcher",
+  "tool_name": "talent_public_search",
+  "duration_ms": 1500,
+  "status": "success",
+  "error": null,
+  "timestamp": "2026-06-26T10:00:00Z"
 }
 ```
 
@@ -142,7 +86,7 @@ workspace/
 
 P1B feasibility 使用两个独立 SQLite 文件：
 
-- application DB（`TASKS_DB_PATH`）是业务事实源，保存 ResearchRun、不可变决策、
+- application DB（`DECISION_RESEARCH_AGENT_DB_PATH`）是业务事实源，保存 ResearchRun、不可变决策、
   workflow、lease、恢复尝试、resolution 和 artifacts；
 - checkpoint DB（`DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH`）只保存纯
   LangGraph ReviewGate 的执行 checkpoint，不保存业务权威结论。

@@ -1,8 +1,7 @@
 # Decision Research Agent — 项目文档
 
-当前仓库和新集成使用 `decision-research-agent` 技术标识。旧
-`deep-search-agent` 环境变量、Tool Client 路径和 health service ID 仅作为兼容
-契约保留，详见 [Agent Integration](AGENT_INTEGRATION.md)。
+当前仓库、运行时配置、Tool Client 和 health service ID 使用
+`decision-research-agent` 技术标识，详见 [Agent Integration](AGENT_INTEGRATION.md)。
 
 ## 文档索引
 
@@ -32,8 +31,6 @@ Superpowers 文档用于沉淀设计输入和实施计划，供后续 writing pl
 | [P2A Real-Source Proof Plan](superpowers/plans/2026-06-23-p2a-real-source-proof.md) | PR3 的固定 manifest、deterministic seed、人工核验、proof report 与验证步骤 |
 | [Technical Identifier Migration Design](superpowers/specs/2026-06-18-technical-identifier-migration-design.md) | 仓库改名后的 runtime env、health、Tool Client、LangSmith 与历史兼容边界 |
 | [Technical Identifier Migration Plan](superpowers/plans/2026-06-18-technical-identifier-migration.md) | canonical-first 标识迁移、回滚和验证步骤 |
-| [Verification Evidence Design](superpowers/specs/2026-06-01-deep-search-agent-verification-evidence-design.md) | 验证收口设计 — 后端测试、前端构建、真实端到端运行证据和职业展示材料时机 |
-| [Evidence Readiness Design](superpowers/specs/2026-06-01-deep-search-agent-evidence-readiness-design.md) | 证据化文档改造设计 — README 作品集化、Evidence Pack、技术决策说明和验证边界 |
 | [Evidence Readiness Plan](superpowers/plans/2026-06-01-evidence-readiness.md) | 证据化文档改造实施计划 — README 重写、Evidence Pack 目录、验证 |
 | [Phase 7b Tool Resilience Plan](superpowers/plans/2026-05-31-phase-7b-tool-resilience.md) | 工具韧性增强实施计划 — 超时、重试、降级和任务级超时 |
 

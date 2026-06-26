@@ -7,11 +7,8 @@ agents and automation scripts. The canonical entrypoint is:
 tools/decision_research_agent_tool.py
 ```
 
-The legacy `tools/deep_search_agent_tool.py` entrypoint remains a thin
-compatibility shim. Both entrypoints call the same implementation.
-
 The client wraps the existing HTTP API. It does not store API keys, start the
-backend, manage frontend sessions, or run benchmark jobs.
+backend, manage UI sessions, or run benchmark jobs.
 
 ## Canonical Configuration
 
@@ -26,21 +23,8 @@ backend, manage frontend sessions, or run benchmark jobs.
 Command-line `--base-url` and `--timeout` override environment defaults. API
 keys are accepted only through environment variables, not CLI arguments.
 
-Canonical keys win whenever they are present, including when empty. A
-conflicting legacy value is never consulted. Legacy-only configurations remain
-supported:
-
-| Canonical | Legacy alias |
-|---|---|
-| `DECISION_RESEARCH_AGENT_URL` | `DEEP_SEARCH_AGENT_URL` |
-| `DECISION_RESEARCH_AGENT_API_KEY` | `DEEP_SEARCH_AGENT_API_KEY` |
-| `DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS` | `DEEP_SEARCH_AGENT_TIMEOUT_SECONDS` |
-| `DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES` | `DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES` |
-| `DECISION_RESEARCH_AGENT_TALENT_RECURSION_LIMIT` | `DEEP_SEARCH_AGENT_TALENT_RECURSION_LIMIT` |
-
-Legacy-only use, or a legacy key ignored because its canonical key is present,
-emits a value-free `FutureWarning` on stderr. Command JSON remains on stdout, so
-automation can parse it without mixing deprecation text into the payload.
+Only canonical keys are read. Old aliases and thread-scoped Tool Client
+commands were removed with the v0.1.0 runtime cleanup.
 
 ## Healthcheck And Doctor
 
@@ -54,14 +38,11 @@ The exact health response remains:
 ```json
 {
   "status": "ok",
-  "service": "deep-search-agent"
+  "service": "decision-research-agent"
 }
 ```
 
-Both commands continue to report `service=deep-search-agent` by contract. A
-successful canonical migration is demonstrated by using the canonical script
-and environment keys and receiving a passing response; the compatibility
-service ID is not product discovery.
+Both commands report `service=decision-research-agent`.
 
 `doctor` also checks the controlled durable review runtime. When the feature is
 disabled, the durable review check reports `disabled` and the overall command
@@ -102,29 +83,6 @@ must not include the API key. Private first-party consumer migration evidence
 is deferred unless its own repository test command is run separately. Handoffs
 for that external check may record only command names and pass/fail results,
 not workspace paths, raw logs, or secrets.
-
-Legacy task/thread commands remain available during the rollback window:
-
-```bash
-python tools/decision_research_agent_tool.py start-task \
-  --query "Research question" \
-  --thread-id "demo-thread-001"
-
-python tools/decision_research_agent_tool.py get-task \
-  --thread-id "demo-thread-001"
-
-python tools/decision_research_agent_tool.py token-usage \
-  --thread-id "demo-thread-001"
-
-python tools/decision_research_agent_tool.py research-run \
-  --thread-id "demo-thread-001"
-
-python tools/decision_research_agent_tool.py research-runs --limit 20
-```
-
-Terminal task statuses are `completed`, `completed_with_fallback`, and
-`failed`. ResearchRun responses include task status, token usage, quality gate
-output, diagnostics, and EvidenceLedger entries.
 
 ## Controlled Review Commands
 
@@ -204,39 +162,6 @@ python tools/decision_research_agent_tool.py evidence finalize \
 `evidence reject` also accepts `--reason-stdin`. `evidence finalize` reads the
 current run state version and creates or reuses a revisioned verification
 snapshot/publication before the fresh review workflow.
-
-## Existing Deployment Upgrade
-
-Keep matching legacy keys during the rollback window:
-
-```bash
-# 1. Add canonical keys without removing rollback-compatible legacy keys.
-export DECISION_RESEARCH_AGENT_URL="$DEEP_SEARCH_AGENT_URL"
-export DECISION_RESEARCH_AGENT_API_KEY="$DEEP_SEARCH_AGENT_API_KEY"
-export DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS="$DEEP_SEARCH_AGENT_TIMEOUT_SECONDS"
-
-# 2. Verify through the canonical entrypoint.
-python tools/decision_research_agent_tool.py healthcheck
-
-# 3. Keep legacy keys through the rollback window; remove them only after the
-#    documented release gate is satisfied.
-```
-
-New installations should use canonical keys only.
-
-## Rollback
-
-Pre-migration code does not understand `DECISION_RESEARCH_AGENT_*`. Before
-rolling code back, ensure the matching `DEEP_SEARCH_AGENT_*` keys remain
-populated or restore them before the process starts. A canonical-only
-installation cannot be rolled back safely without that configuration step.
-
-Legacy aliases remain for at least two tagged releases after this migration.
-Removal requires a separate approved breaking-change plan, a first-party
-consumer inventory, no active first-party legacy use outside shims, tests, and
-compatibility documentation, plus release-note migration instructions. This
-repository currently has no tags, so this migration does not start a fabricated
-date-based countdown.
 
 ## Benchmark Process Boundary
 

@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
 
 from langchain_core.tools import tool
 
 from agent.research import evidence_id_for
-from agent.runtime_env import resolve_env
 from api.context import get_allowed_aggregate_ids_context, get_run_context
 
 
@@ -23,10 +23,9 @@ def _error(code: str, message: str) -> dict:
 @tool("provided_aggregate")
 def provided_aggregate(aggregate_id: str) -> dict:
     """Read one scope-declared, server-bundled aggregate in benchmark mode."""
-    fixtures_enabled = resolve_env(
+    fixtures_enabled = os.environ.get(
         "DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES",
-        "DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES",
-        default="",
+        "",
     )
     if (fixtures_enabled or "").lower() != "true":
         return _error(

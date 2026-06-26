@@ -16,7 +16,7 @@ class MySQLConnectionManager:
             return "错误：MySQL 配置缺失（需 user, password, host, port, database）"
         try:
             self._pool = pooling.MySQLConnectionPool(
-                pool_name="deep_search_pool",
+                pool_name="decision_research_pool",
                 pool_size=5,
                 pool_reset_session=True,
                 connection_timeout=10,  # 连接超时 10s

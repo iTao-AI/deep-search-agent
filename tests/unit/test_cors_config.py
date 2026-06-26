@@ -23,6 +23,10 @@ class TestCORSConfig:
         # 恢复
         if original is not None:
             os.environ["FRONTEND_ORIGIN"] = original
+        elif "FRONTEND_ORIGIN" in os.environ:
+            del os.environ["FRONTEND_ORIGIN"]
+        elif "FRONTEND_ORIGIN" in os.environ:
+            del os.environ["FRONTEND_ORIGIN"]
 
     def test_custom_origin(self):
         """设置 FRONTEND_ORIGIN 后，返回配置的源"""
@@ -41,6 +45,8 @@ class TestCORSConfig:
         # 恢复
         if original is not None:
             os.environ["FRONTEND_ORIGIN"] = original
+        elif "FRONTEND_ORIGIN" in os.environ:
+            del os.environ["FRONTEND_ORIGIN"]
 
     def test_validate_allowed_origin(self):
         """校验允许的源"""
@@ -58,6 +64,8 @@ class TestCORSConfig:
 
         if original is not None:
             os.environ["FRONTEND_ORIGIN"] = original
+        elif "FRONTEND_ORIGIN" in os.environ:
+            del os.environ["FRONTEND_ORIGIN"]
 
     def test_multiple_origins_not_allowed(self):
         """不应该允许多个源（单源策略）"""

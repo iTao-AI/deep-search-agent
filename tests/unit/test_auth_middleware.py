@@ -12,7 +12,7 @@ class TestAuthMiddleware:
         os.environ["API_SECRET"] = "test-key"
         from api.server import app
         client = TestClient(app)
-        response = client.get("/api/files?path=/nonexistent")
+        response = client.get("/api/runs/nonexistent")
         assert response.status_code == 401
         body = response.json()
         assert "API_SECRET" in body.get("detail", "")
@@ -23,7 +23,7 @@ class TestAuthMiddleware:
         from api.server import app
         client = TestClient(app)
         response = client.get(
-            "/api/files?path=/nonexistent",
+            "/api/runs/nonexistent",
             headers={"X-API-Key": "wrong-key"},
         )
         assert response.status_code == 401
@@ -34,7 +34,7 @@ class TestAuthMiddleware:
         from api.server import app
         client = TestClient(app)
         response = client.get(
-            "/api/files?path=/nonexistent",
+            "/api/runs/nonexistent",
             headers={"X-API-Key": "test-key"},
         )
         # 404 not found (directory doesn't exist) — NOT 401
@@ -43,10 +43,11 @@ class TestAuthMiddleware:
     def test_cors_preflight_bypasses_api_key_auth(self):
         """Browser preflight has no X-API-Key and must reach CORS middleware."""
         os.environ["API_SECRET"] = "test-key"
+        os.environ["FRONTEND_ORIGIN"] = "http://localhost:5173"
         from api.server import app
         client = TestClient(app)
         response = client.options(
-            "/api/task",
+            "/api/runs",
             headers={
                 "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": "POST",
@@ -62,7 +63,7 @@ class TestAuthMiddleware:
             del os.environ["API_SECRET"]
         from api.server import app
         client = TestClient(app)
-        response = client.get("/api/files?path=/nonexistent")
+        response = client.get("/api/runs/nonexistent")
         # Should not be 401 when auth is disabled
         assert response.status_code != 401
 
@@ -72,6 +73,6 @@ class TestAuthMiddleware:
         from api.server import app
         client = TestClient(app)
         with pytest.raises(Exception) as exc_info:
-            with client.websocket_connect("/ws/test-thread"):
+            with client.websocket_connect("/ws/runs/test-run"):
                 pass
         # Connection should be refused (auth failure)
