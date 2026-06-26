@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
-from api.persistence import _get_db_path
+from api.database import sqlite_db_path
 from api.evidence_verification_repository import (
     VERIFICATION_MIGRATION_CHECKSUM,
     VERIFICATION_MIGRATION_VERSION,
@@ -163,7 +163,7 @@ VERIFICATION_COLUMNS = {
 def backup_database(*, db_path: str, backup_path: str) -> None:
     """Create a transactionally consistent SQLite backup."""
     Path(backup_path).parent.mkdir(parents=True, exist_ok=True)
-    source = sqlite3.connect(_get_db_path(db_path))
+    source = sqlite3.connect(sqlite_db_path(db_path))
     destination = sqlite3.connect(backup_path)
     try:
         source.backup(destination)
@@ -176,7 +176,7 @@ def restore_database(*, backup_path: str, db_path: str) -> None:
     """Restore a SQLite backup without copying WAL sidecar files."""
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     source = sqlite3.connect(backup_path)
-    destination = sqlite3.connect(_get_db_path(db_path))
+    destination = sqlite3.connect(sqlite_db_path(db_path))
     try:
         source.backup(destination)
     finally:
@@ -232,7 +232,7 @@ def verify_run_schema(
         expected_migrations[PUBLICATION_MIGRATION_VERSION] = (
             PUBLICATION_MIGRATION_CHECKSUM
         )
-    conn = sqlite3.connect(_get_db_path(db_path))
+    conn = sqlite3.connect(sqlite_db_path(db_path))
     try:
         tables = {
             row[0]
@@ -316,7 +316,7 @@ def verify_run_schema(
 def migrate_with_backup(*, db_path: str, backup_path: str) -> dict:
     """Back up, apply, and verify; restore the original DB on any failure."""
     backup_existed = Path(backup_path).exists()
-    connection = sqlite3.connect(_get_db_path(db_path))
+    connection = sqlite3.connect(sqlite_db_path(db_path))
     try:
         has_migration_table = connection.execute(
             """

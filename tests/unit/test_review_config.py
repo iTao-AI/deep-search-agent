@@ -18,7 +18,7 @@ def test_enabled_review_requires_secret_and_explicit_persistent_paths(
 ):
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.delenv("API_SECRET", raising=False)
-    monkeypatch.delenv("TASKS_DB_PATH", raising=False)
+    monkeypatch.delenv("DECISION_RESEARCH_AGENT_DB_PATH", raising=False)
     monkeypatch.delenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         raising=False,
@@ -34,7 +34,7 @@ def test_enabled_review_requires_secret_and_explicit_persistent_paths(
 @pytest.mark.parametrize(
     ("missing_name", "code"),
     [
-        ("TASKS_DB_PATH", "review_application_db_not_configured"),
+        ("DECISION_RESEARCH_AGENT_DB_PATH", "review_application_db_not_configured"),
         (
             "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
             "review_checkpoint_db_not_configured",
@@ -49,7 +49,7 @@ def test_enabled_review_requires_each_database_path(
 ):
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "configured")
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         str(tmp_path / "checkpoints.db"),
@@ -78,7 +78,7 @@ def test_enabled_review_rejects_unsupported_database_paths(
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "configured")
     monkeypatch.setenv(
-        "TASKS_DB_PATH",
+        "DECISION_RESEARCH_AGENT_DB_PATH",
         tasks_path if tasks_path == ":memory:" else str(tmp_path / tasks_path),
     )
     monkeypatch.setenv(
@@ -143,7 +143,7 @@ def test_readiness_requires_exact_thirteen_gate_pass(
 ):
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "configured")
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         str(tmp_path / "checkpoints.db"),
@@ -192,7 +192,7 @@ def test_readiness_rejects_incomplete_existing_review_schema(
 
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "configured")
-    monkeypatch.setenv("TASKS_DB_PATH", str(tasks_path))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tasks_path))
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         str(tmp_path / "checkpoints.db"),

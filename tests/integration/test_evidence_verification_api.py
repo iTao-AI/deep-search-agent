@@ -22,7 +22,7 @@ AUTH = {"X-API-Key": "correct"}
 @pytest.fixture
 def seeded_run(tmp_path, monkeypatch):
     seeded = _seed_talent_run(tmp_path, migrate=True)
-    monkeypatch.setenv("TASKS_DB_PATH", seeded.db_path)
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", seeded.db_path)
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL",
         "true",

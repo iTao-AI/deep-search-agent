@@ -17,7 +17,7 @@ def _detail_url(run_id, review_id):
 @pytest.fixture
 def required_review_run(tmp_path, monkeypatch):
     fixture = _required_review_run(tmp_path, suffix="api")
-    monkeypatch.setenv("TASKS_DB_PATH", fixture.db_path)
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", fixture.db_path)
     return fixture
 
 
@@ -35,7 +35,7 @@ def approve_request():
 def auth(required_review_run, tmp_path, monkeypatch):
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "correct")
-    monkeypatch.setenv("TASKS_DB_PATH", required_review_run.db_path)
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", required_review_run.db_path)
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         str(tmp_path / "review-checkpoints.db"),
@@ -65,7 +65,7 @@ def manual_recovery_run(required_review_run):
 def test_review_list_requires_strict_review_auth(required_review_run, monkeypatch):
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "correct")
-    monkeypatch.setenv("TASKS_DB_PATH", required_review_run.db_path)
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", required_review_run.db_path)
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         f"{required_review_run.db_path}.checkpoints",

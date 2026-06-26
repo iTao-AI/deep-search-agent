@@ -7,7 +7,7 @@ import sqlite3
 import uuid
 from typing import Any
 
-from api.persistence import _get_db_path
+from api.database import sqlite_db_path
 
 
 EXECUTION_STATUSES = {
@@ -33,7 +33,7 @@ def _now() -> str:
 
 
 def _connect(db_path: str | None = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(_get_db_path(db_path), check_same_thread=False)
+    conn = sqlite3.connect(sqlite_db_path(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

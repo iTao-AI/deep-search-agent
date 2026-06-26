@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import uuid
 
+from api.database import APPLICATION_DB_ENV
 from api.review_gate import ReviewGate
 from api.review_models import durable_hitl_enabled
 from api.review_repository import init_review_schema
@@ -87,7 +88,7 @@ def validate_review_runtime(*, output_dir: Path) -> ReviewRuntimeConfig:
         raise ReviewConfigurationError("review_auth_not_configured")
 
     application = _persistent_path(
-        os.getenv("TASKS_DB_PATH"),
+        os.getenv(APPLICATION_DB_ENV),
         missing_code="review_application_db_not_configured",
         memory_code="review_application_db_not_persistent",
     )

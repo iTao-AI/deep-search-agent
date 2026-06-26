@@ -42,7 +42,7 @@ def _scope() -> dict:
 
 
 def seed() -> dict:
-    db_path = os.environ["TASKS_DB_PATH"]
+    db_path = os.environ["DECISION_RESEARCH_AGENT_DB_PATH"]
     created = create_run(
         db_path=db_path,
         thread_id="verification-container-thread",

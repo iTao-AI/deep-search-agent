@@ -18,7 +18,7 @@ Set all four variables through the deployment environment:
 
 - `DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL`
 - `API_SECRET`
-- `TASKS_DB_PATH`
+- `DECISION_RESEARCH_AGENT_DB_PATH`
 - `DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH`
 
 The feature flag must be explicitly `true`. Both database paths must be

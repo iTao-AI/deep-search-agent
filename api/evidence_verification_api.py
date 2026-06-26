@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from starlette.requests import ClientDisconnect
 
+from api.database import sqlite_db_path
 from api.evidence_verification_models import VerificationDecisionRequest
 from api.evidence_verification_repository import (
     VerificationConflict,
@@ -273,7 +274,7 @@ async def list_evidence_verifications(run_id: str, request: Request):
         return _conflict_response("evidence_not_found", run_id=run_id)
     items = await asyncio.to_thread(
         list_effective_verifications,
-        db_path=os.getenv("TASKS_DB_PATH", ""),
+        db_path=sqlite_db_path(),
         run_id=run_id,
         after=after,
         limit=query.limit + 1,
@@ -324,7 +325,7 @@ async def show_evidence_verification(
         return error
     detail = await asyncio.to_thread(
         get_evidence_verification_detail,
-        db_path=os.getenv("TASKS_DB_PATH", ""),
+        db_path=sqlite_db_path(),
         run_id=run_id,
         evidence_id=evidence_id,
     )
@@ -372,7 +373,7 @@ async def submit_evidence_verification_decision(
     try:
         accepted = await asyncio.to_thread(
             accept_verification_decision,
-            db_path=os.getenv("TASKS_DB_PATH", ""),
+            db_path=sqlite_db_path(),
             run_id=run_id,
             evidence_id=evidence_id,
             request=validated,
@@ -428,7 +429,7 @@ async def finalize_evidence_verification(
     try:
         result = await asyncio.to_thread(
             finalize_verification_publication,
-            db_path=os.getenv("TASKS_DB_PATH", ""),
+            db_path=sqlite_db_path(),
             run_id=run_id,
             expected_state_version=validated.expected_state_version,
         )

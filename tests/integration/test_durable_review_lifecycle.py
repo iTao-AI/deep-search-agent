@@ -54,7 +54,7 @@ def _packet():
 
 
 async def _finalize_talent_fixture(tmp_path, monkeypatch, *, enabled: bool):
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL",
         "true" if enabled else "false",
@@ -171,7 +171,7 @@ def test_app_lifespan_starts_worker_only_when_enabled(tmp_path, monkeypatch):
 
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "configured")
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         str(tmp_path / "review-checkpoints.db"),
@@ -197,7 +197,7 @@ def test_app_lifespan_hands_normalized_runtime_paths_to_worker(
     monkeypatch.setattr(server, "create_review_worker", capture_worker)
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "configured")
-    monkeypatch.setenv("TASKS_DB_PATH", "data/../tasks.db")
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", "data/../tasks.db")
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         "./review-checkpoints.db",
@@ -227,7 +227,7 @@ def test_app_lifespan_cleans_up_when_worker_fails_during_startup(
     )
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "configured")
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         str(tmp_path / "review-checkpoints.db"),
@@ -274,7 +274,7 @@ def test_app_lifespan_fails_startup_with_incomplete_review_schema(
 
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL", "true")
     monkeypatch.setenv("API_SECRET", "configured")
-    monkeypatch.setenv("TASKS_DB_PATH", str(tasks_path))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tasks_path))
     monkeypatch.setenv(
         "DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH",
         str(tmp_path / "review-checkpoints.db"),

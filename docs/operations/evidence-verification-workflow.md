@@ -19,7 +19,7 @@ Set canonical variables only:
 DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL=true
 DECISION_RESEARCH_AGENT_ENABLE_EVIDENCE_VERIFICATION=true
 API_SECRET=<configured out of band>
-TASKS_DB_PATH=/app/data/tasks.db
+DECISION_RESEARCH_AGENT_DB_PATH=/app/data/tasks.db
 DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH=/app/data/review_checkpoints.db
 ```
 

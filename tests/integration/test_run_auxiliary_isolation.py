@@ -17,7 +17,7 @@ AUTH_HEADERS = {"X-API-Key": "test-integration-key"}
 def test_same_thread_can_schedule_two_run_scoped_requests(tmp_path, monkeypatch):
     import api.server as server
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
     scheduled = []
 
@@ -189,7 +189,7 @@ async def test_connection_manager_keeps_two_run_channels_for_same_thread():
 def test_run_websocket_resolves_run_identity(tmp_path, monkeypatch):
     from api.run_repository import create_run
 
-    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_DB_PATH", str(tmp_path / "tasks.db"))
     os.environ["API_SECRET"] = "test-integration-key"
     created = create_run(thread_id="shared-thread", query="query")
     client = TestClient(app)
