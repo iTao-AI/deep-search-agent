@@ -96,6 +96,11 @@ terminal. `result --run-id` calls `GET /api/runs/{run_id}/result` and returns
 the bounded canonical artifact payload. For generic runs the artifact ID is
 `research-report.md`.
 
+PR3 bounded smoke exercised this sequence with an environment-only API key,
+temporary application database, one generic run, and result retrieval. The
+captured response payloads did not include the API key. Private consumer
+workspace paths and secrets are intentionally not documented here.
+
 Legacy task/thread commands remain available during the rollback window:
 
 ```bash
