@@ -1,6 +1,8 @@
 """Integration tests for server-side task finalization."""
 import pytest
+from pathlib import PurePosixPath
 
+from agent.harness_contracts import ReportCandidate
 from agent.run_result import AgentRunResult
 
 
@@ -81,6 +83,10 @@ class TestServerTaskFinalization:
                 query=query,
                 session_dir=session_dir,
                 last_agent_text="agent text",
+                report_candidate=ReportCandidate(
+                    path=PurePosixPath("/workspace/research-report.md"),
+                    content="report",
+                ),
             )
 
         monkeypatch.setattr(server, "run_deep_agent", fake_run_deep_agent)
@@ -90,7 +96,7 @@ class TestServerTaskFinalization:
         task = get_task(thread_id=thread_id)
         assert finalization.status == "completed"
         assert task["status"] == "completed"
-        assert task["output_path"] == str(report)
+        assert task["output_path"] == str(session_dir / "research-report.md")
 
     @pytest.mark.asyncio
     async def test_run_task_with_persistence_marks_completed_with_fallback(

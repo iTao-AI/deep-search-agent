@@ -42,3 +42,4 @@ docs/evidence/*
 !docs/evidence/durable-hitl-gate-report.json
 *.md
 !README.md
+!skills/**/SKILL.md

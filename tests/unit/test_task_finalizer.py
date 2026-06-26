@@ -1,10 +1,13 @@
 """Tests for task finalization and fallback reports."""
 import json
+import os
 from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
 
 import pytest
 
 from agent.run_result import AgentRunResult
+from agent.harness_contracts import ReportCandidate
 from agent.research import EvidenceEntry
 
 
@@ -31,7 +34,58 @@ class TestTaskFinalizer:
         assert "_collect_shared_context_evidence" not in source
         assert "shared_context_tools" not in source
 
-    def test_selects_newest_existing_markdown_report(self, tmp_path, task_db):
+    def test_finalizer_uses_report_candidate_without_scanning_session_dir(
+        self,
+        tmp_path,
+        task_db,
+        monkeypatch,
+    ):
+        from api.task_finalizer import finalize_task_run
+
+        thread_id = "finalizer-report-candidate"
+        _save_task(thread_id, "query")
+        result = AgentRunResult(
+            thread_id=thread_id,
+            query="query",
+            session_dir=tmp_path / f"session_{thread_id}",
+            report_candidate=ReportCandidate(
+                path=PurePosixPath("/workspace/research-report.md"),
+                content="# Report\n",
+            ),
+        )
+
+        monkeypatch.setattr(
+            Path,
+            "glob",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("session_dir scan")
+            ),
+        )
+        monkeypatch.setattr(
+            Path,
+            "iterdir",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("session_dir scan")
+            ),
+        )
+        monkeypatch.setattr(
+            os,
+            "scandir",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("session_dir scan")
+            ),
+        )
+
+        finalized = finalize_task_run(result)
+
+        assert finalized.status == "completed"
+        assert Path(finalized.output_path).read_text(encoding="utf-8") == "# Report\n"
+
+    def test_ignores_existing_host_markdown_without_report_candidate(
+        self,
+        tmp_path,
+        task_db,
+    ):
         from api.persistence import get_task
         from api.task_finalizer import finalize_task_run
 
@@ -64,11 +118,11 @@ class TestTaskFinalizer:
         finalization = finalize_task_run(result)
 
         task = get_task(thread_id=thread_id)
-        assert finalization.status == "completed"
-        assert finalization.fallback_used is False
-        assert finalization.output_path == str(new_report)
-        assert task["status"] == "completed"
-        assert task["output_path"] == str(new_report)
+        assert finalization.status == "completed_with_fallback"
+        assert finalization.fallback_used is True
+        assert finalization.output_path.endswith("fallback_report.md")
+        assert task["status"] == "completed_with_fallback"
+        assert task["output_path"].endswith("fallback_report.md")
         assert json.loads(task["token_usage_json"])["total_tokens"] == 0
 
     def test_writes_fallback_report_when_no_markdown_exists(self, tmp_path, task_db):
@@ -196,6 +250,12 @@ class TestTaskFinalizer:
             assistant_calls=1,
             tool_starts=1,
             diagnostics=["tool:tavily_search"],
+            report_candidate=ReportCandidate(
+                path=PurePosixPath("/workspace/research-report.md"),
+                content=(
+                    "The report cites https://example.com/source as evidence."
+                ),
+            ),
             evidence_entries=[
                 EvidenceEntry(
                     thread_id=thread_id,
@@ -241,6 +301,10 @@ class TestTaskFinalizer:
             query="query",
             session_dir=session_dir,
             last_agent_text="agent text",
+            report_candidate=ReportCandidate(
+                path=PurePosixPath("/workspace/research-report.md"),
+                content="report",
+            ),
         )
 
         with pytest.raises(RuntimeError, match="research persistence failed"):

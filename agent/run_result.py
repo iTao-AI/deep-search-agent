@@ -9,6 +9,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Sequence
 
+from agent.harness_contracts import ReportCandidate
 from agent.research import EvidenceEntry, extract_evidence_entries
 from agent.talent_contracts import ResearchPacket
 from langchain_core.messages import AIMessage, ToolMessage
@@ -39,6 +40,7 @@ class ExecutionOutcome:
     error_message: str | None = None
     failure_kind: str | None = None
     cancellation_state: str | None = None
+    report_candidate: ReportCandidate | None = None
 
 
 # Backwards-compatible public name while callers migrate to ExecutionOutcome.
@@ -82,6 +84,7 @@ class AgentRunAccumulator:
     research_packets: list[ResearchPacket] = field(default_factory=list)
     evidence_aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)
     verified_evidence_ids: set[str] = field(default_factory=set)
+    report_candidate: ReportCandidate | None = None
 
     def to_outcome(
         self,
@@ -120,6 +123,7 @@ class AgentRunAccumulator:
             error_message=error_message,
             failure_kind=resolved_failure_kind,
             cancellation_state=cancellation_state,
+            report_candidate=self.report_candidate,
         )
 
     def to_result(self, error_message: str | None = None) -> AgentRunResult:

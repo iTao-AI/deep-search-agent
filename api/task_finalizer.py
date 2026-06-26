@@ -20,21 +20,14 @@ class TaskFinalization:
     error_message: str | None = None
 
 
-def _find_latest_markdown_report(run_result: AgentRunResult) -> Path | None:
-    started_timestamp = (
-        run_result.started_at.timestamp() if run_result.started_at is not None else None
-    )
-    candidates = [
-        path
-        for path in run_result.session_dir.glob("*.md")
-        if path.name != "fallback_report.md"
-        and path.is_file()
-        and path.stat().st_size > 0
-        and (started_timestamp is None or path.stat().st_mtime >= started_timestamp)
-    ]
-    if not candidates:
+def _write_report_candidate(run_result: AgentRunResult) -> Path | None:
+    candidate = run_result.report_candidate
+    if candidate is None or not candidate.content.strip():
         return None
-    return max(candidates, key=lambda path: path.stat().st_mtime)
+    run_result.session_dir.mkdir(parents=True, exist_ok=True)
+    report_path = run_result.session_dir / candidate.path.name
+    report_path.write_text(candidate.content, encoding="utf-8")
+    return report_path
 
 
 def _fallback_report_content(run_result: AgentRunResult) -> str:
@@ -126,7 +119,7 @@ def persist_research_run(
 
 def finalize_task_run(run_result: AgentRunResult) -> TaskFinalization:
     """Persist a successful agent run as completed or completed_with_fallback."""
-    report_path = _find_latest_markdown_report(run_result)
+    report_path = _write_report_candidate(run_result)
     fallback_used = False
     status = "completed"
 
