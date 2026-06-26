@@ -17,7 +17,7 @@ def test_verified_constraints_are_used_by_docker_and_ci():
     assert "langgraph==1.2.6" in constraints
     assert "langsmith==0.8.18" in constraints
     assert "COPY requirements.txt constraints.txt ./" in dockerfile
-    assert "python -m pip install --upgrade pip" in dockerfile
+    assert "python -m pip install --no-cache-dir --default-timeout=60 --retries=5 --upgrade pip" in dockerfile
     assert "--no-cache-dir --default-timeout=60 --retries=5" in dockerfile
     assert "for i in $(seq 1 3)" in dockerfile
     assert "-r requirements.txt -c constraints.txt" in dockerfile
