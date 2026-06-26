@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+import os
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
@@ -25,7 +26,6 @@ from agent.run_result import (
     process_stream_chunk,
 )
 from agent.runtime_context import ResearchRuntimeContext
-from agent.runtime_env import resolve_env
 from agent.token_tracking import TokenTrackingCallbackHandler
 from api.context import (
     reset_execution_context,
@@ -179,10 +179,9 @@ class ResearchExecutionService:
     ) -> None:
         if not aggregate_ids:
             return
-        fixtures_enabled = resolve_env(
+        fixtures_enabled = os.environ.get(
             "DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES",
-            "DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES",
-            default="",
+            "",
         )
         if (fixtures_enabled or "").lower() != "true":
             return

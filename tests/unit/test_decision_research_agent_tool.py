@@ -3,7 +3,6 @@ import io
 import json
 from pathlib import Path
 import re
-import warnings
 
 import pytest
 
@@ -52,94 +51,19 @@ def test_healthcheck_calls_health_endpoint(monkeypatch):
     assert captured == {"url": "http://127.0.0.1:9000/health", "timeout": 2}
 
 
-def test_start_task_posts_query_thread_id_and_auth_header(monkeypatch):
-    captured = {}
-
-    def fake_urlopen(req, timeout):
-        captured["url"] = req.full_url
-        captured["headers"] = dict(req.headers)
-        captured["body"] = json.loads(req.data.decode("utf-8"))
-        return FakeResponse({"status": "started", "thread_id": "thread-1"})
-
-    monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
-
-    result = tool.start_task(
-        query="research question",
-        thread_id="thread-1",
-        config=tool.ToolConfig(base_url="http://127.0.0.1:9000", api_key="secret-key"),
-    )
-
-    assert result["thread_id"] == "thread-1"
-    assert captured["url"] == "http://127.0.0.1:9000/api/task"
-    assert captured["headers"]["X-api-key"] == "secret-key"
-    assert captured["body"] == {"query": "research question", "thread_id": "thread-1"}
-    assert "secret-key" not in json.dumps(result)
-
-
-def test_get_task_and_token_usage_call_expected_endpoints(monkeypatch):
-    urls = []
-
-    def fake_urlopen(req, timeout):
-        urls.append(req.full_url)
-        if req.full_url.endswith("/api/tasks/thread-1"):
-            return FakeResponse({"thread_id": "thread-1", "status": "completed"})
-        return FakeResponse({"thread_id": "thread-1", "total_tokens": 123})
-
-    monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
-    config = tool.ToolConfig(base_url="http://127.0.0.1:9000")
-
-    task = tool.get_task("thread-1", config)
-    usage = tool.token_usage("thread-1", config)
-
-    assert task["status"] == "completed"
-    assert usage["total_tokens"] == 123
-    assert urls == [
-        "http://127.0.0.1:9000/api/tasks/thread-1",
-        "http://127.0.0.1:9000/api/token-usage/thread-1",
-    ]
-
-
-def test_research_run_and_research_runs_call_expected_endpoints(monkeypatch):
-    urls = []
-
-    def fake_urlopen(req, timeout):
-        urls.append(req.full_url)
-        if req.full_url.endswith("/api/research/runs/thread-1"):
-            return FakeResponse({"thread_id": "thread-1", "evidence": []})
-        return FakeResponse({"runs": [{"thread_id": "thread-1"}]})
-
-    monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
-    config = tool.ToolConfig(base_url="http://127.0.0.1:9000")
-
-    run = tool.research_run("thread-1", config)
-    runs = tool.research_runs(config, limit=5)
-
-    assert run["thread_id"] == "thread-1"
-    assert runs["runs"][0]["thread_id"] == "thread-1"
-    assert urls == [
-        "http://127.0.0.1:9000/api/research/runs/thread-1",
-        "http://127.0.0.1:9000/api/research/runs?limit=5",
-    ]
-
-
-def test_get_task_url_encodes_thread_id(monkeypatch):
-    urls = []
-
-    def fake_urlopen(req, timeout):
-        urls.append(req.full_url)
-        return FakeResponse({"thread_id": "a/b", "status": "completed"})
-
-    monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
-
-    tool.get_task("a/b", tool.ToolConfig(base_url="http://127.0.0.1:9000"))
-    tool.token_usage("a/b", tool.ToolConfig(base_url="http://127.0.0.1:9000"))
-    tool.research_run("a/b", tool.ToolConfig(base_url="http://127.0.0.1:9000"))
-
-    assert urls == [
-        "http://127.0.0.1:9000/api/tasks/a%2Fb",
-        "http://127.0.0.1:9000/api/token-usage/a%2Fb",
-        "http://127.0.0.1:9000/api/research/runs/a%2Fb",
-    ]
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["start-task", "--query", "research"],
+        ["get-task", "--thread-id", "thread-1"],
+        ["token-usage", "--thread-id", "thread-1"],
+        ["research-run", "--thread-id", "thread-1"],
+        ["research-runs"],
+    ],
+)
+def test_legacy_commands_are_rejected(argv):
+    with pytest.raises(SystemExit):
+        tool._build_parser().parse_args(argv)
 
 
 def test_http_failure_raises_structured_error(monkeypatch):
@@ -992,60 +916,31 @@ def test_config_from_env_prefers_canonical_values(monkeypatch):
     monkeypatch.setenv("DEEP_SEARCH_AGENT_API_KEY", "legacy-secret")
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS", "17")
     monkeypatch.setenv("DEEP_SEARCH_AGENT_TIMEOUT_SECONDS", "23")
-    tool._reset_warning_state_for_tests()
 
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        config = tool.config_from_env(_args())
+    config = tool.config_from_env(_args())
 
     assert config == tool.ToolConfig(
         base_url="https://canonical.example",
         api_key="",
         timeout_seconds=17,
     )
-    messages = [str(item.message) for item in caught]
-    assert len(messages) == 3
-    assert all("ignored" in message for message in messages)
-    assert "legacy-secret" not in "\n".join(messages)
-    assert "canonical.example" not in "\n".join(messages)
-    assert "legacy.example" not in "\n".join(messages)
 
 
-def test_config_from_env_supports_legacy_values_with_value_free_warnings(monkeypatch):
+def test_config_from_env_ignores_legacy_values(monkeypatch):
     monkeypatch.delenv("DECISION_RESEARCH_AGENT_URL", raising=False)
     monkeypatch.delenv("DECISION_RESEARCH_AGENT_API_KEY", raising=False)
     monkeypatch.delenv("DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS", raising=False)
     monkeypatch.setenv("DEEP_SEARCH_AGENT_URL", "https://legacy.example")
     monkeypatch.setenv("DEEP_SEARCH_AGENT_API_KEY", "legacy-secret")
     monkeypatch.setenv("DEEP_SEARCH_AGENT_TIMEOUT_SECONDS", "23")
-    tool._reset_warning_state_for_tests()
 
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        config = tool.config_from_env(_args())
+    config = tool.config_from_env(_args())
 
     assert config == tool.ToolConfig(
-        base_url="https://legacy.example",
-        api_key="legacy-secret",
-        timeout_seconds=23,
+        base_url=tool.ToolConfig.base_url,
+        api_key=None,
+        timeout_seconds=tool.ToolConfig.timeout_seconds,
     )
-    messages = [str(item.message) for item in caught]
-    assert len(messages) == 3
-    assert all("deprecated; use" in message for message in messages)
-    assert "legacy-secret" not in "\n".join(messages)
-    assert "legacy.example" not in "\n".join(messages)
-
-
-def test_legacy_config_survives_strict_future_warning_filter(monkeypatch):
-    monkeypatch.delenv("DECISION_RESEARCH_AGENT_URL", raising=False)
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_URL", "https://legacy.example")
-    tool._reset_warning_state_for_tests()
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", FutureWarning)
-        config = tool.config_from_env(_args())
-
-    assert config.base_url == "https://legacy.example"
 
 
 @pytest.mark.parametrize("canonical_timeout", ["", "invalid", "0", "-1"])

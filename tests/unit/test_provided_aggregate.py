@@ -50,15 +50,19 @@ def test_canonical_fixture_flag_overrides_legacy_false(monkeypatch):
     assert result["error"]["code"] == "undeclared_provided_aggregate"
 
 
-def test_provided_aggregate_rejects_undeclared_aggregate(tmp_path, monkeypatch):
+def test_legacy_fixture_flag_is_ignored(monkeypatch):
     from tools.provided_aggregate import provided_aggregate
 
+    monkeypatch.delenv(
+        "DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES",
+        raising=False,
+    )
     monkeypatch.setenv("DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES", "true")
 
     result = provided_aggregate.invoke({"aggregate_id": "aggregate-v1"})
 
     assert result["status"] == "error"
-    assert result["error"]["code"] == "undeclared_provided_aggregate"
+    assert result["error"]["code"] == "provided_aggregate_disabled"
 
 
 def test_provided_aggregate_reads_only_declared_fixed_fixture(
@@ -74,7 +78,10 @@ def test_provided_aggregate_reads_only_declared_fixed_fixture(
 
     fixtures = tmp_path / "fixtures"
     _write_fixture(fixtures)
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES", "true")
+    monkeypatch.setenv(
+        "DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES",
+        "true",
+    )
     monkeypatch.setattr(aggregate_tool, "FIXTURE_ROOT", fixtures)
     aggregate_token = set_allowed_aggregate_ids_context(("aggregate-v1",))
     run_token = set_run_context("run-talent")
@@ -95,7 +102,10 @@ def test_provided_aggregate_rejects_path_like_identifier(monkeypatch):
     from api.context import _allowed_aggregate_ids_ctx, set_allowed_aggregate_ids_context
     from tools.provided_aggregate import provided_aggregate
 
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES", "true")
+    monkeypatch.setenv(
+        "DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES",
+        "true",
+    )
     token = set_allowed_aggregate_ids_context(("../secret",))
     try:
         result = provided_aggregate.invoke({"aggregate_id": "../secret"})
@@ -113,7 +123,10 @@ def test_provided_aggregate_rejects_non_utf8_fixture(tmp_path, monkeypatch):
     fixtures = tmp_path / "fixtures"
     fixtures.mkdir()
     (fixtures / "aggregate-v1.json").write_bytes(b"\xff\xfe\x00")
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES", "true")
+    monkeypatch.setenv(
+        "DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES",
+        "true",
+    )
     monkeypatch.setattr(aggregate_tool, "FIXTURE_ROOT", fixtures)
     token = set_allowed_aggregate_ids_context(("aggregate-v1",))
     try:

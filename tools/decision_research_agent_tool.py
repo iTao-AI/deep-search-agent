@@ -6,18 +6,11 @@ import json
 import os
 from pathlib import Path
 import sys
-from threading import RLock
 import time
 from dataclasses import dataclass
 from typing import Any
 from urllib import error, parse, request
 import uuid
-import warnings
-
-
-_MISSING = object()
-_WARNED_LEGACY_KEYS: set[str] = set()
-_WARNING_LOCK = RLock()
 
 
 class ToolClientError(RuntimeError):
@@ -96,33 +89,6 @@ def _request_json(
 
 def healthcheck(config: ToolConfig) -> dict[str, Any]:
     return _request_json("GET", _join_url(config.base_url, "/health"), config=config)
-
-
-def start_task(query: str, thread_id: str | None, config: ToolConfig) -> dict[str, Any]:
-    payload = {"query": query}
-    if thread_id:
-        payload["thread_id"] = thread_id
-    return _request_json("POST", _join_url(config.base_url, "/api/task"), config=config, payload=payload)
-
-
-def get_task(thread_id: str, config: ToolConfig) -> dict[str, Any]:
-    encoded_thread_id = parse.quote(thread_id, safe="")
-    return _request_json("GET", _join_url(config.base_url, f"/api/tasks/{encoded_thread_id}"), config=config)
-
-
-def token_usage(thread_id: str, config: ToolConfig) -> dict[str, Any]:
-    encoded_thread_id = parse.quote(thread_id, safe="")
-    return _request_json("GET", _join_url(config.base_url, f"/api/token-usage/{encoded_thread_id}"), config=config)
-
-
-def research_run(thread_id: str, config: ToolConfig) -> dict[str, Any]:
-    encoded_thread_id = parse.quote(thread_id, safe="")
-    return _request_json("GET", _join_url(config.base_url, f"/api/research/runs/{encoded_thread_id}"), config=config)
-
-
-def research_runs(config: ToolConfig, limit: int = 50) -> dict[str, Any]:
-    safe_limit = max(1, min(limit, 200))
-    return _request_json("GET", _join_url(config.base_url, f"/api/research/runs?limit={safe_limit}"), config=config)
 
 
 def profile_manifest(profile_id: str, config: ToolConfig) -> dict[str, Any]:
@@ -613,55 +579,10 @@ def wait_for_review(
     raise ToolClientError("review_wait_timeout")
 
 
-def _resolve_env(
-    canonical_key: str,
-    legacy_key: str,
-    *,
-    default: str | None = None,
-) -> str | None:
-    """Resolve Tool Client settings without repository package imports."""
-    canonical = os.environ.get(canonical_key, _MISSING)
-    if canonical is not _MISSING:
-        if legacy_key in os.environ:
-            _warn_once(
-                legacy_key,
-                f"{legacy_key} is deprecated and ignored because {canonical_key} is set",
-            )
-        return canonical
-
-    legacy = os.environ.get(legacy_key, _MISSING)
-    if legacy is _MISSING:
-        return default
-
-    _warn_once(legacy_key, f"{legacy_key} is deprecated; use {canonical_key}")
-    return legacy
-
-
-def _warn_once(legacy_key: str, message: str) -> None:
-    # Keep these semantics aligned with agent.runtime_env.
-    with _WARNING_LOCK:
-        if legacy_key in _WARNED_LEGACY_KEYS:
-            return
-        try:
-            warnings.warn(message, FutureWarning, stacklevel=3)
-        except FutureWarning:
-            # Warning policy must not turn legacy configuration into an outage.
-            pass
-        finally:
-            _WARNED_LEGACY_KEYS.add(legacy_key)
-
-
-def _reset_warning_state_for_tests() -> None:
-    """Reset warning deduplication for tests; production code must not call it."""
-    with _WARNING_LOCK:
-        _WARNED_LEGACY_KEYS.clear()
-
-
 def config_from_env(args: argparse.Namespace) -> ToolConfig:
-    timeout_raw = args.timeout or _resolve_env(
+    timeout_raw = args.timeout or os.environ.get(
         "DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS",
-        "DEEP_SEARCH_AGENT_TIMEOUT_SECONDS",
-        default="",
+        "",
     )
     try:
         timeout = float(timeout_raw) if timeout_raw else ToolConfig.timeout_seconds
@@ -669,18 +590,14 @@ def config_from_env(args: argparse.Namespace) -> ToolConfig:
         timeout = ToolConfig.timeout_seconds
     if timeout <= 0:
         timeout = ToolConfig.timeout_seconds
-    base_url_raw = args.base_url or _resolve_env(
+    base_url_raw = args.base_url or os.environ.get(
         "DECISION_RESEARCH_AGENT_URL",
-        "DEEP_SEARCH_AGENT_URL",
-        default="",
+        "",
     )
     base_url = (base_url_raw or "").strip() or ToolConfig.base_url
     return ToolConfig(
         base_url=base_url,
-        api_key=_resolve_env(
-            "DECISION_RESEARCH_AGENT_API_KEY",
-            "DEEP_SEARCH_AGENT_API_KEY",
-        ),
+        api_key=os.environ.get("DECISION_RESEARCH_AGENT_API_KEY"),
         timeout_seconds=timeout,
     )
 
@@ -695,22 +612,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("healthcheck")
     subparsers.add_parser("doctor")
-
-    start = subparsers.add_parser("start-task")
-    start.add_argument("--query", required=True)
-    start.add_argument("--thread-id")
-
-    get = subparsers.add_parser("get-task")
-    get.add_argument("--thread-id", required=True)
-
-    usage = subparsers.add_parser("token-usage")
-    usage.add_argument("--thread-id", required=True)
-
-    research = subparsers.add_parser("research-run")
-    research.add_argument("--thread-id", required=True)
-
-    research_list = subparsers.add_parser("research-runs")
-    research_list.add_argument("--limit", type=int, default=50)
 
     run = subparsers.add_parser("run")
     run.add_argument("--query", required=True)
@@ -810,16 +711,6 @@ def main(argv: list[str] | None = None) -> int:
             result = healthcheck(config)
         elif args.command == "doctor":
             result = doctor(config)
-        elif args.command == "start-task":
-            result = start_task(args.query, args.thread_id, config)
-        elif args.command == "get-task":
-            result = get_task(args.thread_id, config)
-        elif args.command == "token-usage":
-            result = token_usage(args.thread_id, config)
-        elif args.command == "research-run":
-            result = research_run(args.thread_id, config)
-        elif args.command == "research-runs":
-            result = research_runs(config, args.limit)
         elif args.command == "run":
             scope = {}
             if args.scope_file:
