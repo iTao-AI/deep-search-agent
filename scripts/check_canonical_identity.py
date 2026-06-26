@@ -16,6 +16,12 @@ FORBIDDEN_TERMS = (
     "/api/task",
     "/api/tasks",
     "/api/research/runs",
+    "api/task_finalizer.py",
+    "agent/shared_context.py",
+    "tools/shared_context_tools.py",
+    "frontend/README.md",
+    "current Vue code",
+    "cd frontend",
 )
 
 HISTORICAL_PREFIXES = (

@@ -49,11 +49,11 @@ Then read the smallest applicable set:
 |---|---|
 | LangGraph, DeepAgents, model binding, structured output | `agent/main_agent.py`, `agent/profile_agents.py`, `agent/llm.py`, `langchain-dev-guide`, current official docs through Context7 |
 | Run identity, persistence, concurrency | `docs/decisions/run-identity-boundaries.md` and affected repositories/tests |
-| Evidence or finalization | `agent/run_result.py`, `api/task_finalizer.py`, lifecycle tests |
+| Evidence or finalization | `agent/run_result.py`, `api/run_repository.py`, `api/run_result_service.py`, lifecycle tests |
 | Talent profile or benchmark | profile/contracts/artifact/review modules and benchmark tests |
 | Durable review or HITL | `docs/operations/durable-hitl-feasibility.md`, gate report, affected review modules/tests |
 | REST, WebSocket, Tool Client | `spec/api-contract.md`, `docs/AGENT_INTEGRATION.md`, contract tests |
-| Frontend | `frontend/README.md`, affected API contract, current Vue code |
+| Future UI/API consumer | affected API contract, Tool Client behavior, WebSocket contract |
 | Public metric or claim | producing command/artifact and its evidence boundary |
 
 Do not load every listed document for an unrelated or local change. If a
@@ -69,7 +69,7 @@ document is missing or stale, inspect implementation and tests instead.
   readiness, Evidence authority, or delivery.
 - `thread_id` groups caller conversation and remains a compatibility identity.
   `run_id` owns one isolated execution. Do not mechanically rename them.
-- Run-scoped workspace, SharedContext, tokens, telemetry, monitor routing, and
+- Run-scoped workspace, runtime context, tokens, telemetry, monitor routing, and
   search cache must not leak across concurrent runs.
 - Timeout, cancellation, completion, and stale writers must use fenced atomic
   finalization without losing frozen Evidence.
@@ -83,9 +83,10 @@ document is missing or stale, inspect implementation and tests instead.
   single-node SQLite feasibility, not production readiness.
 - Approval permits delivery but does not verify Evidence. Rejection blocks
   delivery and does not automatically start new research.
-- Do not treat LangSmith as a ledger, introduce runtime Skills or Async
-  Subagents, migrate Vue to React, or expand to multi-tenant infrastructure
-  unless the task explicitly approves that scope.
+- Do not treat LangSmith as a ledger, add new runtime Skills beyond the
+  approved generic read-only skills, add Async Subagents, introduce a frontend,
+  or expand to multi-tenant infrastructure unless the task explicitly approves
+  that scope.
 - Do not rename compatibility identifiers, API paths, persisted identities,
   profile IDs, or benchmark IDs as incidental cleanup.
 
@@ -181,19 +182,15 @@ Common commands:
 ```bash
 python -m pytest -q
 
-cd frontend
-npm ci
-npm run build
-
 python scripts/durable_hitl_gate_runner.py \
   --output docs/evidence/durable-hitl-gate-report.json
 
 git diff --check
 ```
 
-Run the frontend build only when frontend or its contract is affected. Run the
-durable HITL gate only when that contract is affected and Docker is available.
-If a check cannot run, state the exact reason.
+There is no bundled frontend build in this release. Run the durable HITL gate
+only when that contract is affected and Docker is available. If a check cannot
+run, state the exact reason.
 
 ## Documentation
 

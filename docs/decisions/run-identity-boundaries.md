@@ -11,8 +11,7 @@ and scripts. These references must not be mechanically renamed.
 
 ## Use `run_id`
 
-- Workspace directory for `/api/runs`.
-- SharedContext snapshot/cleanup key.
+- Workspace directory and runtime context for `/api/runs`.
 - Search de-duplication cache key.
 - Token collection key.
 - New ResearchRun, segment, and evidence persistence.

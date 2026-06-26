@@ -11,7 +11,7 @@ automatically or establish general production readiness.
 ```dotenv
 DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL=true
 API_SECRET=<configured out of band>
-DECISION_RESEARCH_AGENT_DB_PATH=/app/data/tasks.db
+DECISION_RESEARCH_AGENT_DB_PATH=/app/data/decision_research_agent.db
 DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH=/app/data/review_checkpoints.db
 ```
 
