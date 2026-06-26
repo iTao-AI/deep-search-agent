@@ -1,8 +1,8 @@
-# PRD：Deep Search Agent
+# PRD：Decision Research Agent
 
 ## 产品概述
 
-Deep Search Agent 是一个自主规划的信息检索与报告生成智能体。用户用自然语言提问开放性问题，主 Agent 自主拆解任务、委派给专业子 Agent（网络搜索/数据库查询/RAGFlow 知识库），汇总结果并生成 Markdown/PDF 格式的报告。
+Decision Research Agent 是一个自主规划的信息检索与报告生成智能体。用户用自然语言提问开放性问题，主 Agent 自主拆解任务、委派给专业子 Agent（网络搜索/数据库查询/RAGFlow 知识库），汇总结果并生成 Markdown/PDF 格式的报告。
 
 ## 目标用户
 

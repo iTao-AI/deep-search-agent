@@ -228,7 +228,7 @@ app.include_router(evidence_verification_router)
 @app.get("/health")
 async def health():
     """Lightweight service health endpoint for agent-tool integrations."""
-    return {"status": "ok", "service": "deep-search-agent"}
+    return {"status": "ok", "service": "decision-research-agent"}
 
 
 class RunRequest(BaseModel):

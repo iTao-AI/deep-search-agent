@@ -142,7 +142,7 @@ workspace/
 
 P1B feasibility 使用两个独立 SQLite 文件：
 
-- application DB（`TASKS_DB_PATH`）是业务事实源，保存 ResearchRun、不可变决策、
+- application DB（`DECISION_RESEARCH_AGENT_DB_PATH`）是业务事实源，保存 ResearchRun、不可变决策、
   workflow、lease、恢复尝试、resolution 和 artifacts；
 - checkpoint DB（`DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH`）只保存纯
   LangGraph ReviewGate 的执行 checkpoint，不保存业务权威结论。

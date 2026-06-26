@@ -41,7 +41,7 @@ def test_healthcheck_calls_health_endpoint(monkeypatch):
     def fake_urlopen(req, timeout):
         captured["url"] = req.full_url
         captured["timeout"] = timeout
-        return FakeResponse({"status": "ok", "service": "deep-search-agent"})
+        return FakeResponse({"status": "ok", "service": "decision-research-agent"})
 
     monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
 
@@ -622,7 +622,7 @@ def test_review_decision_parser_commands():
 
 def test_cli_does_not_print_api_key(monkeypatch, capsys):
     def fake_urlopen(req, timeout):
-        return FakeResponse({"status": "ok", "service": "deep-search-agent"})
+        return FakeResponse({"status": "ok", "service": "decision-research-agent"})
 
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_API_KEY", "secret-key")
     monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
@@ -661,7 +661,7 @@ def test_doctor_checks_health_and_profile_manifest(monkeypatch):
                 }
             )
         if req.full_url.endswith("/health"):
-            return FakeResponse({"status": "ok", "service": "deep-search-agent"})
+            return FakeResponse({"status": "ok", "service": "decision-research-agent"})
         return FakeResponse(
             {
                 "profile": {"profile_id": "talent-hiring-signal"},
@@ -675,7 +675,7 @@ def test_doctor_checks_health_and_profile_manifest(monkeypatch):
 
     assert result["status"] == "ok"
     assert result["checks"]["server"]["status"] == "ok"
-    assert result["checks"]["server"]["service"] == "deep-search-agent"
+    assert result["checks"]["server"]["service"] == "decision-research-agent"
     assert result["checks"]["talent_profile"]["status"] == "ok"
     assert result["checks"]["durable_review"] == {
         "status": "ok",
@@ -911,11 +911,8 @@ def test_config_from_env_prefers_canonical_values(monkeypatch):
         "DECISION_RESEARCH_AGENT_URL",
         "https://canonical.example",
     )
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_URL", "https://legacy.example")
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_API_KEY", "")
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_API_KEY", "legacy-secret")
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS", "17")
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_TIMEOUT_SECONDS", "23")
 
     config = tool.config_from_env(_args())
 
@@ -926,25 +923,8 @@ def test_config_from_env_prefers_canonical_values(monkeypatch):
     )
 
 
-def test_config_from_env_ignores_legacy_values(monkeypatch):
-    monkeypatch.delenv("DECISION_RESEARCH_AGENT_URL", raising=False)
-    monkeypatch.delenv("DECISION_RESEARCH_AGENT_API_KEY", raising=False)
-    monkeypatch.delenv("DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS", raising=False)
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_URL", "https://legacy.example")
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_API_KEY", "legacy-secret")
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_TIMEOUT_SECONDS", "23")
-
-    config = tool.config_from_env(_args())
-
-    assert config == tool.ToolConfig(
-        base_url=tool.ToolConfig.base_url,
-        api_key=None,
-        timeout_seconds=tool.ToolConfig.timeout_seconds,
-    )
-
-
 @pytest.mark.parametrize("canonical_timeout", ["", "invalid", "0", "-1"])
-def test_invalid_canonical_timeout_uses_default_without_legacy(
+def test_invalid_canonical_timeout_uses_default(
     monkeypatch,
     canonical_timeout,
 ):
@@ -952,7 +932,6 @@ def test_invalid_canonical_timeout_uses_default_without_legacy(
         "DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS",
         canonical_timeout,
     )
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_TIMEOUT_SECONDS", "23")
 
     config = tool.config_from_env(_args())
 
@@ -961,7 +940,6 @@ def test_invalid_canonical_timeout_uses_default_without_legacy(
 
 def test_empty_canonical_url_uses_default_without_legacy(monkeypatch):
     monkeypatch.setenv("DECISION_RESEARCH_AGENT_URL", "   ")
-    monkeypatch.setenv("DEEP_SEARCH_AGENT_URL", "https://legacy.example")
 
     config = tool.config_from_env(_args())
 

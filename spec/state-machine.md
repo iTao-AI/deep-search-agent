@@ -2,7 +2,7 @@
 
 ## LangGraph 图结构
 
-Deep Search Agent 使用 **星型协调图（Star Coordinator Graph）**。
+Decision Research Agent 使用 **星型协调图（Star Coordinator Graph）**。
 
 ```mermaid
 graph LR

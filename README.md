@@ -2,292 +2,152 @@
 
 # Decision Research Agent
 
-An evidence-driven research agent that gathers source-backed findings and turns them into decision-ready briefs. Built on LangGraph / DeepAgents, it combines autonomous planning, delegated research, auditable evidence capture, run-scoped persistence, and deterministic delivery contracts.
+Decision Research Agent is a long-running research service that turns
+source-backed findings into bounded, reviewable decision artifacts. It uses
+LangChain as the agent framework, DeepAgents as the research harness, LangGraph
+as the durable workflow runtime, and LangSmith as privacy-first diagnostics.
 
-The canonical repository and technical identity are `decision-research-agent`.
-The exact `/health` service value and legacy configuration aliases remain
-`deep-search-agent` for bounded compatibility.
+The active repository, runtime configuration, Tool Client, Docker defaults, and
+health service identifier use `decision-research-agent`.
+
+## What It Does
+
+- Runs research through canonical `run_id` scoped execution.
+- Persists ResearchRun, EvidenceLedger, review, verification, publication, and
+  canonical result state in the application database.
+- Produces bounded result artifacts through `GET /api/runs/{run_id}/result`.
+- Supports Talent Hiring Signal as the first benchmarked research profile.
+- Provides controlled durable review and evidence verification workflows behind
+  explicit feature flags.
+
+The repository currently ships backend, API, CLI, tests, docs, and operational
+scripts. It does not ship a frontend; a future UI can consume the existing API
+and WebSocket contracts.
 
 ## Architecture
 
-```
-User Question
-    │
-    ▼
-┌──────────────────────────────────────────────────────┐
-│              Main Agent (LangGraph Planner)          │
-│  - Autonomous task decomposition                     │
-│  - Sub-agent delegation via DeepAgents `task` tool   │
-│  - File system context management (ContextVar)       │
-│  - Report synthesis (Markdown / PDF)                 │
-├──────────────┬──────────────────┬────────────────────┤
-│ Network      │ Database         │ Knowledge Base     │
-│ Search Agent │ Query Agent      │ (RAG) Agent        │
-│ (Tavily)     │ (MySQL)          │ (RAGFlow)          │
-└──────────────┴──────────────────┴────────────────────┘
-    │              │                    │
-    ▼              ▼                    ▼
-  Internet       Business           Enterprise
-  Search         Data               Knowledge
+```mermaid
+flowchart TD
+    User["User or automation"] --> Tool["Tool Client / REST API"]
+    Tool --> API["FastAPI backend"]
+    API --> Harness["DeepAgents harness"]
+    Harness --> LC["LangChain agent framework"]
+    LC --> LG["LangGraph runtime"]
+    Harness --> Tools["Search / database / fixture tools"]
+    API --> DB[("Application SQLite DB")]
+    API --> Artifacts["Canonical artifacts"]
+    API --> LS["LangSmith diagnostics"]
 ```
 
-**Data flow:**
-1. User submits a question via REST API or WebSocket
-2. Main Agent analyzes the question and creates an execution plan
-3. Specialized sub-agents are dispatched with isolated contexts
-4. Results are synthesized into Markdown/PDF reports
-5. Progress is available through run-scoped API and WebSocket consumers
-
-## End-to-End Task Walkthrough
-
-> Numbers below are illustrative examples of the output format, not benchmark results.
-
-```
-User: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
-
-  ↓ Main Agent plans
-  ├── [Network Search Agent] → Tavily search: "AI medical diagnosis trends 2024"
-  │                              Tavily search: "AI radiology deep learning"
-  │                              → Collects search results
-  ├── [Database Query Agent]  → MySQL: SELECT recent medical-AI papers count
-  │                              → Returns query results
-  └── [Knowledge Base Agent]  → RAGFlow: retrieve internal medical-AI reports
-                                 → Returns relevant documents
-  ↓
-  Main Agent synthesizes → report.md → report.pdf
-  ↓
-  WebSocket events streamed to run-scoped consumers in real time
-```
-
-> **Note**: Evidence table data comes from Task 1 actual command output. If numbers differ on re-run, Task 1 output takes precedence.
-
-## Evidence
-
-| Metric | Value | Source |
-|--------|-------|--------|
-| Local pytest run | 598 passed, 0 failed | Python 3.11 compatibility environment, `python -m pytest -q` |
-| Docker deployment | Verified on localhost | [QA Report](docs/evidence/assets/qa-report-summary.md) |
-| E2E Run #1 | 282s, 459K tokens, 2 sub-agents, report.md generated | [Run Log](docs/evidence/run-log.md) |
-| Token tracking | Implemented (Phase 7c) | `agent/token_tracking.py`, `GET /api/token-usage/{thread_id}` |
-| TTL caching | Implemented (Phase 7c) | `tools/cache.py`, Tavily 300s TTL |
-| API Key auth | Implemented (Phase 8) | `api/server.py`, `APIKeyMiddleware` |
-| SQLite persistence | Implemented (Phase 8) | `api/persistence.py`, `GET /api/tasks/{thread_id}` |
-| Search dedup | Implemented (Phase 8) | `tools/tavily_tools.py`, `search_with_dedup` |
-| CI/CD | Configured (Phase 8) | `.github/workflows/ci.yml` |
-| Fallback reports | Implemented (Phase 9) | `api/task_finalizer.py`, deterministic terminal states |
-| Task timeout handling | Implemented (Phase 9) | `api/server.py`, `_mark_task_timeout` callback |
-| ResearchRun + EvidenceLedger | Implemented (Phase 10) | `agent/research.py`, `GET /api/research/runs/{thread_id}` |
-| Controlled durable review | P1B 13/13 gates passed; P1C backend/CLI workflow available when explicitly enabled; disabled by default | [Operator guide](docs/operations/controlled-review-workflow.md) |
-| Controlled Evidence Verification | P2A revisioned verification/publication backend and CLI available when explicitly enabled; disabled by default | [Operator guide](docs/operations/evidence-verification-workflow.md) |
-
-> All metrics above are from actual command runs on this machine. Token/cost benchmark data and P95 latency are pending dedicated benchmark runs.
-
-## Key Engineering Decisions
-
-### ContextVar Session Isolation
-
-Concurrent API requests share the same Python process. Without isolation, global state (current thread_id, workspace path, LLM callbacks) would bleed between requests. We use `contextvars.ContextVar` to attach session-scoped state to each async task, ensuring request A's workspace never touches request B's files.
-
-See: [`api/context.py`](api/context.py)
-
-### YAML Prompt Configuration
-
-Agent system prompts live in `prompt/prompts.yml` instead of Python string literals. This separates prompt content from code, enables version-controlled prompt iteration without touching Python files, and allows non-developers to review/edit prompts.
-
-### WebSocket over Polling
-
-The agent execution produces many intermediate events (tool calls, sub-agent dispatches, reasoning steps). Polling would waste bandwidth and introduce latency. WebSocket pushes each event as it happens, giving first-party tools or future UI consumers real-time visibility into the agent's planning process.
-
-### Retry, Timeout, Cache, Token Tracking
-
-Tavily and RAGFlow calls are wrapped with timeout policies and retry decorators with exponential backoff. MySQL connections use connect_timeout and read_timeout. Tavily search results use TTL caching (300s). Token tracking via LangChain `BaseCallbackHandler` records input/output/total tokens per LLM call with cost estimation. These make the system observable and resilient to transient failures.
-
-See: [`tools/cache.py`](tools/cache.py), [`agent/token_tracking.py`](agent/token_tracking.py), [`tools/retry_utils.py`](tools/retry_utils.py)
-
-### Upload/Download Path Security
-
-File uploads use filename sanitization (strip directory components, Windows path handling) and length validation. Download paths are resolved through a virtual-path cleaning mechanism that prevents `../` traversal, limiting the risk of out-of-bounds file access.
-
-See: [`api/upload_security.py`](api/upload_security.py), [`utils/path_utils.py`](utils/path_utils.py)
+Service-owned state remains the authority for business decisions. LangSmith is
+used for diagnostics, not as the ResearchRun or EvidenceLedger ledger.
 
 ## Quick Start
 
-### Prerequisites
-
-- Python >= 3.11
-- Node.js 20.19+ or 22.12+
-- Tavily API key
-- DeepSeek API key
-
-### 1. Install Backend Dependencies
-
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-
-```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -c constraints.txt
 cp .env.example .env
-# Fill in your API keys
-```
-
-### 3. Run
-
-```bash
-# Start the backend
 python api/server.py
-
 ```
 
-API endpoints:
-- **POST /api/task** — Start an agent task
-- **POST /api/upload** — Upload files for analysis
-- **GET /api/files** — List generated files
-- **GET /api/download** — Download generated files
-- **GET /api/tasks/{thread_id}** — View persisted task status and output path
-- **GET /api/token-usage/{thread_id}** — View token usage for a thread
-- **GET /api/research/runs/{thread_id}** — View ResearchRun and EvidenceLedger for a thread
-- **GET /api/research/runs** — List recent ResearchRun records
-- **POST /api/runs** / **GET /api/runs/{run_id}** — Start and inspect isolated research runs
-- **GET /api/reviews** / **GET /api/reviews/health** — Authenticated controlled review queue and runtime readiness
-- **GET /api/runs/{run_id}/reviews/{review_id}** — Authenticated immutable review detail
-- **POST /api/runs/{run_id}/reviews/{review_id}/decisions** — Authenticated approve/reject decision
-- **GET /api/runs/{run_id}/evidence/verifications** — Authenticated, paginated effective Evidence verification state
-- **POST /api/runs/{run_id}/evidence/verification-snapshots** — Finalize a revisioned verification snapshot and publication
-- **GET /api/telemetry/runs/{run_id}** / **GET /api/token-usage/runs/{run_id}** — View run-scoped observability
-- **WebSocket /ws/runs/{run_id}** — Run-scoped real-time event stream
-- **WebSocket /ws/{thread_id}** — Real-time reasoning stream
-
-WebSocket events: `session_created`, `tool_start`, `assistant_call`, `task_result`, `task_finalized`, `run_timeout`, `error`
-
-### Talent Benchmark Fixtures
-
-Talent runs can preload server-bundled `provided_aggregate` fixtures without
-giving the model filesystem, upload, or runtime search-tool access. The provider
-is disabled by default and only resolves aggregate IDs declared in a validated
-`ResearchScope`.
+Health:
 
 ```bash
-export DECISION_RESEARCH_AGENT_ENABLE_BENCHMARK_FIXTURES=true
-
-# Example fixture and matching scope:
-# benchmarks/fixtures/talent-hiring-signal-v1.json
-# benchmarks/talent-hiring-signal-v1/research-scope.json
+curl http://127.0.0.1:8000/health
 ```
 
-The provider never accepts caller-controlled paths. Keep it disabled outside
-explicit benchmark or development runs. The Talent model cites declared sample
-IDs or source URLs; the service normalizes those aliases to run-scoped evidence
-IDs before review.
+Expected response:
 
-### Controlled Durable Review
+```json
+{"status":"ok","service":"decision-research-agent"}
+```
 
-The bounded P1B review path passed all 13 durability and safety gates, including
-container restart and SIGKILL crash windows. P1C adds an authenticated
-first-party backend and CLI workflow for list, show, approve, reject, wait, and
-doctor operations. The feature remains disabled by default:
+## Tool Client
+
+```bash
+python tools/decision_research_agent_tool.py healthcheck
+
+python tools/decision_research_agent_tool.py run \
+  --query "Research question" \
+  --thread-id "demo-thread" \
+  --wait
+
+python tools/decision_research_agent_tool.py result \
+  --run-id "$RUN_ID"
+```
+
+Configuration:
+
+```dotenv
+DECISION_RESEARCH_AGENT_URL=http://127.0.0.1:8000
+DECISION_RESEARCH_AGENT_API_KEY=
+DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS=10
+DECISION_RESEARCH_AGENT_DB_PATH=data/decision_research_agent.db
+DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH=data/review_checkpoints.db
+```
+
+## Core API
+
+- `GET /health`
+- `POST /api/runs`
+- `GET /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/result`
+- `GET /api/telemetry/runs/{run_id}`
+- `GET /api/token-usage/runs/{run_id}`
+- `WebSocket /ws/runs/{run_id}`
+
+Controlled review and evidence verification endpoints are documented in
+[API Contract](spec/api-contract.md).
+
+## Controlled Features
+
+Durable review is disabled by default:
 
 ```dotenv
 DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL=false
 ```
 
-The supported boundary is one backend replica with persistent, separate
-application and checkpoint SQLite databases plus persistent output storage.
-No frontend review controls are shipped in this repository. An `approve`
-decision permits delivery but does not verify evidence. A `reject` decision
-blocks delivery and does not start new research.
-
-See the [controlled review operator guide](docs/operations/controlled-review-workflow.md),
-[P1B feasibility notes](docs/operations/durable-hitl-feasibility.md), and
-[gate report](docs/evidence/durable-hitl-gate-report.json). A PASS report does
-not establish multi-instance, multi-user, or public-internet production
-readiness.
-
-### Controlled Evidence Verification
-
-P2A adds append-only human Evidence verification decisions, deterministic
-snapshots, revisioned publications, fresh-review enforcement, and canonical
-CLI commands. It remains disabled by default:
+Evidence verification is disabled by default:
 
 ```dotenv
 DECISION_RESEARCH_AGENT_ENABLE_EVIDENCE_VERIFICATION=false
 ```
 
-The supported boundary is the existing single-replica SQLite durable review
-runtime. It does not add UI, RBAC, automatic source retrieval, LLM verification,
-multi-instance operation, runtime Skills, Async Subagents, or real-source
-proof. See the [Evidence verification operator guide](docs/operations/evidence-verification-workflow.md).
+Both features are supported only within the documented single-node SQLite
+boundary unless a later rollout expands the deployment model.
 
-## Project Structure
+## Verification
 
-```
-decision-research-agent/
-├── agent/
-│   ├── main_agent.py              # Main agent orchestration
-│   ├── llm.py                     # LLM factory with callback support
-│   ├── prompts.py                 # YAML prompt config loader
-│   ├── token_tracking.py          # LangChain callback for token tracking
-│   ├── telemetry.py               # Telemetry recording
-│   ├── research.py                # ResearchRun evidence extraction and quality gate
-│   ├── run_result.py               # AgentRunAccumulator + stream processing (Phase 9)
-│   └── sub_agents/
-│       ├── network_search_agent.py
-│       ├── database_query_agent.py
-│       └── knowledge_base_agent.py
-├── tools/
-│   ├── tavily_tools.py            # Search with TTL caching
-│   ├── mysql_tools.py             # Database query tools
-│   ├── ragflow_tools.py           # RAGFlow knowledge base tools
-│   ├── cache.py                   # TTL cache + @cached_tool decorator
-│   ├── retry_utils.py             # Retry decorator with backoff
-│   ├── markdown_tools.py          # Report generation
-│   └── upload_file_read_tool.py   # File reading (PDF, Word, Excel, text)
-├── api/
-│   ├── server.py                  # FastAPI server (REST + WebSocket)
-│   ├── monitor.py                 # Real-time progress monitor
-│   ├── context.py                 # ContextVar session isolation
-│   ├── persistence.py              # SQLite task + research run persistence
-│   └── task_finalizer.py           # Deterministic task finalization (Phase 9)
-├── utils/
-│   ├── path_utils.py              # Path security helpers
-│   └── word_converter.py          # PDF 转换（weasyprint 引擎）
-├── prompt/
-│   └── prompts.yml                # Agent system prompts
-├── tests/
-│   └── unit/                      # 单元测试（见 Evidence 表格）
-├── docs/                          # Product docs
-├── scripts/
-│   ├── e2e_runner.py              # Manual E2E runner
-│   └── benchmark_runner.py        # Repeated benchmark runner
-├── spec/                          # Technical specifications
-└── openspec/                      # OpenSpec change records
+Current release work keeps verification evidence in PRs and operator reports.
+Useful local checks:
+
+```bash
+python -m pytest -q
+python scripts/check_canonical_identity.py --root .
+python tools/decision_research_agent_tool.py doctor
 ```
 
-## Evidence Pack & Technical Docs
+## Documentation
 
-- [Documentation Index](docs/README.md) — Product docs, technical references, decisions, and implementation plans
-- [Evidence Pack](docs/evidence/) — QA screenshots, run log, technical decisions
-- [Evidence Readiness Design](docs/superpowers/specs/2026-06-01-deep-search-agent-evidence-readiness-design.md) — Design spec for this documentation direction
-- [Architecture Spec](spec/architecture.md) — System architecture and data flow
-- [API Contract](spec/api-contract.md) — REST + WebSocket endpoint definitions
+- [Documentation Index](docs/README.md)
+- [Agent Integration](docs/AGENT_INTEGRATION.md)
+- [API Contract](spec/api-contract.md)
+- [Data Models](spec/data-models.md)
+- [Controlled Review Workflow](docs/operations/controlled-review-workflow.md)
+- [Evidence Verification Workflow](docs/operations/evidence-verification-workflow.md)
 
 ## Known Boundaries
 
-- **WeasyPrint dependency**: PDF conversion tests require WeasyPrint system libraries (cairo, pango, gobject). On machines with dependencies available, tests run for real. On machines without them, conversion tests are skipped via `pytest.mark.skipif`, and the missing-dependency error path is tested via import-stage `OSError` simulation. Docker 环境已包含这些依赖。
-- **API Key auth**: All `/api/*` endpoints are protected by `APIKeyMiddleware`. Requests without `X-API-Key` header get 401. Inject `API_SECRET` through the deployment environment to enable; if unset, a warning is logged but all requests pass through (dev mode).
-- **WebSocket auth**: Browser clients pass the key via the `api_key` query parameter because native WebSocket constructors cannot set custom headers. Production logs should avoid recording full WebSocket URLs.
-- **Task state persistence**: Tasks are persisted to SQLite (`data/tasks.db`) through `api/persistence.py`. Server restart does not lose completed task records. Query by `GET /api/tasks/{thread_id}`.
-- **Research evidence persistence**: Terminal tasks also persist ResearchRun metadata and EvidenceLedger entries. Query by `GET /api/research/runs/{thread_id}`. Evidence entries are source-like observations from tool messages, not independently verified facts.
-- **CI/CD**: GitHub Actions runs backend tests on push/PR to `main`. API keys must be configured in GitHub Secrets.
-- **Benchmark data**: A repeated benchmark runner exists at `scripts/benchmark_runner.py`, but new median/P95 numbers should only be reported after a real multi-run benchmark is executed and archived. The existing 5-query data remains a single snapshot.
-- **Durable HITL**: P1B durability evidence is PASS and P1C provides a controlled backend/CLI workflow, but the feature remains disabled by default and supported only for a controlled single-node deployment. This repository does not ship frontend review controls.
+- No bundled frontend is shipped in this release.
+- Durable review and evidence verification are feature-flagged controlled
+  workflows, not public multi-user production features.
+- Evidence verification records human decisions and deterministic snapshots; it
+  does not perform automatic source retrieval or LLM verification.
+- Historical evidence, archived plans, and archived OpenSpec records may retain
+  their original wording as immutable project history.
 
 ## License
 
 MIT. See [LICENSE](./LICENSE).
-
-## Security
-
-Report suspected vulnerabilities through GitHub private vulnerability reporting. See [SECURITY.md](./SECURITY.md).

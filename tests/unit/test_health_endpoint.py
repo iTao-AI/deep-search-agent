@@ -10,4 +10,4 @@ def test_health_endpoint_bypasses_api_key_auth():
     response = TestClient(app).get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "deep-search-agent"}
+    assert response.json() == {"status": "ok", "service": "decision-research-agent"}

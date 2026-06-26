@@ -2,245 +2,137 @@
 
 # Decision Research Agent
 
-一个证据驱动的决策研究智能体：围绕明确的研究范围收集来源证据、形成可追溯结论，并生成支持实际决策的研究简报。项目基于 LangGraph / DeepAgents，支持自主规划、研究任务委派、证据生命周期治理、运行级持久化和确定性交付契约。
+Decision Research Agent 是一个长任务研究服务：围绕来源证据生成有界、可审查、可交付的决策研究结果。项目使用 LangChain 作为 Agent Framework，DeepAgents 作为研究 harness，LangGraph 作为 durable workflow runtime，LangSmith 作为隐私优先诊断工具。
 
-仓库和技术主标识已统一为 `decision-research-agent`。精确 `/health` 服务标识和
-旧环境变量别名继续使用 `deep-search-agent`，作为有边界的兼容契约。
+当前仓库、运行时配置、Tool Client、Docker 默认值和 health service ID 均使用 `decision-research-agent`。
+
+## 当前能力
+
+- 使用 canonical `run_id` 执行研究任务。
+- 在应用数据库中持久化 ResearchRun、EvidenceLedger、review、verification、publication 和 canonical result 状态。
+- 通过 `GET /api/runs/{run_id}/result` 暴露有界交付 artifact。
+- 以 Talent Hiring Signal 作为首个已验证 benchmark profile。
+- 通过显式 feature flag 提供受控 durable review 和 evidence verification workflow。
+
+本仓库当前发布 backend、API、CLI、测试、文档和运维脚本。不随仓库发布前端；后续 UI 可直接消费现有 API 与 WebSocket 契约。
 
 ## 架构
 
-```
-用户问题
-    │
-    ▼
-┌──────────────────────────────────────────────────────┐
-│           主 Agent（LangGraph 规划器）                │
-│  - 自主任务分解                                      │
-│  - 通过 DeepAgents task 工具委派子 Agent              │
-│  - 基于 ContextVar 的文件系统上下文管理               │
-│  - 报告合成（Markdown / PDF）                        │
-├──────────────┬──────────────────┬────────────────────┤
-│ 网络搜索 Agent│ 数据库查询 Agent  │ 知识库 Agent (RAG) │
-│ (Tavily)     │ (MySQL)          │ (RAGFlow)          │
-└──────────────┴──────────────────┴────────────────────┘
-    │              │                    │
-    ▼              ▼                    ▼
-  互联网搜索       业务数据             企业知识库
+```mermaid
+flowchart TD
+    User["用户或自动化脚本"] --> Tool["Tool Client / REST API"]
+    Tool --> API["FastAPI backend"]
+    API --> Harness["DeepAgents harness"]
+    Harness --> LC["LangChain agent framework"]
+    LC --> LG["LangGraph runtime"]
+    Harness --> Tools["搜索 / 数据库 / fixture 工具"]
+    API --> DB[("Application SQLite DB")]
+    API --> Artifacts["Canonical artifacts"]
+    API --> LS["LangSmith diagnostics"]
 ```
 
-**数据流：**
-1. 用户通过 REST API 或 WebSocket 提交问题
-2. 主 Agent 分析问题并生成执行计划
-3. 专用子 Agent 在隔离上下文中被派发执行
-4. 结果被综合为 Markdown/PDF 报告
-5. 执行进度通过 WebSocket 实时推送到前端
-
-## 端到端任务链路
-
-> 以下数字仅为演示输出格式示例，非实际 benchmark 数据。
-
-```
-用户: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
-
-  ↓ 主 Agent 规划
-  ├── [网络搜索 Agent] → Tavily 搜索: "AI 医疗诊断 趋势 2024"
-  │                       Tavily 搜索: "AI 影像识别 深度学习"
-  │                       → 收集搜索结果
-  ├── [数据库查询 Agent] → MySQL: SELECT 医疗AI 论文数量
-  │                          → 返回查询结果
-  └── [知识库 Agent]     → RAGFlow: 检索内部医疗AI 报告
-                             → 返回相关文档
-  ↓
-  主 Agent 综合 → report.md → report.pdf
-  ↓
-  WebSocket 事件实时推送到前端
-```
-
-> **注意**: 以下表格数据来自 Task 1 的实际命令输出。如果重新运行后数字与预设值不同，以 Task 1 输出为准。
-
-## 验证证据
-
-| 指标 | 值 | 来源 |
-|------|-----|------|
-| Local pytest run | 598 通过, 0 失败 | Python 3.11 compatibility environment，`python -m pytest -q` |
-| Docker 部署 | 本机验证通过 | [QA 报告](docs/evidence/assets/qa-report-summary.md) |
-| 前端构建 | 通过 | `cd frontend && npm run build` |
-| E2E Run #1 | 282秒, 459K token, 2 子Agent, 报告.md 已生成 | [运行记录](docs/evidence/run-log.md) |
-| Token 追踪 | 已实现（Phase 7c） | `agent/token_tracking.py`, `GET /api/token-usage/{thread_id}` |
-| TTL 缓存 | 已实现（Phase 7c） | `tools/cache.py`, Tavily 300s TTL |
-| API Key 鉴权 | 已实现（Phase 8） | `api/server.py`, `APIKeyMiddleware` |
-| SQLite 持久化 | 已实现（Phase 8） | `api/persistence.py`, `GET /api/tasks/{thread_id}` |
-| 搜索去重 | 已实现（Phase 8） | `tools/tavily_tools.py`, `search_with_dedup` |
-| CI/CD | 已配置（Phase 8） | `.github/workflows/ci.yml` |
-| 兜底报告 | 已实现（Phase 9） | `api/task_finalizer.py`，确定性终态 |
-| 任务超时处理 | 已实现（Phase 9） | `api/server.py`，`_mark_task_timeout` 回调 |
-| ResearchRun + EvidenceLedger | 已实现（Phase 10） | `agent/research.py`, `GET /api/research/runs/{thread_id}` |
-| Durable HITL feasibility | 13/13 门禁通过，默认关闭 | [门禁报告](docs/evidence/durable-hitl-gate-report.json) |
-
-> 以上数据均来自本机实际命令运行结果。Token/cost 基准测试数据和 P95 延迟待专项基准运行后补充。
-
-## 关键工程设计
-
-### ContextVar 会话隔离
-
-并发 API 请求共享同一 Python 进程。没有隔离的情况下，全局状态（当前 thread_id、工作区路径、LLM 回调）会在请求间串扰。我们使用 `contextvars.ContextVar` 将会话级状态绑定到每个异步任务，确保请求 A 的工作区不会污染请求 B 的文件。
-
-详见: [`api/context.py`](api/context.py)
-
-### YAML Prompt 配置
-
-Agent 系统提示词放在 `prompt/prompts.yml` 而非 Python 字符串中。这样将提示词内容与代码分离，支持版本控制下的提示词迭代，非开发人员也能审查和编辑提示词。
-
-### WebSocket 实时推送而非轮询
-
-Agent 执行过程产生大量中间事件（工具调用、子 Agent 派发、推理步骤）。轮询浪费带宽且引入延迟。WebSocket 在事件发生时即时推送，让前端实时看到 Agent 的规划过程。
-
-### 重试、超时、缓存、Token 追踪
-
-Tavily 和 RAGFlow 调用包裹了超时策略和指数退避重试装饰器。MySQL 连接使用 connect_timeout 和 read_timeout。Tavily 搜索结果使用 TTL 缓存（300s）。通过 LangChain `BaseCallbackHandler` 的 token 追踪记录每次 LLM 调用的 input/output/total token 数量和费用估算。这些让系统具备可观测性，并能自动从瞬态故障中恢复。
-
-详见: [`tools/cache.py`](tools/cache.py), [`agent/token_tracking.py`](agent/token_tracking.py), [`tools/retry_utils.py`](tools/retry_utils.py)
-
-### 上传/下载路径安全
-
-文件上传使用文件名净化（去除路径成分、处理 Windows 路径）和长度校验。下载路径通过虚拟路径清理机制解析，阻止 `../` 路径穿越，降低文件越权访问风险。
-
-详见: [`api/upload_security.py`](api/upload_security.py), [`utils/path_utils.py`](utils/path_utils.py)
+服务端持久化状态是业务事实源。LangSmith 用于诊断，不替代 ResearchRun 或 EvidenceLedger。
 
 ## 快速开始
 
-### 前置条件
-
-- Python >= 3.11
-- Node.js 20.19+ 或 22.12+
-- Tavily API 密钥
-- DeepSeek API 密钥
-
-### 1. 安装后端依赖
-
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 2. 配置环境变量
-
-```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -c constraints.txt
 cp .env.example .env
-# 填入你的 API 密钥
+python api/server.py
 ```
 
-### 3. 运行
+健康检查：
 
 ```bash
-# 启动后端
-python api/server.py
-
-# 在另一个终端，启动前端
-cd frontend
-npm install && npm run dev
+curl http://127.0.0.1:8000/health
 ```
 
-API 端点:
-- **POST /api/task** — 启动 Agent 任务
-- **POST /api/upload** — 上传文件供分析
-- **GET /api/files** — 列出已生成文件
-- **GET /api/download** — 下载已生成文件
-- **GET /api/tasks/{thread_id}** — 查看任务持久化状态和输出路径
-- **GET /api/token-usage/{thread_id}** — 查看某个线程的 token 用量
-- **GET /api/research/runs/{thread_id}** — 查看某个线程的 ResearchRun 和 EvidenceLedger
-- **GET /api/research/runs** — 查看最近的 ResearchRun 列表
-- **POST /api/runs** / **GET /api/runs/{run_id}** — 启动并查询隔离的研究执行
-- **POST /api/runs/{run_id}/reviews/{review_id}/decisions** — 实验性、feature-flagged Talent review 决策
-- **GET /api/telemetry/runs/{run_id}** / **GET /api/token-usage/runs/{run_id}** — 查看 run 级可观测数据
-- **WebSocket /ws/runs/{run_id}** — run 级实时事件流
-- **WebSocket /ws/{thread_id}** — 实时推理流
+预期响应：
 
-WebSocket 事件: `session_created`, `tool_start`, `assistant_call`, `task_result`, `task_finalized`, `run_timeout`, `error`
+```json
+{"status":"ok","service":"decision-research-agent"}
+```
 
-### Durable HITL 可行性
+## Tool Client
 
-有边界的 P1B review 路径已通过 13 项持久化与安全门禁，包括容器重启和
-SIGKILL crash windows，但仍是实验能力且默认关闭：
+```bash
+python tools/decision_research_agent_tool.py healthcheck
+
+python tools/decision_research_agent_tool.py run \
+  --query "Research question" \
+  --thread-id "demo-thread" \
+  --wait
+
+python tools/decision_research_agent_tool.py result \
+  --run-id "$RUN_ID"
+```
+
+配置项：
+
+```dotenv
+DECISION_RESEARCH_AGENT_URL=http://127.0.0.1:8000
+DECISION_RESEARCH_AGENT_API_KEY=
+DECISION_RESEARCH_AGENT_TIMEOUT_SECONDS=10
+DECISION_RESEARCH_AGENT_DB_PATH=data/decision_research_agent.db
+DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH=data/review_checkpoints.db
+```
+
+## 核心 API
+
+- `GET /health`
+- `POST /api/runs`
+- `GET /api/runs/{run_id}`
+- `GET /api/runs/{run_id}/result`
+- `GET /api/telemetry/runs/{run_id}`
+- `GET /api/token-usage/runs/{run_id}`
+- `WebSocket /ws/runs/{run_id}`
+
+受控 review 与 evidence verification endpoints 见 [API Contract](spec/api-contract.md)。
+
+## 受控功能
+
+Durable review 默认关闭：
 
 ```dotenv
 DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL=false
 ```
 
-`approve` 只允许交付，不代表证据已验证；`reject` 阻止交付，也不会启动新的研究。
-详见[运维说明](docs/operations/durable-hitl-feasibility.md)和
-[门禁报告](docs/evidence/durable-hitl-gate-report.json)。门禁 PASS 不会自动授权生产启用。
+Evidence verification 默认关闭：
 
-## 项目结构
-
-```
-decision-research-agent/
-├── agent/
-│   ├── main_agent.py              # 主 Agent 编排
-│   ├── llm.py                     # LLM 工厂（支持回调）
-│   ├── prompts.py                 # YAML 提示词加载器
-│   ├── token_tracking.py          # LangChain 回调 token 追踪
-│   ├── telemetry.py               # 遥测记录
-│   ├── research.py                # ResearchRun 证据抽取和质量门禁
-│   ├── run_result.py               # AgentRunAccumulator + 流处理（Phase 9）
-│   └── sub_agents/
-│       ├── network_search_agent.py
-│       ├── database_query_agent.py
-│       └── knowledge_base_agent.py
-├── tools/
-│   ├── tavily_tools.py            # 搜索（带 TTL 缓存）
-│   ├── mysql_tools.py             # 数据库查询工具
-│   ├── ragflow_tools.py           # RAGFlow 知识库工具
-│   ├── cache.py                   # TTL 缓存 + @cached_tool 装饰器
-│   ├── retry_utils.py             # 指数退避重试装饰器
-│   ├── markdown_tools.py          # 报告生成
-│   └── upload_file_read_tool.py   # 文件读取（PDF, Word, Excel, 文本）
-├── api/
-│   ├── server.py                  # FastAPI 服务（REST + WebSocket）
-│   ├── monitor.py                 # 实时进度监控器
-│   ├── context.py                 # ContextVar 会话隔离
-│   ├── persistence.py              # SQLite 任务状态 + ResearchRun 持久化
-│   └── task_finalizer.py           # 确定性任务终态处理（Phase 9）
-├── utils/
-│   ├── path_utils.py              # 路径安全工具
-│   └── word_converter.py          # PDF 转换（weasyprint 引擎）
-├── prompt/
-│   └── prompts.yml                # Agent 系统提示词
-├── tests/
-│   └── unit/                      # 单元测试（见证据表格）
-├── frontend/                      # Vue 3 前端
-├── docs/                          # 产品文档
-├── scripts/
-│   ├── e2e_runner.py              # 手动 E2E runner
-│   └── benchmark_runner.py        # 重复 benchmark runner
-├── spec/                          # 技术规格
-└── openspec/                      # OpenSpec 变更记录
+```dotenv
+DECISION_RESEARCH_AGENT_ENABLE_EVIDENCE_VERIFICATION=false
 ```
 
-## Evidence Pack 与技术文档
+除非后续 rollout 扩展部署模型，否则这两个功能仅支持文档中定义的单节点 SQLite 边界。
 
-- [文档索引](docs/README.md) — 产品文档、技术参考、决策记录和实施计划入口
-- [Evidence Pack](docs/evidence/) — QA 截图、运行记录、技术决策
-- [证据化设计规格](docs/superpowers/specs/2026-06-01-deep-search-agent-evidence-readiness-design.md) — 本文档改造方向
-- [架构规格](spec/architecture.md) — 系统架构与数据流
-- [API 契约](spec/api-contract.md) — REST + WebSocket 端点定义
+## 验证
+
+常用本地检查：
+
+```bash
+python -m pytest -q
+python scripts/check_canonical_identity.py --root .
+python tools/decision_research_agent_tool.py doctor
+```
+
+## 文档
+
+- [Documentation Index](docs/README.md)
+- [Agent Integration](docs/AGENT_INTEGRATION.md)
+- [API Contract](spec/api-contract.md)
+- [Data Models](spec/data-models.md)
+- [Controlled Review Workflow](docs/operations/controlled-review-workflow.md)
+- [Evidence Verification Workflow](docs/operations/evidence-verification-workflow.md)
 
 ## 已知边界
 
-- **WeasyPrint 依赖**: PDF 转换测试需要 WeasyPrint 系统库（cairo、pango、gobject）。依赖可用时真实运行；依赖缺失时相关转换测试 skip，并保留系统依赖缺失路径测试。Docker 环境已包含这些依赖。
-- **前端构建**: 已验证（`cd frontend && npm run build` 成功，built in 357ms）。
-- **API Key 鉴权**: 所有 `/api/*` 端点受 APIKeyMiddleware 保护。请求缺少 X-API-Key header 返回 401。在 .env 中设置 API_SECRET=your-key 启用；未设置时打印警告但放行所有请求（开发模式）。
-- **WebSocket 鉴权**: 浏览器端 WebSocket 通过 `api_key` query parameter 传递 key，因为原生 WebSocket 构造器不能设置自定义 header。生产环境日志应避免记录完整 WebSocket URL。
-- **任务状态持久化**: 通过 SQLite（data/tasks.db）持久化任务状态，重启服务器不丢失。查询 GET /api/tasks/{thread_id}。
-- **研究证据持久化**: 终态任务会额外持久化 ResearchRun 元数据和 EvidenceLedger。查询 GET /api/research/runs/{thread_id}。Evidence 条目来自工具消息中的来源型观察，不等同于已人工验证事实。
-- **CI/CD**: GitHub Actions 在 push/PR 到 main 时自动运行 pytest + 前端构建。API keys 需在 GitHub Secrets 中配置。
-- **Benchmark 数据**: 已提供 `scripts/benchmark_runner.py` 重复 benchmark runner，但新的中位数/P95 只能在真实多轮 benchmark 执行并归档后报告。现有 5-query 数据仍是单次快照。
-- **Durable HITL**: P1B feasibility gate 已 PASS，但 endpoint 仍是实验能力且默认关闭。生产启用需要独立 rollout 决策，本阶段不包含 P1C。
+- 本版本不随仓库发布前端。
+- Durable review 与 evidence verification 是受控 feature-flag workflow，不是公开多用户生产功能。
+- Evidence verification 记录人工决策和确定性 snapshot；不自动检索来源，也不使用 LLM 做证据核验。
+- 历史 evidence、归档 plan 和归档 OpenSpec 可以保留原始表述，作为不可变项目历史。
 
 ## License
 
-MIT，详见 [LICENSE](./LICENSE)。
-
-## 安全
-
-请通过 GitHub private vulnerability reporting 报告疑似漏洞，详见 [SECURITY.md](./SECURITY.md)。
+MIT. See [LICENSE](./LICENSE).

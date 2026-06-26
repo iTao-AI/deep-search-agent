@@ -19,9 +19,8 @@ Current verified slices include:
   13 durability and safety gates passed.
 
 The canonical repository and technical identifier are
-`decision-research-agent`. The exact `/health` service value
-`deep-search-agent` and documented legacy aliases remain compatibility
-contracts.
+`decision-research-agent`. Runtime configuration, Tool Client usage, Docker
+defaults, and `/health` service identity use that canonical identifier.
 
 ## Source Of Truth
 
