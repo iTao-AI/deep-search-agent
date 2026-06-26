@@ -202,6 +202,66 @@ def test_finalize_run_transaction_persists_talent_artifacts_atomically(tmp_path)
         assert stored["content_hash"] == expected["content_hash"]
 
 
+def test_fenced_finalization_persists_exactly_one_generic_result_artifact(tmp_path):
+    from api.run_repository import (
+        create_run,
+        finalize_run_transaction,
+        get_artifact,
+        get_run,
+    )
+
+    db_path = str(tmp_path / "runs.db")
+    created = create_run(db_path=db_path, thread_id="thread-1", query="query")
+    artifact = {
+        "artifact_id": "research-report.md",
+        "kind": "research_report_markdown",
+        "media_type": "text/markdown",
+        "content": "# Report",
+        "content_hash": "hash-1",
+    }
+    different_artifact = {
+        **artifact,
+        "content": "# Different",
+        "content_hash": "hash-2",
+    }
+
+    first = finalize_run_transaction(
+        db_path=db_path,
+        run_id=created["run_id"],
+        segment_id=created["segment_id"],
+        expected_state_version=0,
+        allowed_previous_statuses={"pending"},
+        execution_status="completed",
+        delivery_status="ready",
+        evidence_entries=[],
+        artifacts=[artifact],
+    )
+    second = finalize_run_transaction(
+        db_path=db_path,
+        run_id=created["run_id"],
+        segment_id=created["segment_id"],
+        expected_state_version=0,
+        allowed_previous_statuses={"pending"},
+        execution_status="completed",
+        delivery_status="ready",
+        evidence_entries=[],
+        artifacts=[different_artifact],
+    )
+
+    run = get_run(db_path=db_path, run_id=created["run_id"])
+    assert first is True
+    assert second is False
+    assert run["state_version"] == 1
+    assert [item["artifact_id"] for item in run["artifacts"]] == [
+        "research-report.md"
+    ]
+    assert get_artifact(
+        db_path=db_path,
+        run_id=created["run_id"],
+        artifact_id="research-report.md",
+    )["content"] == "# Report"
+
+
 def test_required_review_finalization_seeds_workflow_atomically(tmp_path):
     from agent.talent_contracts import ReviewBundle
     from api.review_models import (

@@ -50,6 +50,7 @@ from api.run_repository import (
     get_run,
     transition_run,
 )
+from api.run_result_service import build_generic_result_artifact
 from agent.profile_registry import profile_registry
 from agent.talent_contracts import ResearchScope
 from api.talent_artifacts import build_talent_artifacts
@@ -485,6 +486,8 @@ async def _run_v2_with_persistence(
         review_bundle = None
         review_workflow = None
         artifacts = []
+        if execution_status == "completed" and profile_id == "generic":
+            artifacts = [build_generic_result_artifact(result)]
         if execution_status == "completed" and profile_id == "talent-hiring-signal":
             review_bundle, _, artifacts = build_talent_artifacts(
                 run_id=run_id,
