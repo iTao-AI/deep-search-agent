@@ -36,7 +36,7 @@ User Question
 2. Main Agent analyzes the question and creates an execution plan
 3. Specialized sub-agents are dispatched with isolated contexts
 4. Results are synthesized into Markdown/PDF reports
-5. Progress streams to the frontend via WebSocket in real time
+5. Progress is available through run-scoped API and WebSocket consumers
 
 ## End-to-End Task Walkthrough
 
@@ -56,7 +56,7 @@ User: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
   ↓
   Main Agent synthesizes → report.md → report.pdf
   ↓
-  WebSocket events streamed to frontend in real time
+  WebSocket events streamed to run-scoped consumers in real time
 ```
 
 > **Note**: Evidence table data comes from Task 1 actual command output. If numbers differ on re-run, Task 1 output takes precedence.
@@ -67,7 +67,6 @@ User: "调研 AI 在医疗诊断中的应用趋势，生成 PDF 报告"
 |--------|-------|--------|
 | Local pytest run | 598 passed, 0 failed | Python 3.11 compatibility environment, `python -m pytest -q` |
 | Docker deployment | Verified on localhost | [QA Report](docs/evidence/assets/qa-report-summary.md) |
-| Frontend build | Passed | `cd frontend && npm run build` |
 | E2E Run #1 | 282s, 459K tokens, 2 sub-agents, report.md generated | [Run Log](docs/evidence/run-log.md) |
 | Token tracking | Implemented (Phase 7c) | `agent/token_tracking.py`, `GET /api/token-usage/{thread_id}` |
 | TTL caching | Implemented (Phase 7c) | `tools/cache.py`, Tavily 300s TTL |
@@ -97,7 +96,7 @@ Agent system prompts live in `prompt/prompts.yml` instead of Python string liter
 
 ### WebSocket over Polling
 
-The agent execution produces many intermediate events (tool calls, sub-agent dispatches, reasoning steps). Polling would waste bandwidth and introduce latency. WebSocket pushes each event as it happens, giving the frontend real-time visibility into the agent's planning process.
+The agent execution produces many intermediate events (tool calls, sub-agent dispatches, reasoning steps). Polling would waste bandwidth and introduce latency. WebSocket pushes each event as it happens, giving first-party tools or future UI consumers real-time visibility into the agent's planning process.
 
 ### Retry, Timeout, Cache, Token Tracking
 
@@ -140,9 +139,6 @@ cp .env.example .env
 # Start the backend
 python api/server.py
 
-# In another terminal, start the frontend
-cd frontend
-npm install && npm run dev
 ```
 
 API endpoints:
@@ -199,7 +195,7 @@ DECISION_RESEARCH_AGENT_ENABLE_DURABLE_HITL=false
 
 The supported boundary is one backend replica with persistent, separate
 application and checkpoint SQLite databases plus persistent output storage.
-The existing Vue frontend does not expose review controls. An `approve`
+No frontend review controls are shipped in this repository. An `approve`
 decision permits delivery but does not verify evidence. A `reject` decision
 blocks delivery and does not start new research.
 
@@ -261,7 +257,6 @@ decision-research-agent/
 │   └── prompts.yml                # Agent system prompts
 ├── tests/
 │   └── unit/                      # 单元测试（见 Evidence 表格）
-├── frontend/                      # Vue 3 frontend
 ├── docs/                          # Product docs
 ├── scripts/
 │   ├── e2e_runner.py              # Manual E2E runner
@@ -281,14 +276,13 @@ decision-research-agent/
 ## Known Boundaries
 
 - **WeasyPrint dependency**: PDF conversion tests require WeasyPrint system libraries (cairo, pango, gobject). On machines with dependencies available, tests run for real. On machines without them, conversion tests are skipped via `pytest.mark.skipif`, and the missing-dependency error path is tested via import-stage `OSError` simulation. Docker 环境已包含这些依赖。
-- **Frontend build**: Verified (`cd frontend && npm run build` succeeded, built in 357ms).
 - **API Key auth**: All `/api/*` endpoints are protected by `APIKeyMiddleware`. Requests without `X-API-Key` header get 401. Inject `API_SECRET` through the deployment environment to enable; if unset, a warning is logged but all requests pass through (dev mode).
 - **WebSocket auth**: Browser clients pass the key via the `api_key` query parameter because native WebSocket constructors cannot set custom headers. Production logs should avoid recording full WebSocket URLs.
 - **Task state persistence**: Tasks are persisted to SQLite (`data/tasks.db`) through `api/persistence.py`. Server restart does not lose completed task records. Query by `GET /api/tasks/{thread_id}`.
 - **Research evidence persistence**: Terminal tasks also persist ResearchRun metadata and EvidenceLedger entries. Query by `GET /api/research/runs/{thread_id}`. Evidence entries are source-like observations from tool messages, not independently verified facts.
-- **CI/CD**: GitHub Actions runs backend tests and frontend build on push/PR to `main`. API keys must be configured in GitHub Secrets.
+- **CI/CD**: GitHub Actions runs backend tests on push/PR to `main`. API keys must be configured in GitHub Secrets.
 - **Benchmark data**: A repeated benchmark runner exists at `scripts/benchmark_runner.py`, but new median/P95 numbers should only be reported after a real multi-run benchmark is executed and archived. The existing 5-query data remains a single snapshot.
-- **Durable HITL**: P1B durability evidence is PASS and P1C provides a controlled backend/CLI workflow, but the feature remains disabled by default and supported only for a controlled single-node deployment. The Vue frontend has no review controls.
+- **Durable HITL**: P1B durability evidence is PASS and P1C provides a controlled backend/CLI workflow, but the feature remains disabled by default and supported only for a controlled single-node deployment. This repository does not ship frontend review controls.
 
 ## License
 

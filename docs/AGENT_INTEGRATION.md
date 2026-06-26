@@ -11,7 +11,7 @@ The legacy `tools/deep_search_agent_tool.py` entrypoint remains a thin
 compatibility shim. Both entrypoints call the same implementation.
 
 The client wraps the existing HTTP API. It does not store API keys, start the
-backend, manage frontend sessions, or run benchmark jobs.
+backend, manage UI sessions, or run benchmark jobs.
 
 ## Canonical Configuration
 

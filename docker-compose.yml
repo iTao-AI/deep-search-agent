@@ -24,17 +24,6 @@ services:
     networks:
       - app-network
 
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - app-network
-
   mysql:
     image: mysql:8.0
     # Bind to localhost only — no external network exposure

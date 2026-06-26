@@ -43,6 +43,7 @@ class TestAuthMiddleware:
     def test_cors_preflight_bypasses_api_key_auth(self):
         """Browser preflight has no X-API-Key and must reach CORS middleware."""
         os.environ["API_SECRET"] = "test-key"
+        os.environ["FRONTEND_ORIGIN"] = "http://localhost:5173"
         from api.server import app
         client = TestClient(app)
         response = client.options(

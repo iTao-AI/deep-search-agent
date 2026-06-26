@@ -23,7 +23,7 @@ graph TB
     ReportGenerator -->|Markdown/PDF| Workspace[Session Workspace]
 
     MainAgent -->|WebSocket 事件| Monitor[ToolMonitor]
-    Monitor -->|实时推送| Frontend[Vue 3 Frontend]
+    Monitor -->|实时推送| Consumers[Tool Client / Future UI]
 ```
 
 ## 模块职责
@@ -72,7 +72,7 @@ graph TB
 6. 子 Agent 执行 → 调用对应工具 → 结果返回主 Agent
 7. 流式事件通过 `monitor.report_*()` 推送到 WebSocket
 8. 主 Agent 汇总结果 → 生成 Markdown/PDF 到 session workspace
-9. 前端通过 WebSocket 接收实时事件，通过 REST 获取文件
+9. 第一方工具或未来 UI 通过 WebSocket 接收实时事件，并通过 REST 获取有界结果
 
 ## 关键设计模式
 
@@ -92,9 +92,10 @@ Agent 系统提示词存放在 `prompt/prompts.yml`，由 `agent/prompts.py` 加
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Frontend  │────>│   Backend   │────>│   MySQL     │
-│  Vue 3 SPA  │<────│  FastAPI    │<────│  Database   │
-└─────────────┘     └──────┬──────┘     └─────────────┘
+┌─────────────┐     ┌─────────────┐
+│  API/CLI    │────>│   Backend   │
+│ Consumers   │<────│  FastAPI    │
+└─────────────┘     └──────┬──────┘
                            │
                      ┌─────┴─────┐     ┌─────────────┐
                      │  External │────>│   Tavily    │

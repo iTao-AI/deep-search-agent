@@ -5,10 +5,6 @@ __pycache__/
 .venv/
 *.egg-info/
 
-# Node.js
-node_modules/
-frontend/node_modules/
-
 # Git
 .git/
 .gitignore
