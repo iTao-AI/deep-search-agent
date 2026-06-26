@@ -15,6 +15,9 @@ LANGSMITH_HIDE_OUTPUTS=true
 
 该配置用于观察 Agent 调用树、节点耗时、错误、状态和元数据，但不上传研究问题、工具输入、工具输出或生成报告正文。
 
+Terminology contract: LangSmith = privacy-first tracing/evaluation. These are
+the privacy-first trace defaults for this release.
+
 后端 Tracing 推荐使用仅授权给目标 workspace 的 **Service Key**。它代表服务身份，适合本地后端、自动运行和未来 CI；不要使用继承个人用户全部权限的 Personal Access Token 作为应用凭证。
 
 Personal Access Token 只适合操作者本人通过 CLI 执行个人脚本、查询或管理操作。真实 `LANGSMITH_API_KEY` 只写入被 Git 忽略的 `.env` 或运行环境变量，不得写入仓库、命令参数、日志或 Agent 对话。

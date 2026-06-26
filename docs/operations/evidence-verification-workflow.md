@@ -9,7 +9,8 @@ the existing durable review worker.
 
 It adds no UI, RBAC, multi-user identity, PostgreSQL, multiple replicas,
 automatic source retrieval, browser action, LLM verification, runtime Skills,
-Async Subagents, or real-source proof.
+Async Subagents, or real-source proof. There is no frontend service in this
+release.
 
 ## Enable
 
@@ -132,3 +133,9 @@ databases or delete historical revisions.
 
 Re-enable only after `doctor`, the 13-item durable gate, and the synthetic
 verification-to-approval container canary pass.
+
+The feature flag default remains:
+
+```dotenv
+DECISION_RESEARCH_AGENT_ENABLE_EVIDENCE_VERIFICATION=false
+```

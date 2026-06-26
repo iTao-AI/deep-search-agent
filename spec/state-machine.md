@@ -48,6 +48,10 @@ and runtime context injection. The service layer owns evidence capture,
 terminal transactions, review decisions, verification snapshots, publications,
 and canonical result delivery.
 
+The main generic research state machine does not resume an interrupted tool
+call after process death. Durable resume semantics apply only to the controlled
+review workflow shown below.
+
 ## Generic Delivery
 
 ```mermaid

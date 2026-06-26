@@ -15,6 +15,10 @@
 `run_id`。辅助状态（workspace、telemetry、token usage、monitor channel、
 search cache）必须按 `run_id` 隔离。
 
+Application DB = business authority。LangGraph checkpoint DB 和 LangSmith trace
+都不是 ResearchRun、EvidenceLedger、review、verification、publication 或
+delivery 的业务事实源。
+
 ## Execution Outcome
 
 Agent harness 输出在进入业务账本前被 service 层冻结为 outcome snapshot：

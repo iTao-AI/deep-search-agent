@@ -10,7 +10,7 @@ configured API credential.
 This is not a multi-user or multi-instance deployment contract. The application
 database remains the business ledger; the checkpoint database stores only the
 LangGraph review-gate execution position. This repository does not ship
-frontend review controls.
+frontend review controls; there is no frontend service in this release.
 
 ## Configure
 
@@ -135,6 +135,17 @@ application, checkpoint, output, decision, and unresolved workflow state.
 Re-enable only after `doctor` passes and startup reconciliation succeeds with a
 compatible version. Do not roll code across schema or checkpoint compatibility
 boundaries without the existing backup and restore procedure.
+
+## Release Migration Boundary
+
+The canonical DB migration path is managed by startup schema verification and
+the repository migration scripts. Before any rollback, preserve the application
+database, checkpoint database, and output storage as one recovery set.
+
+The v0.1.0 cleanup removes the active legacy task runtime. If an operator still
+has pre-v0.1.0 legacy tables, handle legacy table archive/drop explicitly in an
+operator-reviewed database maintenance window; do not drop historical tables as
+part of normal service startup.
 
 ## Non-Goals
 

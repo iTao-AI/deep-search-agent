@@ -3,6 +3,16 @@
 当前仓库、运行时配置、Tool Client 和 health service ID 使用
 `decision-research-agent` 技术标识，详见 [Agent Integration](AGENT_INTEGRATION.md)。
 
+当前产品契约：
+
+- LangChain = Agent Framework
+- DeepAgents = research harness
+- LangGraph = durable workflow runtime
+- LangSmith = privacy-first tracing/evaluation
+- Application DB = business authority
+- v0.1.0 是 backend-and-CLI release，React deferred。
+- Markdown-only delivery：交付结果通过 canonical result endpoint 返回 Markdown artifact。
+
 ## 文档索引
 
 | 文档 | 说明 |

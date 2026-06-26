@@ -4,6 +4,14 @@
 
 Decision Research Agent 是一个长任务研究服务：围绕来源证据生成有界、可审查、可交付的决策研究结果。项目使用 LangChain 作为 Agent Framework，DeepAgents 作为研究 harness，LangGraph 作为 durable workflow runtime，LangSmith 作为隐私优先诊断工具。
 
+术语契约：
+
+- LangChain = Agent Framework
+- DeepAgents = research harness
+- LangGraph = durable workflow runtime
+- LangSmith = privacy-first tracing/evaluation
+- Application DB = business authority
+
 当前仓库、运行时配置、Tool Client、Docker 默认值和 health service ID 均使用 `decision-research-agent`。
 
 ## 当前能力
@@ -35,18 +43,23 @@ flowchart TD
 
 ## 快速开始
 
+先 clone 仓库、创建本地 `.env`、按 constraints 安装依赖、启动后端，再做
+healthcheck、doctor、创建 run 并读取 canonical result。
+
 ```bash
+git clone https://github.com/iTao-AI/decision-research-agent.git
+cd decision-research-agent
+cp .env.example .env
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -c constraints.txt
-cp .env.example .env
 python api/server.py
 ```
 
 健康检查：
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl --fail --silent http://127.0.0.1:8000/health
 ```
 
 预期响应：
@@ -59,6 +72,7 @@ curl http://127.0.0.1:8000/health
 
 ```bash
 python tools/decision_research_agent_tool.py healthcheck
+python tools/decision_research_agent_tool.py doctor
 
 python tools/decision_research_agent_tool.py run \
   --query "Research question" \
@@ -128,7 +142,10 @@ python tools/decision_research_agent_tool.py doctor
 
 ## 已知边界
 
+- v0.1.0 是 backend-and-CLI release。
 - 本版本不随仓库发布前端。
+- React deferred：未来 React UI 应消费 canonical API 与 result contract，不重新引入并行 runtime。
+- Markdown-only delivery：canonical 研究结果通过 result endpoint 返回 Markdown artifact。
 - Durable review 与 evidence verification 是受控 feature-flag workflow，不是公开多用户生产功能。
 - Evidence verification 记录人工决策和确定性 snapshot；不自动检索来源，也不使用 LLM 做证据核验。
 - 历史 evidence、归档 plan 和归档 OpenSpec 可以保留原始表述，作为不可变项目历史。

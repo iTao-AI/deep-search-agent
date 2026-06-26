@@ -65,8 +65,8 @@ ship a bundled frontend.
 - Business ledger: application SQLite database through service-owned
   repositories.
 - Deployment target: backend Docker service plus optional MySQL dependency.
-- UI: no bundled frontend in v0.1.0; future React UI must consume the same
-  canonical API/result contracts.
+- UI: no bundled frontend in v0.1.0; React deferred to a later product slice
+  that must consume the same canonical API/result contracts.
 
 ## Non-Goals For v0.1.0
 
@@ -74,7 +74,7 @@ ship a bundled frontend.
 - Runtime Async Subagents beyond the approved profile architecture.
 - LLM-based evidence verification authority.
 - Browser automation or automatic real-source proof fetching.
-- Bundled Vue or React UI.
+- Bundled frontend UI.
 - Legacy task/thread API compatibility.
 
 ## Change Log
