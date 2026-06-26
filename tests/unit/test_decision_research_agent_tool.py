@@ -236,6 +236,181 @@ def test_review_show_fails_when_run_has_no_durable_review(monkeypatch):
         )
 
 
+def test_result_requests_canonical_result_endpoint(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(req, timeout):
+        captured["url"] = req.full_url
+        return FakeResponse(
+            {"artifact": {"artifact_id": "research-report.md"}}
+        )
+
+    monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
+
+    value = tool.result(
+        "run/1",
+        config=tool.ToolConfig(base_url="http://127.0.0.1:9000"),
+    )
+
+    assert value["artifact"]["artifact_id"] == "research-report.md"
+    assert captured["url"] == "http://127.0.0.1:9000/api/runs/run%2F1/result"
+
+
+def test_cli_result_prints_canonical_result(monkeypatch, capsys):
+    urls = []
+
+    def fake_urlopen(req, timeout):
+        urls.append(req.full_url)
+        return FakeResponse(
+            {
+                "run_id": "run_1",
+                "artifact": {"artifact_id": "research-report.md"},
+            }
+        )
+
+    monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
+
+    exit_code = tool.main(
+        [
+            "--base-url",
+            "http://127.0.0.1:9000",
+            "result",
+            "--run-id",
+            "run_1",
+        ]
+    )
+
+    assert exit_code == 0
+    assert urls == ["http://127.0.0.1:9000/api/runs/run_1/result"]
+    assert json.loads(capsys.readouterr().out)["artifact"]["artifact_id"] == (
+        "research-report.md"
+    )
+
+
+def test_cli_run_wait_then_result_is_secret_safe_consumer_flow(
+    monkeypatch,
+    capsys,
+):
+    requests = []
+
+    def fake_urlopen(req, timeout):
+        requests.append(
+            {
+                "method": req.get_method(),
+                "url": req.full_url,
+                "headers": dict(req.headers),
+                "body": (
+                    json.loads(req.data.decode("utf-8"))
+                    if req.data is not None
+                    else None
+                ),
+            }
+        )
+        if req.full_url.endswith("/api/runs") and req.get_method() == "POST":
+            return FakeResponse(
+                {
+                    "status": "started",
+                    "run_id": "run_1",
+                    "thread_id": "thread_1",
+                },
+                status=202,
+            )
+        if req.full_url.endswith("/api/runs/run_1/result"):
+            return FakeResponse(
+                {
+                    "run_id": "run_1",
+                    "artifact": {
+                        "artifact_id": "research-report.md",
+                        "content": "# Report",
+                    },
+                }
+            )
+        if req.full_url.endswith("/api/runs/run_1"):
+            return FakeResponse(
+                {
+                    "run_id": "run_1",
+                    "execution_status": "completed",
+                    "delivery_status": "ready",
+                }
+            )
+        raise AssertionError(f"unexpected request: {req.full_url}")
+
+    monkeypatch.setenv("DECISION_RESEARCH_AGENT_API_KEY", "secret-key")
+    monkeypatch.setattr(tool.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(tool.time, "sleep", lambda seconds: None)
+
+    run_exit = tool.main(
+        [
+            "--base-url",
+            "http://127.0.0.1:9000",
+            "run",
+            "--query",
+            "bounded public smoke",
+            "--thread-id",
+            "thread_1",
+            "--wait",
+        ]
+    )
+    result_exit = tool.main(
+        [
+            "--base-url",
+            "http://127.0.0.1:9000",
+            "result",
+            "--run-id",
+            "run_1",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert run_exit == 0
+    assert result_exit == 0
+    assert "secret-key" not in captured.out
+    assert "secret-key" not in captured.err
+    assert [item["method"] for item in requests] == ["POST", "GET", "GET"]
+    assert [item["url"] for item in requests] == [
+        "http://127.0.0.1:9000/api/runs",
+        "http://127.0.0.1:9000/api/runs/run_1",
+        "http://127.0.0.1:9000/api/runs/run_1/result",
+    ]
+    assert requests[0]["body"] == {
+        "query": "bounded public smoke",
+        "profile_id": "generic",
+        "scope": {},
+        "thread_id": "thread_1",
+    }
+    assert '"artifact_id": "research-report.md"' in captured.out
+
+
+def test_result_preserves_structured_http_error(monkeypatch):
+    body = io.BytesIO(
+        json.dumps(
+            {
+                "code": "run_review_required",
+                "problem": "Review required.",
+                "fix": "Approve or reject review.",
+            }
+        ).encode("utf-8")
+    )
+    http_error = tool.error.HTTPError(
+        "http://127.0.0.1:8000/api/runs/run_1/result",
+        409,
+        "Conflict",
+        {},
+        body,
+    )
+    monkeypatch.setattr(
+        tool.request,
+        "urlopen",
+        lambda req, timeout: (_ for _ in ()).throw(http_error),
+    )
+
+    with pytest.raises(tool.ToolClientHTTPError) as captured:
+        tool.result("run_1", tool.ToolConfig())
+
+    assert captured.value.status == 409
+    assert captured.value.payload["code"] == "run_review_required"
+
+
 def test_review_read_parser_commands():
     parser = tool._build_parser()
 

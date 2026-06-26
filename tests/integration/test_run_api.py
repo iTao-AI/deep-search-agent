@@ -319,6 +319,63 @@ async def test_talent_run_persists_review_and_canonical_artifacts(tmp_path, monk
     assert run["review_workflow"] is None
 
 
+@pytest.mark.asyncio
+async def test_generic_run_persists_canonical_result_artifact(tmp_path, monkeypatch):
+    import api.server as server
+    from agent.harness_contracts import ReportCandidate
+    from agent.run_result import AgentRunResult
+    from api.run_repository import create_run, get_artifact, get_run
+    from pathlib import PurePosixPath
+
+    monkeypatch.setenv("TASKS_DB_PATH", str(tmp_path / "tasks.db"))
+    created = create_run(
+        thread_id="generic-thread",
+        query="query",
+        profile_id="generic",
+    )
+
+    async def capture_agent(*args, **kwargs):
+        return AgentRunResult(
+            thread_id="generic-thread",
+            query="query",
+            session_dir=tmp_path,
+            profile_id="generic",
+            run_id=created["run_id"],
+            segment_id=created["segment_id"],
+            report_candidate=ReportCandidate(
+                path=PurePosixPath("/workspace/research-report.md"),
+                content="# Generic Report",
+            ),
+        )
+
+    monkeypatch.setattr(server, "run_deep_agent", capture_agent)
+
+    await server._run_v2_with_persistence(
+        query="query",
+        thread_id="generic-thread",
+        run_id=created["run_id"],
+        segment_id=created["segment_id"],
+        profile_id="generic",
+        scope={},
+        outcome_box=server.OutcomeBox(),
+    )
+
+    run = get_run(run_id=created["run_id"])
+    assert run["execution_status"] == "completed"
+    assert run["delivery_status"] == "ready"
+    assert run["review_status"] == "not_required"
+    assert [item["artifact_id"] for item in run["artifacts"]] == [
+        "research-report.md"
+    ]
+    artifact = get_artifact(
+        run_id=created["run_id"],
+        artifact_id="research-report.md",
+    )
+    assert artifact["kind"] == "research_report_markdown"
+    assert artifact["media_type"] == "text/markdown"
+    assert artifact["content"] == "# Generic Report"
+
+
 def test_run_artifact_api_resolves_by_run_and_artifact_id(tmp_path, monkeypatch):
     from api.run_repository import create_run, finalize_run_transaction
 
@@ -446,6 +503,7 @@ async def test_mark_run_timeout_finalizes_nonterminal_run_with_frozen_evidence(
     assert [item["evidence_fingerprint"] for item in run["evidence"]] == [
         "timeout-evidence"
     ]
+    assert run["artifacts"] == []
     assert events[0][0][0] == "run_timeout"
     assert events[0][1]["thread_id"] == "timeout-thread"
     assert events[0][1]["run_id"] == created["run_id"]

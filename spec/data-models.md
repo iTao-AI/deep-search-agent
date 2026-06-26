@@ -168,10 +168,26 @@ verification revision replaces active publication -> superseded
 
 Run 的 `delivery_status` 包含：
 
+- `pending`：run 已创建但尚未可交付；
 - `review_required`：需要决策，尚不可交付；
 - `ready`：`approve` 已 exactly-once resolution；
 - `blocked`：`reject` 已 resolution，禁止交付；
 - `failed`：研究执行失败。
+
+Generic run 完成且 delivery ready 时，application DB 在同一个 fenced
+terminal transaction 内写入 immutable `run_artifacts_v2` result artifact：
+
+| 字段 | Generic contract |
+|---|---|
+| `artifact_id` | `research-report.md` |
+| `kind` | `research_report_markdown` 或 `research_report_fallback_markdown` |
+| `media_type` | `text/markdown` |
+| `content_hash` | artifact `content` 的 SHA-256 hex |
+
+`GET /api/runs/{run_id}/result` 只解析当前可交付 artifact。Generic run 选择
+`research-report.md`；Talent run 优先选择 current publication 绑定的 Markdown
+artifact，未启用 publication 时选择 canonical `decision-brief.md`。该投影不返回
+本地路径、checkpoint metadata、数据库行或原始异常。
 
 公开 run 投影不会返回 decision reason、actor fingerprint、lease owner、
 checkpoint 路径或 checkpoint payload。`approve` 只允许交付，不改变 EvidenceLedger

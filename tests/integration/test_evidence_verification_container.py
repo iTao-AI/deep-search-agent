@@ -192,14 +192,12 @@ def test_verification_to_approval_survives_container_restart(
         "--run-id",
         seeded["run_id"],
     )
-    publication_id = result["current_publication"]["publication_id"]
-    assert result["current_publication"]["status"] == "ready"
-    artifact_ids = {
-        item["artifact_id"]
-        for item in result["artifacts"]
-    }
-    assert "decision-brief.json" in artifact_ids
-    assert "decision-brief.r2.reviewed.json" in artifact_ids
+    assert result["delivery_status"] == "ready"
+    assert result["artifact"]["artifact_id"] == (
+        "decision-brief.r2.reviewed.md"
+    )
+    content_hash = result["artifact"]["content_hash"]
+    assert "content" in result["artifact"]
 
     project.restart("backend")
     restarted = _tool(
@@ -208,7 +206,8 @@ def test_verification_to_approval_survives_container_restart(
         "--run-id",
         seeded["run_id"],
     )
-    assert restarted["current_publication"]["publication_id"] == (
-        publication_id
+    assert restarted["delivery_status"] == "ready"
+    assert restarted["artifact"]["artifact_id"] == (
+        "decision-brief.r2.reviewed.md"
     )
-    assert restarted["current_publication"]["status"] == "ready"
+    assert restarted["artifact"]["content_hash"] == content_hash

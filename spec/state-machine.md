@@ -81,6 +81,29 @@ Agent 间共享的事实层（Phase 3 引入）：
 5. `generating` → 生成 Markdown/PDF 文件
 6. `complete` → 任务结束
 
+## Canonical Run Delivery 状态
+
+v0.1.0 的 canonical path 以 `run_id` 为执行身份。Legacy task/thread
+状态机暂时保留到后续 removal 阶段，但第一方 run/result consumer 使用以下
+application-owned 状态：
+
+```text
+pending -> running -> completed
+pending -> running -> failed
+
+completed + generic artifact persisted -> delivery ready
+completed + Talent review required -> delivery review_required
+review approve/resolution -> delivery ready
+review reject/resolution -> delivery blocked
+failed/timeout/cancelled -> delivery failed
+```
+
+Generic completed run 在 fenced terminal transaction 内持久化
+`research-report.md`。`GET /api/runs/{run_id}/result` 只在
+`execution_status=completed` 且 `delivery_status=ready` 时返回 artifact；
+非终态、失败、review required、blocked 或 artifact 缺失均返回稳定 409/404
+错误码。
+
 ## 异常路径
 
 | 异常 | 处理方式 |
