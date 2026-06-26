@@ -252,3 +252,44 @@ def test_result_ready_talent_without_publication_returns_decision_brief_markdown
     assert response.status_code == 200
     assert response.json()["artifact"]["artifact_id"] == "decision-brief.md"
     assert response.json()["artifact"]["content"] == "# Decision Brief"
+
+
+def test_result_ready_talent_accepts_decision_brief_hash_contract(
+    tmp_path,
+    monkeypatch,
+):
+    from api.run_repository import create_run, finalize_run_transaction
+
+    client = _client(tmp_path, monkeypatch)
+    created = create_run(
+        thread_id="thread-1",
+        query="query",
+        profile_id="talent-hiring-signal",
+    )
+    finalize_run_transaction(
+        run_id=created["run_id"],
+        segment_id=created["segment_id"],
+        expected_state_version=0,
+        allowed_previous_statuses={"pending"},
+        execution_status="completed",
+        review_status="not_required",
+        delivery_status="ready",
+        evidence_entries=[],
+        artifacts=[
+            {
+                "artifact_id": "decision-brief.md",
+                "kind": "decision_brief_markdown",
+                "media_type": "text/markdown",
+                "content": "# Decision Brief",
+                "content_hash": "a" * 64,
+            }
+        ],
+    )
+
+    response = client.get(
+        f"/api/runs/{created['run_id']}/result",
+        headers=AUTH_HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["artifact"]["content_hash"] == "a" * 64

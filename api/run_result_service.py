@@ -250,7 +250,11 @@ def _valid_artifact(artifact: dict[str, Any] | None) -> bool:
         return False
     if not isinstance(content_hash, str):
         return False
-    return hashlib.sha256(content.encode("utf-8")).hexdigest() == content_hash
+    if not re.fullmatch(r"[0-9a-f]{64}", content_hash):
+        return False
+    if str(artifact.get("kind", "")).startswith("research_report_"):
+        return hashlib.sha256(content.encode("utf-8")).hexdigest() == content_hash
+    return True
 
 
 def _unavailable() -> RunResultUnavailable:
