@@ -3,11 +3,22 @@
 当前仓库、运行时配置、Tool Client 和 health service ID 使用
 `decision-research-agent` 技术标识，详见 [Agent Integration](AGENT_INTEGRATION.md)。
 
+当前产品契约：
+
+- LangChain = Agent Framework
+- DeepAgents = research harness
+- LangGraph = durable workflow runtime
+- LangSmith = privacy-first tracing/evaluation
+- Application DB = business authority
+- v0.1.0 是 backend-and-CLI release，React deferred。
+- Markdown-only delivery：交付结果通过 canonical result endpoint 返回 Markdown artifact。
+
 ## 文档索引
 
 | 文档 | 说明 |
 |------|------|
 | [PRD](prd.md) | 产品需求文档 — 产品愿景、目标用户、核心功能、成功指标 |
+| [v0.1.0 Release Notes](releases/v0.1.0.md) | 首个 backend-and-CLI release 的 breaking changes、migration、rollback 与 gate 边界 |
 | [Agent Integration](AGENT_INTEGRATION.md) | 上层 Agent / 自动化脚本调用 Decision Research Agent 的稳定工具客户端 |
 | [LangSmith 可观测性](observability.md) | 隐私优先 Trace 配置、CLI 验证和完整 Trace 切换门槛 |
 | [Durable HITL 运维说明](operations/durable-hitl-feasibility.md) | 实验性 P1B 启用边界、决策语义、恢复边界和 13 项 gate 命令 |

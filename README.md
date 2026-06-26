@@ -7,6 +7,14 @@ source-backed findings into bounded, reviewable decision artifacts. It uses
 LangChain as the agent framework, DeepAgents as the research harness, LangGraph
 as the durable workflow runtime, and LangSmith as privacy-first diagnostics.
 
+Terminology contract:
+
+- LangChain = Agent Framework
+- DeepAgents = research harness
+- LangGraph = durable workflow runtime
+- LangSmith = privacy-first tracing/evaluation
+- Application DB = business authority
+
 The active repository, runtime configuration, Tool Client, Docker defaults, and
 health service identifier use `decision-research-agent`.
 
@@ -44,18 +52,24 @@ used for diagnostics, not as the ResearchRun or EvidenceLedger ledger.
 
 ## Quick Start
 
+Clone the repository, create a local environment file, install the pinned
+runtime, start the backend, check health, then create a run and retrieve its
+canonical result.
+
 ```bash
+git clone https://github.com/iTao-AI/decision-research-agent.git
+cd decision-research-agent
+cp .env.example .env
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -c constraints.txt
-cp .env.example .env
 python api/server.py
 ```
 
 Health:
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl --fail --silent http://127.0.0.1:8000/health
 ```
 
 Expected response:
@@ -68,6 +82,7 @@ Expected response:
 
 ```bash
 python tools/decision_research_agent_tool.py healthcheck
+python tools/decision_research_agent_tool.py doctor
 
 python tools/decision_research_agent_tool.py run \
   --query "Research question" \
@@ -139,12 +154,18 @@ python tools/decision_research_agent_tool.py doctor
 - [Agent Integration](docs/AGENT_INTEGRATION.md)
 - [API Contract](spec/api-contract.md)
 - [Data Models](spec/data-models.md)
+- [v0.1.0 Release Notes](docs/releases/v0.1.0.md)
 - [Controlled Review Workflow](docs/operations/controlled-review-workflow.md)
 - [Evidence Verification Workflow](docs/operations/evidence-verification-workflow.md)
 
 ## Known Boundaries
 
+- v0.1.0 is a backend-and-CLI release.
 - No bundled frontend is shipped in this release.
+- React deferred: a future React UI can consume the canonical API and result
+  contract without reintroducing a parallel runtime.
+- Markdown-only delivery: canonical research results are returned as Markdown
+  artifacts through the result endpoint.
 - Durable review and evidence verification are feature-flagged controlled
   workflows, not public multi-user production features.
 - Evidence verification records human decisions and deterministic snapshots; it

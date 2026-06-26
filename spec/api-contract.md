@@ -56,7 +56,7 @@ it does not read LangGraph checkpoint state.
 
 Ready generic runs return `research-report.md`. Ready Talent runs return the
 current publication artifact when available, otherwise the canonical
-`decision-brief.md` artifact.
+`decision-brief.md` artifact. Delivery is Markdown-only delivery in v0.1.0.
 
 Stable errors:
 
@@ -68,6 +68,8 @@ Stable errors:
 | `409` | `run_review_required` | Delivery is waiting for review |
 | `409` | `run_delivery_blocked` | Delivery was blocked |
 | `409` | `run_result_unavailable` | Artifact missing, empty, unsafe, too large, or hash-mismatched |
+
+These result endpoint error codes are stable public contract values.
 
 ## Observability
 

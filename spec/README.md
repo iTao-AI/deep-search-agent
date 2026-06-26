@@ -2,6 +2,14 @@
 
 本目录包含 Decision Research Agent 系统的技术参考文档。与 `openspec/specs/` 不同，这里是**系统当前状态的完整快照**，不随 OpenSpec 变更流程自动管理。
 
+当前 spec 使用以下口径：
+
+- LangChain = Agent Framework
+- DeepAgents = research harness
+- LangGraph = durable workflow runtime
+- LangSmith = privacy-first tracing/evaluation
+- Application DB = business authority
+
 ## 文档清单
 
 | 文件 | 内容 | AI 注入时机 |

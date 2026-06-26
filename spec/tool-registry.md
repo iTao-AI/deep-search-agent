@@ -27,6 +27,10 @@ The Talent profile intentionally does not load runtime skills or arbitrary
 filesystem tools. Talent findings and claims must bind to current-run evidence
 IDs validated by the application service.
 
+Generic virtual workspace and Skills are DeepAgents harness capabilities, not
+application database authority. Anything intended for delivery must still pass
+the service-owned outcome, artifact, and safety contracts.
+
 ## Registration Rules
 
 1. Register tools through profile-specific harness policy, not global hidden
@@ -44,7 +48,7 @@ IDs validated by the application service.
 ## Removed Surfaces
 
 v0.1.0 runtime cleanup removed the old thread/task runtime, upload-file shared
-workspace tools, in-agent Markdown/PDF report tooling, and old shared-context
+workspace tools, in-agent report-generation tooling, and old shared-context
 tool contracts from the active product surface. Historical documents may
 mention them, but active contracts must use canonical run/result delivery.
 

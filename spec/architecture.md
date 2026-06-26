@@ -6,6 +6,8 @@ and deterministic delivery contracts.
 
 ## Runtime Layers
 
+Canonical call path: ResearchExecutionService -> AgentHarness -> DeepAgentsHarness.
+
 ```mermaid
 flowchart TD
     Client["Tool Client / REST caller"] --> API["FastAPI API"]
@@ -29,9 +31,27 @@ flowchart TD
 | Service layer | ResearchRun, EvidenceLedger, review state, verification decisions, publication state, canonical result delivery |
 | LangSmith | Trace and diagnostics only |
 
+Terminology contract: LangChain = Agent Framework; DeepAgents = research
+harness; LangGraph = durable workflow runtime; LangSmith = privacy-first
+tracing/evaluation; Application DB = business authority.
+
 LangSmith and LangGraph checkpoints are not business ledgers. Service-owned
 tables remain the source of truth for delivery, review, evidence verification,
 and publication decisions.
+
+## Profile Execution
+
+Generic research uses the DeepAgentsHarness path with framework-owned virtual
+workspace behavior, read-only Skills, compiled researcher delegation, middleware
+budgets, tool filtering, and runtime context injection. The service observes
+the execution and persists only validated outcome, evidence, telemetry, and
+artifact state.
+
+Talent Hiring Signal uses a bounded direct LangChain structured-output path
+inside the profile compiler. It intentionally does not load generic Skills,
+arbitrary filesystem tools, upload tools, or broad workspace access. Talent
+readiness is decided by service-owned schema, evidence-reference, review
+bundle, and publication contracts.
 
 ## Data Flow
 
@@ -47,11 +67,18 @@ and publication decisions.
 
 ## Deployment Boundary
 
-The repository currently ships a backend service, CLI Tool Client, tests,
+The repository currently ships a backend-and-CLI release: backend service, CLI Tool Client, tests,
 operator scripts, and documentation. It does not ship a frontend. Future UI
 work should consume the same canonical API and WebSocket contracts rather than
 reintroducing a parallel runtime.
 
+Delivery is Markdown-only delivery in v0.1.0. The result endpoint returns
+canonical Markdown artifacts and does not generate PDF files.
+
 Controlled durable review and evidence verification are supported only within
 the documented single-node SQLite boundary unless a later architecture decision
 expands the deployment model.
+
+The main generic research path does not resume an interrupted tool call after
+process death. Durable recovery is currently scoped to the controlled review
+gate and its checkpoint database, not arbitrary research execution.
