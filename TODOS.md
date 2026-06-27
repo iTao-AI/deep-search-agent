@@ -32,8 +32,8 @@ readability milestone. They require separate evidence, design, and approval.
 
 ## Agent Capabilities
 
-- Keep runtime Skills, Async Subagents, and LLM review deferred until benchmark
-  evidence demonstrates a specific limitation they solve.
+- Keep additional runtime Skills, Async Subagents, and LLM review deferred until
+  benchmark evidence demonstrates a specific limitation they solve.
 
 # Post-v0.1.0 CLI DX
 

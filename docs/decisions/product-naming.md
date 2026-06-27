@@ -17,8 +17,8 @@ EvidenceLedger, ResearchRun identity model, deterministic DecisionBrief
 contracts, and the completed Talent value gate. It does not claim that every
 source is verified or that the service makes decisions for users.
 
-Durable HITL, runtime Skills, Async Subagent, and other deferred capabilities
-are not implied by the name.
+The name does not imply automatic truth verification, asynchronous subagents,
+multi-tenant production readiness, or autonomous decision authority.
 
 ## Technical Boundary
 
