@@ -1,4 +1,4 @@
-# P2A Real-Source Proof
+# Bounded Real-Source Proof
 
 Executed on 2026-06-25 against the fixed
 `talent-agent-hiring-signals-v1` manifest.
@@ -48,4 +48,4 @@ a crawler, source archive, market-coverage benchmark, role-availability
 guarantee, hiring-outcome claim, or production-readiness claim.
 
 The machine-readable result is
-[p2a-real-source-proof.json](p2a-real-source-proof.json).
+[real-source-proof.json](real-source-proof.json).

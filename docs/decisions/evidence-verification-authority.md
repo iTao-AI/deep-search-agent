@@ -37,7 +37,7 @@ Existing Talent benchmark fixtures remain effectively `verified` with origin
 unless the migration also proves an aggregate-only Talent scope and the row has
 legacy `verification_status=verified`.
 
-P2A PR2 exposes the authority through strictly authenticated API and canonical
+Revisioned publication exposes the authority through strictly authenticated API and canonical
 Tool Client operations. It adds an explicit revisioned publication head:
 
 - a new accepted human decision atomically stales the current publication;
@@ -52,10 +52,10 @@ changes verification authority and derived delivery does not require a new
 verification.
 
 The controlled boundary remains default-disabled, single-node SQLite, and one
-backend replica. PR2 adds no source retrieval, LLM verification, UI, RBAC,
+backend replica. This contract adds no source retrieval, LLM verification, UI, RBAC,
 Skills, Async Subagents, multi-instance behavior, or real-source proof.
 
-P2A PR3 adds a bounded real-source proof. It uses ordinary Evidence with
+The bounded real-source proof uses ordinary Evidence with
 baseline origin `none`, then relies on the existing append-only human decision
 ledger and immutable snapshot projection to establish `human` authority. The
 proof report is evidence of workflow execution for a small public sample, not a
@@ -66,9 +66,10 @@ source archive or market coverage claim.
 - Mutating `evidence_entries_v2.verification_status`: rejected because it erases
   decision history and stale fingerprint boundaries.
 - Automatic LLM verification: rejected because a model is not the human
-  authority for this milestone.
+  authority for this workflow.
 - Server-side URL retrieval: deferred because it adds SSRF, redirect, DNS,
-  payload, content-type, and source-drift risks not required for PR1.
+  payload, content-type, and source-drift risks not required for this authority
+  boundary.
 
 ## Evidence And Delivery Separation
 

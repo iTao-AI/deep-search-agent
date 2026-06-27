@@ -7,7 +7,7 @@
 - Health service identifier: `decision-research-agent`
 
 The repository and primary local directory were renamed on 2026-06-18 after
-the Talent P1A value gate passed. New configuration, Tool Client usage, and
+the Talent benchmark value gate passed. New configuration, Tool Client usage, and
 LangSmith examples use the canonical identity.
 
 ## Evidence Boundary
@@ -23,6 +23,5 @@ are not implied by the name.
 ## Technical Boundary
 
 The active runtime, Tool Client, environment variables, Docker defaults, and
-health response use the canonical identifier. Historical evidence, archived
-plans, and archived OpenSpec records may keep their original wording as
-immutable project history.
+health response use the canonical identifier. Git history retains earlier
+wording as immutable project history.

@@ -2,7 +2,7 @@
 
 ## Supported Boundary
 
-P2A Evidence verification is default-disabled and supports one backend replica,
+Evidence verification authority is default-disabled and supports one backend replica,
 one persistent application SQLite database, one separate persistent checkpoint
 SQLite database, persistent output storage, one configured API credential, and
 the existing durable review worker.

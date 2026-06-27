@@ -56,6 +56,10 @@ FORBIDDEN_PROCESS_PHRASES = (
     "执行窗口汇报",
 )
 
+FORBIDDEN_PUBLIC_STAGE_MARKERS = re.compile(
+    r"\b(?:P1A|P1B|P1C|P2A|Phase 7b)\b"
+)
+
 _MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 
 
@@ -74,7 +78,9 @@ def tracked_paths(root: Path) -> list[str]:
     return sorted(
         path.relative_to(root).as_posix()
         for path in root.rglob("*")
-        if path.is_file() and ".git" not in path.relative_to(root).parts
+        if path.is_file()
+        and not path.is_symlink()
+        and ".git" not in path.relative_to(root).parts
     )
 
 
@@ -89,6 +95,8 @@ def presentation_violations(text: str) -> list[str]:
         for index, phrase in enumerate(FORBIDDEN_PROCESS_PHRASES, start=1)
         if phrase in text
     )
+    if FORBIDDEN_PUBLIC_STAGE_MARKERS.search(text):
+        violations.append("internal-stage-marker")
     return violations
 
 
@@ -107,10 +115,17 @@ def superpowers_path_violations(root: Path) -> list[dict[str, str]]:
 
 def markdown_content_violations(root: Path) -> list[dict[str, str]]:
     violations: list[dict[str, str]] = []
+    resolved_root = root.resolve()
     for relative_path in tracked_paths(root):
         if not relative_path.endswith(".md"):
             continue
-        text = (root / relative_path).read_text(encoding="utf-8")
+        source = root / relative_path
+        if not source.resolve().is_relative_to(resolved_root):
+            violations.append(
+                {"path": relative_path, "rule": "tracked-markdown-outside-root"}
+            )
+            continue
+        text = source.read_text(encoding="utf-8")
         for rule in presentation_violations(text):
             violations.append({"path": relative_path, "rule": rule})
     return violations
@@ -125,10 +140,17 @@ def _link_target(raw_target: str) -> str:
 
 def relative_markdown_link_violations(root: Path) -> list[dict[str, str]]:
     violations: list[dict[str, str]] = []
+    resolved_root = root.resolve()
     for relative_path in tracked_paths(root):
         if not relative_path.endswith(".md"):
             continue
         source = root / relative_path
+        resolved_source = source.resolve()
+        if not resolved_source.is_relative_to(resolved_root):
+            violations.append(
+                {"path": relative_path, "rule": "tracked-markdown-outside-root"}
+            )
+            continue
         text = source.read_text(encoding="utf-8")
         for match in _MARKDOWN_LINK.finditer(text):
             target = _link_target(match.group(1))
@@ -147,8 +169,17 @@ def relative_markdown_link_violations(root: Path) -> list[dict[str, str]]:
                 root / path_part.lstrip("/")
                 if path_part.startswith("/")
                 else source.parent / path_part
-            )
-            if not destination.resolve().exists():
+            ).resolve()
+            if not destination.is_relative_to(resolved_root):
+                violations.append(
+                    {
+                        "path": relative_path,
+                        "rule": "relative-link-outside-root",
+                        "target": target,
+                    }
+                )
+                continue
+            if not destination.exists():
                 violations.append(
                     {
                         "path": relative_path,

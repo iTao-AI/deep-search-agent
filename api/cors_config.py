@@ -1,30 +1,16 @@
-"""CORS 配置管理"""
+"""CORS allowlist configuration."""
 import os
 
 
-def get_allowed_origins() -> list:
-    """
-    获取允许的 CORS 源列表。
+_ALLOWED_ORIGIN_ENV = "DECISION_RESEARCH_AGENT_CORS_ALLOWED_ORIGIN"
 
-    通过 FRONTEND_ORIGIN 环境变量配置前端地址。
-    如果未设置，默认允许 localhost:5173（本地 UI 开发服务器）。
 
-    Returns:
-        list: 允许的源地址列表
-    """
-    frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
-    return [frontend_origin]
+def get_allowed_origins() -> list[str]:
+    """Return the single configured browser origin, or deny by default."""
+    allowed_origin = os.getenv(_ALLOWED_ORIGIN_ENV)
+    return [allowed_origin] if allowed_origin else []
 
 
 def validate_cors_origin(origin: str) -> bool:
-    """
-    校验请求源是否合法。
-
-    Args:
-        origin: 请求的 Origin 头
-
-    Returns:
-        bool: 是否允许该源
-    """
-    allowed = get_allowed_origins()
-    return origin in allowed
+    """Return whether an Origin header is explicitly allowed."""
+    return origin in get_allowed_origins()

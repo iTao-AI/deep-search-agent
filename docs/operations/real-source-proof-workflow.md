@@ -26,14 +26,14 @@ market-coverage claim.
      --manifest benchmarks/real-source-proof/talent-agent-hiring-signals-v1.json \
      --db-path "$DECISION_RESEARCH_AGENT_DB_PATH" \
      --run-id "$RUN_ID" \
-     --output docs/evidence/p2a-real-source-proof.json
+     --output docs/evidence/real-source-proof.json
    ```
 
 9. Check the complete report schema:
 
    ```bash
    python scripts/real_source_proof.py check-report \
-     --report docs/evidence/p2a-real-source-proof.json
+     --report docs/evidence/real-source-proof.json
    ```
 
 `build-report` verifies an idempotent finalization replay, rebuilds reviewed

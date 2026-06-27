@@ -14,7 +14,7 @@ Current verified slices include:
 - Evidence preservation across completion, timeout, and cancellation paths.
 - Application-owned `ResearchRun` and `EvidenceLedger` persistence.
 - A restricted `talent-hiring-signal` profile with deterministic artifacts.
-- A fixed-sample Talent benchmark whose P1A value gate passed.
+- A fixed-sample Talent benchmark whose value gate passed.
 - A default-disabled single-node SQLite durable HITL feasibility path whose
   13 durability and safety gates passed.
 
@@ -214,7 +214,7 @@ multi-module work, or multiple PRs. Use the Issue or PR body for small changes.
 Long-lived architecture belongs in `docs/decisions/`.
 
 Do not commit raw GStack artifacts, private planning notes, personal paths, or
-job-search context.
+private job-search motivation/presentation context.
 
 ## Git, Security, And Completion
 

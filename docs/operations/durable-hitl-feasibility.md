@@ -3,7 +3,7 @@
 ## Status
 
 The endpoint is experimental and disabled by default. A successful gate report
-proves the bounded P1B durability contract only; it does not enable the feature
+proves the bounded controlled-review durability contract only; it does not enable the feature
 automatically or establish general production readiness.
 
 ## Enable in a controlled environment
@@ -45,7 +45,7 @@ python scripts/durable_hitl_gate_runner.py \
 ```
 
 `PASS` requires thirteen passes. Any failure or Docker skip is `NO_GO`. On
-`NO_GO`, keep the feature flag false and do not begin P1C.
+`NO_GO`, keep the feature flag false and do not enable controlled review.
 
 The container gate uses an isolated, test-only bootstrap readiness report to
 break the startup prerequisite cycle. The authoritative report is still built

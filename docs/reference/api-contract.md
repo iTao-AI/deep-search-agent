@@ -168,6 +168,10 @@ Except `/health` and OpenAPI documentation, HTTP API paths require
 `DECISION_RESEARCH_AGENT_API_KEY` from the environment and never accepts an API
 key as a command-line argument.
 
+Browser CORS is deny-by-default. Operators may allow one explicit origin with
+`DECISION_RESEARCH_AGENT_CORS_ALLOWED_ORIGIN`; when it is unset, the allowlist
+is empty. The retired frontend-specific setting is not a compatibility alias.
+
 All caller-provided `thread_id` values must be 1-128 characters of letters,
 digits, dots, underscores, or hyphens. Path separators and traversal forms are
 rejected.

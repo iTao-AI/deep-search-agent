@@ -49,8 +49,8 @@ the service-owned outcome, artifact, and safety contracts.
 
 v0.1.0 runtime cleanup removed the old thread/task runtime, upload-file shared
 workspace tools, in-agent report-generation tooling, and old shared-context
-tool contracts from the active product surface. Historical documents may
-mention them, but active contracts must use canonical run/result delivery.
+tool contracts from the active product surface. Git history may mention them,
+but active contracts must use canonical run/result delivery.
 
 ## Change Log
 

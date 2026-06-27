@@ -137,6 +137,14 @@ Agent business architecture.
   screenshots, secrets, private paths, and unrelated dependency changes.
 - Perform a light pre-review and leave the local branch clean.
 
+## Resolved Verification Deviations
+
+- Container gate tests use an isolated test-only bootstrap readiness report to
+  break the gate report's startup self-dependency.
+- Production readiness remains fail-closed and does not use the test override.
+- Docker health verification uses a bounded readiness wait followed by one
+  visible authoritative health request.
+
 ## Verification Commands
 
 ```bash
@@ -152,11 +160,26 @@ python -m pytest -q \
 python scripts/durable_hitl_gate_runner.py \
   --output docs/evidence/durable-hitl-gate-report.json
 python scripts/real_source_proof.py check-report \
-  --report docs/evidence/p2a-real-source-proof.json
+  --report docs/evidence/real-source-proof.json
 docker compose config --quiet
 docker compose build backend
 docker compose up -d mysql backend
-curl --fail --silent http://127.0.0.1:8000/health
+ready=0
+for attempt in $(seq 1 60); do
+  if curl --fail --silent --show-error --max-time 2 \
+    http://127.0.0.1:8000/health >/tmp/dra-health.json; then
+    ready=1
+    break
+  fi
+  sleep 1
+done
+if [ "$ready" -ne 1 ]; then
+  docker compose logs --no-color backend mysql
+  docker compose down -v
+  exit 1
+fi
+curl --fail --silent --show-error --max-time 5 \
+  http://127.0.0.1:8000/health
 docker compose down -v
 git diff --check
 ```

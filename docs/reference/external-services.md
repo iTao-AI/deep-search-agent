@@ -1,63 +1,61 @@
 # 外部服务清单
 
-## 依赖概览
+## 当前运行时边界
 
-| 服务 | 用途 | 协议 | SLA/可用性 | 当前超时 | 当前重试 | 降级策略 |
-|------|------|------|------------|----------|----------|----------|
-| DeepSeek official API | LLM 推理 | OpenAI 兼容 HTTP | 外部托管 | 120s | provider fallback | DeepSeek V4 Flash fallback |
-| Tavily Search | 网络搜索 | REST API | ~99% | 无 | 3 次 | 无 |
-| RAGFlow | 企业知识库检索 | REST API (流式) | 自建，不稳定 | 无 | 无 | 返回空结果 |
-| MySQL | 业务数据存储 | TCP | 自建 | 连接池管理 | 无 | 无 |
+| 服务 | 用途 | 超时 | 重试与降级 |
+|---|---|---|---|
+| OpenAI-compatible provider (default DeepSeek) | LLM 推理 | 120s | 可配置 fallback model；provider 错误继续按调用方契约处理 |
+| Tavily Search | 公共网络搜索 | 单次 15s，并设置有界总超时 | 3 total attempts；成功结果进入短期 cache；无备用搜索引擎 |
+| RAGFlow | 可选知识库检索 | 单次 60s | 非 timeout 异常最多 3 total attempts；terminal on timeout；失败返回有界错误文本 |
+| MySQL | 通用 profile 的只读数据查询 | 连接 10s，读取/查询 30s | 连接池管理；无透明写入或跨服务 fallback |
 
-## 各服务详情
+这些数值来自 `tools/retry_utils.py`、`tools/tavily_tools.py`、
+`tools/ragflow_tools.py` 和 `tools/mysql_tools.py` 的当前实现。本文不声明外部
+provider SLA。
 
-### DeepSeek official API
+## OpenAI-Compatible Provider
 
-- **环境变量**: `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `LLM_MODEL`, `LLM_FALLBACK_MODEL`, `LLM_REASONING_EFFORT`, `LLM_THINKING_MODE`
-- **模型**: 默认 `deepseek-v4-pro`，fallback 为 `deepseek-v4-flash`
-- **兼容变量**: `LLM_QWEN_MAX` 仅在 `LLM_MODEL` 未设置时读取
-- **当前配置**: thinking mode 默认 enabled，`reasoning_effort` 默认 max
-- **工具调用兼容性**: DeepSeek V4 thinking mode 与强制 `tool_choice`
-  不兼容。运行时仅在 `tool_choice=True`、`"any"`、`"required"`、指定
-  tool name 或 tool-selection dict 时，使用独立模型副本关闭
-  `extra_body.thinking` 完成 tool binding；普通调用和 `"auto"` / `"none"`
-  仍保留默认 thinking mode。
-- **应急诊断**: `LLM_THINKING_MODE=disabled` 可用于临时确认 provider
-  兼容性问题，但不应作为默认修复方式，因为它会关闭所有普通推理调用的
-  thinking mode。
-- **待改进**: 请求 ID 记录、provider 错误分层统计
+- 环境变量：`OPENAI_BASE_URL`, `OPENAI_API_KEY`, `LLM_MODEL`,
+  `LLM_FALLBACK_MODEL`, `LLM_REASONING_EFFORT`, `LLM_THINKING_MODE`。
+- 默认配置面向 DeepSeek；调用协议仍是 OpenAI-compatible provider contract。
+- `LLM_QWEN_MAX` 仅在 `LLM_MODEL` 未设置时作为兼容配置读取。
+- 默认请求超时为 120s。Fallback model 是 provider/model fallback，不代表
+  对所有错误自动成功或具备可用性承诺。
+- 当强制 tool selection 与 provider thinking mode 不兼容时，运行时只对该次
+  tool binding 使用关闭 thinking 的模型副本；普通调用保留配置的 thinking
+  mode。
 
-### Tavily Search
+## Tavily Search
 
-- **环境变量**: `TAVILY_API_KEY`
-- **API**: Tavily Search API
-- **当前重试**: 内置 3 次重试
-- **当前超时**: 无（待改进，Phase 7b）
-- **降级策略**: 无 fallback 引擎（待改进，Phase 7b）
+- 环境变量：`TAVILY_API_KEY`。
+- 每次请求超时 15s；resilience wrapper 设置覆盖重试和退避的有界总超时。
+- 请求最多执行 3 total attempts。成功响应进入 300s cache，并受 run/thread
+  scoped search de-duplication 约束。
+- 没有备用搜索 provider；最终失败作为有界工具错误返回。
 
-### RAGFlow
+## RAGFlow
 
-- **环境变量**: `RAGFLOW_API_URL`, `RAGFLOW_API_KEY`
-- **API**: 自建 RAGFlow 服务
-- **当前重试**: 无（待改进，Phase 7b）
-- **当前超时**: 流式响应无超时（待改进，Phase 7b）
-- **降级策略**: 返回空结果字符串
+- 环境变量：`RAGFLOW_API_URL`, `RAGFLOW_API_KEY`。
+- 每次检索超时 60s。TimeoutError 是 terminal on timeout，不进入下一次尝试。
+- 其他异常最多执行 3 total attempts，并使用有界退避。
+- 没有备用知识库 provider；最终失败返回有界错误文本。
 
-### MySQL
+## MySQL
 
-- **环境变量**: `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_PORT`
-- **连接管理**: 连接池
-- **瞬断重试**: 无（待改进，Phase 7b）
+- 环境变量：`MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`,
+  `MYSQL_DATABASE`, `MYSQL_PORT`。
+- 连接池配置连接超时 10s、读取/查询超时 30s。
+- 表浏览使用 table whitelist；自定义查询使用 SELECT-only textual guard，并
+  拒绝常见写入关键字和 `SELECT INTO`。
+- 该文本校验 is not an AST or parameter-binding authority。模型生成的任意 SQL
+  仍应视为不可信输入；部署时应使用 least-privilege read-only account，并在
+  数据库权限层拒绝写入和越权读取。
 
 ## 安全注意事项
 
-1. **API Key 管理**: 所有密钥存于 `.env` 文件，不应提交到 git
-2. **路径遍历防护**: 文件读写工具限制在 session workspace 内
-3. **SQL 注入**: 由子 Agent prompt 约束，但缺少参数化查询强制
-4. **SSRF**: 外部服务 URL 可配置，需确保不暴露内网地址
-
-## 变更记录
-
-| 日期 | 变更 |
-|------|------|
-| 2026-05-19 | 初始外部服务清单 |
+1. 密钥只通过环境变量或本地 `.env` 注入，不提交到 Git。
+2. 外部服务 URL 属于 operator 配置；部署环境应限制可达网络，避免把内部地址
+   暴露给不可信配置来源。
+3. Tool output 在进入 application ledger 前仍是不可信文本，必须通过既有 schema、
+   Evidence reference 和持久化边界。
+4. MySQL 应以数据库账户权限作为最终写保护；应用层文本校验不是 SQL parser。

@@ -7,8 +7,8 @@ not grant independent verification authority.
 | Artifact | Boundary |
 |---|---|
 | [durable-hitl-gate-report.json](durable-hitl-gate-report.json) | Machine-readable result for the 13 controlled single-node SQLite durability and safety gates. |
-| [p2a-real-source-proof.json](p2a-real-source-proof.json) | Machine-readable bounded real-source workflow proof and report hashes. |
-| [p2a-real-source-proof.md](p2a-real-source-proof.md) | Human-readable proof procedure, verification/publication outcome, and explicit limitations. |
+| [real-source-proof.json](real-source-proof.json) | Machine-readable bounded real-source workflow proof and report hashes. |
+| [real-source-proof.md](real-source-proof.md) | Human-readable proof procedure, verification/publication outcome, and explicit limitations. |
 
 The durable HITL artifact proves only the documented feasibility boundary; its
 feature flag remains disabled by default. The real-source artifact proves a

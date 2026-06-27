@@ -15,5 +15,5 @@ scores. Populate the declared sample before running the profile.
 6. Compare the Talent output on evidence coverage, scope adherence, limitations, and
    reviewability.
 
-The P1A value gate passes only when at least three of the four dimensions improve.
+The Talent benchmark value gate passes only when at least three of the four dimensions improve.
 Until then, Skills, Async Subagent, durable HITL, and UI expansion remain disabled.

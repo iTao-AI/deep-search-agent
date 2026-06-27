@@ -44,8 +44,8 @@ the application database is business authority.
 
 - [Evidence Index](evidence/README.md) — current bounded evidence.
 - [Durable HITL Gate Report](evidence/durable-hitl-gate-report.json) — 13-gate result artifact.
-- [Real-Source Proof](evidence/p2a-real-source-proof.md) and
-  [JSON report](evidence/p2a-real-source-proof.json) — bounded proof and limitations.
+- [Real-Source Proof](evidence/real-source-proof.md) and
+  [JSON report](evidence/real-source-proof.json) — bounded proof and limitations.
 
 ## Release
 
