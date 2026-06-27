@@ -37,7 +37,7 @@ Existing Talent benchmark fixtures remain effectively `verified` with origin
 unless the migration also proves an aggregate-only Talent scope and the row has
 legacy `verification_status=verified`.
 
-P2A PR2 exposes the authority through strictly authenticated API and canonical
+Revisioned publication exposes the authority through strictly authenticated API and canonical
 Tool Client operations. It adds an explicit revisioned publication head:
 
 - a new accepted human decision atomically stales the current publication;
@@ -52,20 +52,44 @@ changes verification authority and derived delivery does not require a new
 verification.
 
 The controlled boundary remains default-disabled, single-node SQLite, and one
-backend replica. PR2 adds no source retrieval, LLM verification, UI, RBAC,
-Skills, Async Subagents, multi-instance behavior, or real-source proof.
+backend replica. This runtime contract adds no UI, RBAC, Skills, Async
+Subagents, or multi-instance behavior. It does not automatically retrieve
+sources, run browser actions, or use an LLM to verify Evidence.
 
-P2A PR3 adds a bounded real-source proof. It uses ordinary Evidence with
+The repository provides a separate bounded, operator-driven real-source proof
+workflow that uses ordinary Evidence with
 baseline origin `none`, then relies on the existing append-only human decision
 ledger and immutable snapshot projection to establish `human` authority. The
-proof report is evidence of workflow execution for a small public sample, not a
-source archive or market coverage claim.
+proof report is evidence of workflow execution for a small public sample. It is
+not a runtime crawler, not automatic truth verification, and not a
+production-readiness claim, source archive, or market coverage claim.
 
 ## Rejected Alternatives
 
 - Mutating `evidence_entries_v2.verification_status`: rejected because it erases
   decision history and stale fingerprint boundaries.
 - Automatic LLM verification: rejected because a model is not the human
-  authority for this milestone.
+  authority for this workflow.
 - Server-side URL retrieval: deferred because it adds SSRF, redirect, DNS,
-  payload, content-type, and source-drift risks not required for PR1.
+  payload, content-type, and source-drift risks not required for this authority
+  boundary.
+
+## Evidence And Delivery Separation
+
+Collection, verification, review, and delivery are separate authorities:
+
+```text
+source tool output
+-> immutable Evidence entry
+-> optional deterministic preflight
+-> append-only human verification decision
+-> deterministic effective-state snapshot
+-> publication revision
+-> independent durable review
+-> current deliverable artifact
+```
+
+The bounded real-source proof exercises this chain using an ordinary Evidence
+origin and an existing report checker. It does not introduce a crawler, source
+archive, automatic truth judgment, or market-coverage claim. The checked-in
+proof report is accepted only within the limitations recorded beside it.

@@ -78,6 +78,9 @@ Expected response:
 {"status":"ok","service":"decision-research-agent"}
 ```
 
+Continue with the complete [Getting Started tutorial](docs/getting-started.md)
+for Tool Client readiness, run creation, result retrieval, and troubleshooting.
+
 ## Tool Client
 
 ```bash
@@ -114,7 +117,7 @@ DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH=data/review_checkpoints.db
 - `WebSocket /ws/runs/{run_id}`
 
 Controlled review and evidence verification endpoints are documented in
-[API Contract](spec/api-contract.md).
+[API Contract](docs/reference/api-contract.md).
 
 ## Controlled Features
 
@@ -151,9 +154,11 @@ python tools/decision_research_agent_tool.py doctor
 ## Documentation
 
 - [Documentation Index](docs/README.md)
+- [Getting Started](docs/getting-started.md)
+- [Contributing](CONTRIBUTING.md)
 - [Agent Integration](docs/AGENT_INTEGRATION.md)
-- [API Contract](spec/api-contract.md)
-- [Data Models](spec/data-models.md)
+- [API Contract](docs/reference/api-contract.md)
+- [Data Models](docs/reference/data-models.md)
 - [v0.1.0 Release Notes](docs/releases/v0.1.0.md)
 - [Controlled Review Workflow](docs/operations/controlled-review-workflow.md)
 - [Evidence Verification Workflow](docs/operations/evidence-verification-workflow.md)
@@ -170,8 +175,8 @@ python tools/decision_research_agent_tool.py doctor
   workflows, not public multi-user production features.
 - Evidence verification records human decisions and deterministic snapshots; it
   does not perform automatic source retrieval or LLM verification.
-- Historical evidence, archived plans, and archived OpenSpec records may retain
-  their original wording as immutable project history.
+- Completed implementation history is retained in Git. Active public-neutral
+  project plans remain in the curated Superpowers workspace.
 
 ## License
 

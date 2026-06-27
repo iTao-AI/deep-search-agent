@@ -1,86 +1,29 @@
-"""CORS 配置单元测试 - Phase C"""
-import os
-import pytest
+"""CORS configuration contract tests."""
+
+from api.cors_config import get_allowed_origins, validate_cors_origin
 
 
-class TestCORSConfig:
-    """Phase C: CORS 配置修复"""
+CANONICAL_ENV = "DECISION_RESEARCH_AGENT_CORS_ALLOWED_ORIGIN"
 
-    def test_default_origin(self):
-        """未设置 FRONTEND_ORIGIN 时，默认返回 localhost:5173"""
-        # 保存原值
-        original = os.environ.get("FRONTEND_ORIGIN")
 
-        # 清除环境变量
-        if "FRONTEND_ORIGIN" in os.environ:
-            del os.environ["FRONTEND_ORIGIN"]
+def test_cors_denies_browser_origins_by_default(monkeypatch) -> None:
+    monkeypatch.delenv(CANONICAL_ENV, raising=False)
+    monkeypatch.delenv("FRONTEND_ORIGIN", raising=False)
 
-        from api.cors_config import get_allowed_origins
-        origins = get_allowed_origins()
+    assert get_allowed_origins() == []
+    assert validate_cors_origin("http://localhost:5173") is False
 
-        assert origins == ["http://localhost:5173"]
 
-        # 恢复
-        if original is not None:
-            os.environ["FRONTEND_ORIGIN"] = original
-        elif "FRONTEND_ORIGIN" in os.environ:
-            del os.environ["FRONTEND_ORIGIN"]
-        elif "FRONTEND_ORIGIN" in os.environ:
-            del os.environ["FRONTEND_ORIGIN"]
+def test_cors_allows_one_canonical_configured_origin(monkeypatch) -> None:
+    monkeypatch.setenv(CANONICAL_ENV, "https://example.com")
 
-    def test_custom_origin(self):
-        """设置 FRONTEND_ORIGIN 后，返回配置的源"""
-        original = os.environ.get("FRONTEND_ORIGIN")
-        os.environ["FRONTEND_ORIGIN"] = "https://example.com"
+    assert get_allowed_origins() == ["https://example.com"]
+    assert validate_cors_origin("https://example.com") is True
+    assert validate_cors_origin("https://other.example.com") is False
 
-        # 重新导入以获取新配置
-        import importlib
-        import api.cors_config
-        importlib.reload(api.cors_config)
-        from api.cors_config import get_allowed_origins
 
-        origins = get_allowed_origins()
-        assert origins == ["https://example.com"]
+def test_cors_does_not_accept_retired_frontend_origin_alias(monkeypatch) -> None:
+    monkeypatch.delenv(CANONICAL_ENV, raising=False)
+    monkeypatch.setenv("FRONTEND_ORIGIN", "http://localhost:5173")
 
-        # 恢复
-        if original is not None:
-            os.environ["FRONTEND_ORIGIN"] = original
-        elif "FRONTEND_ORIGIN" in os.environ:
-            del os.environ["FRONTEND_ORIGIN"]
-
-    def test_validate_allowed_origin(self):
-        """校验允许的源"""
-        original = os.environ.get("FRONTEND_ORIGIN")
-        if "FRONTEND_ORIGIN" in os.environ:
-            del os.environ["FRONTEND_ORIGIN"]
-
-        import importlib
-        import api.cors_config
-        importlib.reload(api.cors_config)
-        from api.cors_config import validate_cors_origin
-
-        assert validate_cors_origin("http://localhost:5173") is True
-        assert validate_cors_origin("http://evil.com") is False
-
-        if original is not None:
-            os.environ["FRONTEND_ORIGIN"] = original
-        elif "FRONTEND_ORIGIN" in os.environ:
-            del os.environ["FRONTEND_ORIGIN"]
-
-    def test_multiple_origins_not_allowed(self):
-        """不应该允许多个源（单源策略）"""
-        original = os.environ.get("FRONTEND_ORIGIN")
-        if "FRONTEND_ORIGIN" in os.environ:
-            del os.environ["FRONTEND_ORIGIN"]
-
-        import importlib
-        import api.cors_config
-        importlib.reload(api.cors_config)
-        from api.cors_config import get_allowed_origins
-
-        origins = get_allowed_origins()
-        assert len(origins) == 1
-        assert origins[0] == "http://localhost:5173"
-
-        if original is not None:
-            os.environ["FRONTEND_ORIGIN"] = original
+    assert get_allowed_origins() == []

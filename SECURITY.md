@@ -26,8 +26,9 @@ LangSmith traces are privacy-first by default. Keep inputs and outputs hidden
 unless a local, low-sensitivity diagnostic task explicitly requires temporary
 full trace visibility.
 
-Treat uploaded content, model output, tool responses, external service
-responses, generated reports, and persisted artifacts as untrusted input.
+Treat caller-provided request data, model output, tool responses, external
+service responses, generated reports, and persisted artifacts as untrusted
+input.
 
 ## Out Of Scope
 

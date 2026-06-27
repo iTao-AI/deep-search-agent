@@ -57,7 +57,7 @@ def seed() -> dict:
         subagent_name="network_search",
         tool_name="internet_search",
         source_url="https://example.com/container-job",
-        snippet="Synthetic persisted Evidence for the P2A canary.",
+        snippet="Synthetic persisted Evidence for the verification authority canary.",
         citation_status="cited",
         retrieved_at="2026-06-23T00:00:00+00:00",
         created_at="2026-06-23T00:00:00+00:00",

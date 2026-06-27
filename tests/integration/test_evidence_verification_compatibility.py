@@ -162,8 +162,8 @@ def test_authority_adr_states_exact_legacy_backfill_boundary():
 
 def test_pr2_public_contract_docs_cover_supersession_and_operator_cli():
     root = Path(__file__).resolve().parents[2]
-    api_contract = (root / "spec/api-contract.md").read_text(encoding="utf-8")
-    data_models = (root / "spec/data-models.md").read_text(encoding="utf-8")
+    api_contract = (root / "docs/reference/api-contract.md").read_text(encoding="utf-8")
+    data_models = (root / "docs/reference/data-models.md").read_text(encoding="utf-8")
     integration = (root / "docs/AGENT_INTEGRATION.md").read_text(
         encoding="utf-8"
     )

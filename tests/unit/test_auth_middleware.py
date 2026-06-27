@@ -1,5 +1,7 @@
 """Test API Key authentication middleware."""
 import os
+import subprocess
+import sys
 import pytest
 from fastapi.testclient import TestClient
 
@@ -42,20 +44,41 @@ class TestAuthMiddleware:
 
     def test_cors_preflight_bypasses_api_key_auth(self):
         """Browser preflight has no X-API-Key and must reach CORS middleware."""
-        os.environ["API_SECRET"] = "test-key"
-        os.environ["FRONTEND_ORIGIN"] = "http://localhost:5173"
-        from api.server import app
-        client = TestClient(app)
-        response = client.options(
-            "/api/runs",
-            headers={
-                "Origin": "http://localhost:5173",
-                "Access-Control-Request-Method": "POST",
-                "Access-Control-Request-Headers": "x-api-key,content-type",
-            },
+        env = os.environ.copy()
+        env.update(
+            {
+                "API_SECRET": "test-key",
+                "DECISION_RESEARCH_AGENT_CORS_ALLOWED_ORIGIN": "http://localhost:5173",
+                "OPENAI_API_KEY": "test-cors-subprocess-only",
+                "OPENAI_BASE_URL": "http://test",
+                "LANGSMITH_TRACING": "false",
+            }
         )
-        assert response.status_code == 200
-        assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                """
+from fastapi.testclient import TestClient
+from api.server import app
+
+response = TestClient(app).options(
+    "/api/runs",
+    headers={
+        "Origin": "http://localhost:5173",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "x-api-key,content-type",
+    },
+)
+assert response.status_code == 200, response.text
+assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+""",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert completed.returncode == 0, completed.stderr
 
     def test_api_secret_not_set_warns_and_passes(self):
         """If API_SECRET is not in env, log warning and skip auth."""

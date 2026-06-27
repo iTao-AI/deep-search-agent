@@ -56,22 +56,13 @@ with patch('agent.deepagents_harness.create_deep_agent', return_value=MagicMock(
     def test_cors_and_task_tracker_functions_integrated(self):
         """CORS and task tracker helpers remain importable."""
         from api.task_tracker import create_tracked_task, get_active_task, clear_active_tasks
-
-        # 保存原值
-        original = os.environ.get("FRONTEND_ORIGIN")
-        if "FRONTEND_ORIGIN" in os.environ:
-            del os.environ["FRONTEND_ORIGIN"]
-
-        # 重新导入获取默认值
-        import importlib
-        import api.cors_config
-        importlib.reload(api.cors_config)
         from api.cors_config import get_allowed_origins
 
-        assert "http://localhost:5173" in get_allowed_origins()
+        with patch.dict(
+            os.environ,
+            {"DECISION_RESEARCH_AGENT_CORS_ALLOWED_ORIGIN": "https://example.com"},
+            clear=False,
+        ):
+            assert get_allowed_origins() == ["https://example.com"]
         clear_active_tasks()
         assert get_active_task("nonexistent") is None
-
-        # 恢复
-        if original is not None:
-            os.environ["FRONTEND_ORIGIN"] = original

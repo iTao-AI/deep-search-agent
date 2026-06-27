@@ -2,15 +2,20 @@
 
 ## Supported Boundary
 
-P2A Evidence verification is default-disabled and supports one backend replica,
+Evidence verification authority is default-disabled and supports one backend replica,
 one persistent application SQLite database, one separate persistent checkpoint
 SQLite database, persistent output storage, one configured API credential, and
 the existing durable review worker.
 
-It adds no UI, RBAC, multi-user identity, PostgreSQL, multiple replicas,
-automatic source retrieval, browser action, LLM verification, runtime Skills,
-Async Subagents, or real-source proof. There is no frontend service in this
-release.
+The runtime adds no UI, RBAC, multi-user identity, PostgreSQL, multiple
+replicas, runtime Skills, or Async Subagents. It does not automatically
+retrieve sources, run browser actions, or use an LLM to verify Evidence. There
+is no frontend service in this release.
+
+The repository provides a separate bounded, operator-driven real-source proof
+workflow that exercises the existing ledger, review, and publication contract.
+The proof is not a runtime crawler, not automatic truth verification, and not a
+production-readiness claim.
 
 ## Enable
 

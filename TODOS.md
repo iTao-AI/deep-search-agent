@@ -19,7 +19,7 @@ readability milestone. They require separate evidence, design, and approval.
 - [ ] React frontend migration and review UI.
 - [ ] Multi-user identity/RBAC.
 - [ ] Shared database and multi-instance worker coordination.
-- Keep durable HITL disabled by default. Enable P1C only inside the documented
+- Keep durable HITL disabled by default. Enable controlled review only inside the documented
   controlled single-node boundary after `doctor` and all thirteen gates pass.
 
 ## Delivery Channels

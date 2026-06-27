@@ -149,6 +149,6 @@ part of normal service startup.
 
 ## Non-Goals
 
-P1C does not add a UI or React migration, RBAC or multi-user identity,
+The controlled review workflow does not add a UI or React migration, RBAC or multi-user identity,
 PostgreSQL, multiple replicas, claim editing, decision amendment, automatic
 rerun, runtime Skills, or Async Subagents.

@@ -1,67 +1,56 @@
-# Decision Research Agent — 项目文档
+# Decision Research Agent Documentation
 
-当前仓库、运行时配置、Tool Client 和 health service ID 使用
-`decision-research-agent` 技术标识，详见 [Agent Integration](AGENT_INTEGRATION.md)。
+Decision Research Agent is a backend-and-CLI research service. LangChain is
+the Agent Framework, DeepAgents is the research harness, LangGraph is the
+durable workflow runtime, LangSmith is privacy-first tracing/evaluation, and
+the application database is business authority.
 
-当前产品契约：
+## Tutorial
 
-- LangChain = Agent Framework
-- DeepAgents = research harness
-- LangGraph = durable workflow runtime
-- LangSmith = privacy-first tracing/evaluation
-- Application DB = business authority
-- v0.1.0 是 backend-and-CLI release，React deferred。
-- Markdown-only delivery：交付结果通过 canonical result endpoint 返回 Markdown artifact。
+- [Getting Started](getting-started.md) — create a Python 3.11 environment,
+  start the backend, verify health, and run the Tool Client.
 
-## 文档索引
+## How-to And Operations
 
-| 文档 | 说明 |
-|------|------|
-| [PRD](prd.md) | 产品需求文档 — 产品愿景、目标用户、核心功能、成功指标 |
-| [v0.1.0 Release Notes](releases/v0.1.0.md) | 首个 backend-and-CLI release 的 breaking changes、migration、rollback 与 gate 边界 |
-| [Agent Integration](AGENT_INTEGRATION.md) | 上层 Agent / 自动化脚本调用 Decision Research Agent 的稳定工具客户端 |
-| [LangSmith 可观测性](observability.md) | 隐私优先 Trace 配置、CLI 验证和完整 Trace 切换门槛 |
-| [Durable HITL 运维说明](operations/durable-hitl-feasibility.md) | 实验性 P1B 启用边界、决策语义、恢复边界和 13 项 gate 命令 |
-| [Evidence Verification 运维说明](operations/evidence-verification-workflow.md) | P2A 启用、CLI、revisioned publication、恢复和 rollback 边界 |
-| [Real-Source Proof 运维说明](operations/real-source-proof-workflow.md) | P2A PR3 小样本 manifest、人工核验、publication、fresh review 与报告流程 |
-| [Run Log](evidence/run-log.md) | E2E、ResearchRun 和 benchmark 证据记录 |
-| [技术决策说明](evidence/technical-decisions.md) | 关键工程决策 — 记录为什么选择 A 而不是 B |
-| [Evidence Verification Authority](decisions/evidence-verification-authority.md) | P2A 的不可变 Evidence、追加式 human decision、revisioned publication 与 review 权威边界 |
+- [Agent Integration](AGENT_INTEGRATION.md) — use the first-party Tool Client.
+- [Observability](observability.md) — configure privacy-first LangSmith traces.
+- [Controlled Review](operations/controlled-review-workflow.md) — operate the review queue.
+- [Durable HITL Feasibility](operations/durable-hitl-feasibility.md) — enable and verify the bounded workflow.
+- [Evidence Verification](operations/evidence-verification-workflow.md) — operate append-only verification.
+- [Real-Source Proof](operations/real-source-proof-workflow.md) — reproduce the bounded proof workflow.
 
-## 历史规划文档
+## Reference
 
-历史规划记录保留为项目过程资料，不作为 v0.1.0 当前公共入口。当前
-release review 应优先读取上方文档索引、`spec/` 当前技术快照和 release
-notes。
+- [API Contract](reference/api-contract.md) — REST, WebSocket, authentication, and errors.
+- [Data Models](reference/data-models.md) — run, Evidence, artifact, review, and publication records.
+- [State Machines](reference/state-machines.md) — execution, delivery, review, and verification transitions.
+- [Tool Registry](reference/tool-registry.md) — server-owned tool and Skill boundaries.
+- [External Services](reference/external-services.md) — provider and storage dependencies.
 
-## Evidence Pack
+## Explanation And Decisions
 
-运行证据、技术决策说明和基准数据。
+- [Architecture](architecture.md) — runtime layers, data flow, and deployment boundary.
+- [Product Requirements](prd.md) — product intent and current scope.
+- [Framework And Runtime Boundaries](decisions/framework-runtime-boundaries.md) — framework ownership.
+- [Run Identity Boundaries](decisions/run-identity-boundaries.md) — identity scopes.
+- [Evidence Verification Authority](decisions/evidence-verification-authority.md) — immutable Evidence decisions.
+- [Product Naming](decisions/product-naming.md) — canonical identity.
+- [AI-Assisted Engineering](development/ai-assisted-engineering.md) — governed implementation workflow.
+- [Superpowers Lifecycle](superpowers/README.md) and the
+  [current release plan](superpowers/plans/2026-06-27-v0-1-0-release-presentation-cleanup.md)
+  — active public-neutral project planning.
 
-| 文件 | 说明 |
-|------|------|
-| [Evidence Pack 索引](evidence/README.md) | 证据目录总览 |
-| [Run Log](evidence/run-log.md) | 端到端运行记录模板 |
-| [Technical Decisions](evidence/technical-decisions.md) | 关键技术决策与代码路径 |
-| [Durable HITL Gate Report](evidence/durable-hitl-gate-report.json) | P1B feasibility 的 13 项持久化、安全与 crash gate 结果 |
-| [P2A Real-Source Proof JSON](evidence/p2a-real-source-proof.json) | 小样本真实来源 proof 的有界机器可读报告 |
-| [P2A Real-Source Proof](evidence/p2a-real-source-proof.md) | 人工核验与 fresh review 执行结果、来源边界和限制 |
+## Evidence
 
-## 技术参考文档
+- [Evidence Index](evidence/README.md) — current bounded evidence.
+- [Durable HITL Gate Report](evidence/durable-hitl-gate-report.json) — 13-gate result artifact.
+- [Real-Source Proof](evidence/real-source-proof.md) and
+  [JSON report](evidence/real-source-proof.json) — bounded proof and limitations.
 
-技术参考文档位于项目根目录 `spec/` 下，包含：
+## Release
 
-| 文档 | 说明 |
-|------|------|
-| [architecture.md](../spec/architecture.md) | 系统架构、模块职责、数据流 |
-| [api-contract.md](../spec/api-contract.md) | REST + WebSocket API 端点定义 |
-| [data-models.md](../spec/data-models.md) | 数据模型、Session Workspace、子 Agent 输入输出 |
-| [tool-registry.md](../spec/tool-registry.md) | 工具接口定义清单 |
-| [state-machine.md](../spec/state-machine.md) | LangGraph 图结构、节点定义、状态流转 |
-| [external-services.md](../spec/external-services.md) | 外部依赖清单、SLA、超时/降级策略 |
+- [v0.1.0 Release Notes](releases/v0.1.0.md) — migration, rollback, and release gates.
+- [Contributing](../CONTRIBUTING.md) — contributor setup and verification.
 
-## 与 openspec/ 的区别
-
-- **`docs/`** — 产品意图和架构决策（为什么）
-- **`spec/`** — 系统当前技术状态的快照（现在是什么）
-- **`openspec/`** — 历史变更过程管理资料，由 OpenSpec 工具自动管理
+Completed implementation history is retained in Git. Current contracts live in
+code, tests, ADRs, and the reference documentation above.

@@ -273,7 +273,7 @@ def _conflict_response(code: str, *, run_id: str) -> JSONResponse:
             409,
             code=code,
             problem="This run profile does not support durable review.",
-            cause="P1B is limited to the Talent Hiring Signal profile.",
+            cause="Controlled durable review is limited to the Talent Hiring Signal profile.",
             fix="Use the existing delivery path for this profile.",
             retryable=False,
             run_id=run_id,
