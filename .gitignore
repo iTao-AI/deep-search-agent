@@ -22,7 +22,6 @@ Thumbs.db
 .agents/
 .claude/
 skills-lock.json
-CLAUDE.md
 
 # Runtime directories
 output/
