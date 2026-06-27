@@ -71,6 +71,26 @@ Stable errors:
 
 These result endpoint error codes are stable public contract values.
 
+### GET /api/runs/{run_id}/artifacts/{artifact_id}
+
+Return one persisted artifact by the exact run and artifact IDs. A successful
+response uses the stored media type and returns the content as the response
+body. This endpoint does not select the current deliverable; use the result
+endpoint for delivery policy.
+
+An unknown run/artifact pair returns `404` with
+`{"detail":"Artifact 不存在"}`. Path separators are not valid inside the
+artifact path parameter.
+
+### GET /api/profiles/{profile_id}
+
+Return the server-owned profile and harness-policy manifest. It includes
+schema/renderer identifiers, tool allowlists, named researchers, Skills,
+backend, and filesystem permissions, but no provider credentials or
+request-specific runtime state.
+
+An unknown profile returns `404` with detail code `unknown_profile`.
+
 ## Observability
 
 ### GET /api/telemetry/runs/{run_id}
@@ -151,6 +171,11 @@ key as a command-line argument.
 All caller-provided `thread_id` values must be 1-128 characters of letters,
 digits, dots, underscores, or hyphens. Path separators and traversal forms are
 rejected.
+
+`POST /api/runs` defaults `profile_id` to `generic`, `scope` to an empty
+object, and generates `thread_id` when omitted. Unknown profiles return `400
+unknown_profile`; invalid Talent scope returns `422 invalid_research_scope`
+before execution is scheduled.
 
 ## Error Shape
 

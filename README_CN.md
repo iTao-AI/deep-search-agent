@@ -103,7 +103,7 @@ DECISION_RESEARCH_AGENT_CHECKPOINT_DB_PATH=data/review_checkpoints.db
 - `GET /api/token-usage/runs/{run_id}`
 - `WebSocket /ws/runs/{run_id}`
 
-受控 review 与 evidence verification endpoints 见 [API Contract](spec/api-contract.md)。
+受控 review 与 evidence verification endpoints 见 [API Contract](docs/reference/api-contract.md)。
 
 ## 受控功能
 
@@ -135,8 +135,8 @@ python tools/decision_research_agent_tool.py doctor
 
 - [Documentation Index](docs/README.md)
 - [Agent Integration](docs/AGENT_INTEGRATION.md)
-- [API Contract](spec/api-contract.md)
-- [Data Models](spec/data-models.md)
+- [API Contract](docs/reference/api-contract.md)
+- [Data Models](docs/reference/data-models.md)
 - [v0.1.0 Release Notes](docs/releases/v0.1.0.md)
 - [Controlled Review Workflow](docs/operations/controlled-review-workflow.md)
 - [Evidence Verification Workflow](docs/operations/evidence-verification-workflow.md)

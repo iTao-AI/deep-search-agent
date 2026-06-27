@@ -18,12 +18,11 @@ CURRENT_DOCS = [
     PROJECT_ROOT / "docs" / "operations" / "durable-hitl-feasibility.md",
     PROJECT_ROOT / "docs" / "operations" / "evidence-verification-workflow.md",
     PROJECT_ROOT / "docs" / "operations" / "real-source-proof-workflow.md",
-    PROJECT_ROOT / "spec" / "README.md",
-    PROJECT_ROOT / "spec" / "architecture.md",
-    PROJECT_ROOT / "spec" / "api-contract.md",
-    PROJECT_ROOT / "spec" / "data-models.md",
-    PROJECT_ROOT / "spec" / "state-machine.md",
-    PROJECT_ROOT / "spec" / "tool-registry.md",
+    PROJECT_ROOT / "docs" / "architecture.md",
+    PROJECT_ROOT / "docs" / "reference" / "api-contract.md",
+    PROJECT_ROOT / "docs" / "reference" / "data-models.md",
+    PROJECT_ROOT / "docs" / "reference" / "state-machines.md",
+    PROJECT_ROOT / "docs" / "reference" / "tool-registry.md",
 ]
 
 def _combined_docs() -> str:

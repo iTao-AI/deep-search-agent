@@ -23,6 +23,10 @@ flowchart TD
 
 ## Ownership Boundaries
 
+The durable rationale and rejected alternatives are recorded in
+[Framework And Runtime Boundaries](decisions/framework-runtime-boundaries.md).
+This document summarizes the current implementation.
+
 | Layer | Owns |
 |---|---|
 | DeepAgents harness | Agent execution, tool filtering, middleware, skills loading, runtime context injection |

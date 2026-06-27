@@ -28,7 +28,7 @@ Use this priority order:
 
 1. Actual code, tests, migrations, configuration, and command output.
 2. Accepted decisions in `docs/decisions/`.
-3. Current contracts in `spec/`.
+3. Current reference contracts in `docs/reference/` and `docs/architecture.md`.
 4. Current public specs and plans in `docs/superpowers/`.
 5. Operations and evidence documents.
 6. Issues, PR descriptions, historical plans, and external artifacts.
@@ -52,7 +52,7 @@ Then read the smallest applicable set:
 | Evidence or finalization | `agent/run_result.py`, `api/run_repository.py`, `api/run_result_service.py`, lifecycle tests |
 | Talent profile or benchmark | profile/contracts/artifact/review modules and benchmark tests |
 | Durable review or HITL | `docs/operations/durable-hitl-feasibility.md`, gate report, affected review modules/tests |
-| REST, WebSocket, Tool Client | `spec/api-contract.md`, `docs/AGENT_INTEGRATION.md`, contract tests |
+| REST, WebSocket, Tool Client | `docs/reference/api-contract.md`, `docs/AGENT_INTEGRATION.md`, contract tests |
 | Future UI/API consumer | affected API contract, Tool Client behavior, WebSocket contract |
 | Public metric or claim | producing command/artifact and its evidence boundary |
 
