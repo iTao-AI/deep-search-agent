@@ -4,6 +4,8 @@ from pathlib import Path
 import re
 import subprocess
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -133,8 +135,43 @@ def test_release_verification_uses_bounded_backend_readiness() -> None:
             assert phrase in text, f"{phrase!r} missing from {path}"
 
 
-def test_changelog_marks_v010_as_pending_release() -> None:
+def test_changelog_dates_v010_release() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-    assert "## [0.1.0] - Pending release" in changelog
-    assert not re.search(r"^## \[0\.1\.0\] - \d{4}-\d{2}-\d{2}$", changelog, re.MULTILINE)
+    assert "## [0.1.0] - 2026-06-28" in changelog
+    assert "## [0.1.0] - Pending release" not in changelog
+
+
+def test_talent_benchmark_has_one_current_discoverable_entrypoint() -> None:
+    docs_index = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
+
+    assert (ROOT / "benchmarks" / "talent-hiring-signal-v1" / "README.md").is_file()
+    assert not (ROOT / "benchmarks" / "talent_hiring_signal").exists()
+    assert "../benchmarks/talent-hiring-signal-v1/README.md" in docs_index
+
+
+def test_capability_docs_do_not_defer_shipped_runtime_skills_or_durable_hitl() -> None:
+    naming = (ROOT / "docs" / "decisions" / "product-naming.md").read_text(
+        encoding="utf-8"
+    )
+    todos = (ROOT / "TODOS.md").read_text(encoding="utf-8")
+
+    assert "Durable HITL, runtime Skills" not in naming
+    assert "Keep runtime Skills, Async Subagents" not in todos
+    assert "additional runtime Skills" in todos
+
+
+def test_removed_upload_surface_has_no_direct_multipart_dependency() -> None:
+    for relative_path in ("requirements.txt", "constraints.txt"):
+        text = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert "python-multipart" not in text
+
+
+def test_dependabot_disables_routine_pip_version_pull_requests() -> None:
+    config = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text())
+    updates = {
+        entry["package-ecosystem"]: entry for entry in config["updates"]
+    }
+
+    assert updates["pip"]["open-pull-requests-limit"] == 0
+    assert updates["github-actions"]["open-pull-requests-limit"] > 0

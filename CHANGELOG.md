@@ -6,7 +6,7 @@ All notable changes to this project are documented in this file.
 
 - No unreleased changes.
 
-## [0.1.0] - Pending release
+## [0.1.0] - 2026-06-28
 
 ### Backend-and-CLI release
 

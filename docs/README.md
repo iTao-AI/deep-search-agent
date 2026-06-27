@@ -42,6 +42,8 @@ the application database is business authority.
 
 ## Evidence
 
+- [Talent Hiring Signal Benchmark v1](../benchmarks/talent-hiring-signal-v1/README.md)
+  — bounded profile and renderer gates.
 - [Evidence Index](evidence/README.md) — current bounded evidence.
 - [Durable HITL Gate Report](evidence/durable-hitl-gate-report.json) — 13-gate result artifact.
 - [Real-Source Proof](evidence/real-source-proof.md) and
