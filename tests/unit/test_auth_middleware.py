@@ -49,6 +49,9 @@ class TestAuthMiddleware:
             {
                 "API_SECRET": "test-key",
                 "DECISION_RESEARCH_AGENT_CORS_ALLOWED_ORIGIN": "http://localhost:5173",
+                "OPENAI_API_KEY": "test-cors-subprocess-only",
+                "OPENAI_BASE_URL": "http://test",
+                "LANGSMITH_TRACING": "false",
             }
         )
         completed = subprocess.run(
