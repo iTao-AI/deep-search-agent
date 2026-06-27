@@ -52,14 +52,17 @@ changes verification authority and derived delivery does not require a new
 verification.
 
 The controlled boundary remains default-disabled, single-node SQLite, and one
-backend replica. This contract adds no source retrieval, LLM verification, UI, RBAC,
-Skills, Async Subagents, multi-instance behavior, or real-source proof.
+backend replica. This runtime contract adds no UI, RBAC, Skills, Async
+Subagents, or multi-instance behavior. It does not automatically retrieve
+sources, run browser actions, or use an LLM to verify Evidence.
 
-The bounded real-source proof uses ordinary Evidence with
+The repository provides a separate bounded, operator-driven real-source proof
+workflow that uses ordinary Evidence with
 baseline origin `none`, then relies on the existing append-only human decision
 ledger and immutable snapshot projection to establish `human` authority. The
-proof report is evidence of workflow execution for a small public sample, not a
-source archive or market coverage claim.
+proof report is evidence of workflow execution for a small public sample. It is
+not a runtime crawler, not automatic truth verification, and not a
+production-readiness claim, source archive, or market coverage claim.
 
 ## Rejected Alternatives
 

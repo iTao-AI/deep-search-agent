@@ -89,6 +89,23 @@ def test_real_source_proof_uses_canonical_public_paths() -> None:
     assert completed.returncode == 1, completed.stdout
 
 
+def test_verification_docs_distinguish_runtime_from_operator_proof() -> None:
+    paths = [
+        ROOT / "docs/operations/evidence-verification-workflow.md",
+        ROOT / "docs/decisions/evidence-verification-authority.md",
+    ]
+
+    assert (ROOT / "docs/operations/real-source-proof-workflow.md").is_file()
+    for path in paths:
+        text = " ".join(path.read_text(encoding="utf-8").split())
+        assert "adds no real-source proof" not in text
+        assert "operator-driven real-source proof" in text
+        assert "does not automatically retrieve sources" in text
+        assert "not a runtime crawler" in text
+        assert "not automatic truth verification" in text
+        assert "not a production-readiness claim" in text
+
+
 def test_cors_reference_is_canonical_and_deny_by_default() -> None:
     text = (ROOT / "docs/reference/api-contract.md").read_text(encoding="utf-8")
 
