@@ -747,7 +747,9 @@ def wait_for_run(
     if timeout_seconds <= 0:
         raise ToolClientError("run_wait_timeout_seconds_must_be_positive")
     deadline = time.monotonic() + timeout_seconds
-    while True:
+    first_poll = True
+    while first_poll or time.monotonic() < deadline:
+        first_poll = False
         result = get_run(run_id, config)
         if result.get("execution_status") in {
             "completed",
@@ -759,6 +761,7 @@ def wait_for_run(
         if remaining <= 0:
             raise ToolClientError("run_wait_timeout")
         time.sleep(min(poll_seconds, remaining))
+    raise ToolClientError("run_wait_timeout")
 
 
 def _bounded_error_code(value: Any) -> str:

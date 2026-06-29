@@ -1066,13 +1066,15 @@ def test_wait_for_run_rejects_non_positive_bounds(
 
 def test_wait_for_run_sleep_does_not_cross_deadline(monkeypatch):
     clock = FakeClock()
+    poll_times = []
     monkeypatch.setattr(tool.time, "monotonic", clock.monotonic)
     monkeypatch.setattr(tool.time, "sleep", clock.sleep)
-    monkeypatch.setattr(
-        tool,
-        "get_run",
-        lambda run_id, config: {"execution_status": "running"},
-    )
+
+    def fake_get_run(run_id, config):
+        poll_times.append(clock.now)
+        return {"execution_status": "running"}
+
+    monkeypatch.setattr(tool, "get_run", fake_get_run)
 
     with pytest.raises(tool.ToolClientError) as captured:
         tool.wait_for_run(
@@ -1085,6 +1087,7 @@ def test_wait_for_run_sleep_does_not_cross_deadline(monkeypatch):
     assert captured.value.payload["code"] == "run_wait_timeout"
     assert clock.now == 1
     assert clock.sleeps == [1]
+    assert poll_times == [0.0]
 
 
 @pytest.mark.parametrize(
