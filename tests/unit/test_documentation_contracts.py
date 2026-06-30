@@ -122,6 +122,20 @@ def test_demo_console_docs_define_a_safe_copy_pasteable_local_flow() -> None:
         assert phrase in guide
 
 
+def test_demo_console_docs_track_frontend_node_requirements() -> None:
+    docs = "\n\n".join(
+        [
+            (PROJECT_ROOT / "docs" / "demo-console.md").read_text(encoding="utf-8"),
+            (PROJECT_ROOT / "docs" / "getting-started.md").read_text(encoding="utf-8"),
+        ]
+    )
+
+    assert "20.19+" in docs
+    assert "22.13+" in docs
+    assert "24+" in docs
+    assert "22.12+" not in docs
+
+
 def test_readme_first_run_flow_is_canonical_and_copy_pasteable() -> None:
     readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
 
