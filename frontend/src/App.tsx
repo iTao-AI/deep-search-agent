@@ -75,18 +75,13 @@ export default function App({ liveOptions }: { liveOptions?: LiveRunOptions }) {
           </nav>
         </aside>
 
-        <main className="canvas">
+        <main className={`canvas ${liveRun.state.mode}-mode`}>
           <section className="status-grid" aria-label="Run state summary">
             <Metric label={t.labels.service} value={displayService} tone="blue" />
             <Metric label={t.labels.health} value={displayHealth} tone="amber" />
             <Metric label={t.labels.mode} value={displayMode} tone="cyan" />
             <Metric label={t.labels.run} value={displayRunId} tone="green" />
           </section>
-
-          <LiveDemoPanel
-            language={language}
-            liveRun={liveRun}
-          />
 
           <section className="primary-panel">
             <div className="panel-heading">
@@ -105,6 +100,11 @@ export default function App({ liveOptions }: { liveOptions?: LiveRunOptions }) {
             {activeScreen === "result" && <CanonicalResult labels={t.labels} />}
             {activeScreen === "architecture" && <ArchitectureMode labels={t.labels} />}
           </section>
+
+          <LiveDemoPanel
+            language={language}
+            liveRun={liveRun}
+          />
         </main>
 
         <aside className="inspector">

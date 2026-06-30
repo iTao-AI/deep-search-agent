@@ -113,6 +113,22 @@ describe("Decision Research Agent demo console", () => {
     expect(screen.getByText("使用内置静态快照，适合无后端面试演示。")).toBeInTheDocument();
   });
 
+  it("prioritizes screen content in Static Demo and live controls in Live Backend mode", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const canvas = document.querySelector(".canvas");
+    const primaryPanel = document.querySelector(".primary-panel");
+    const livePanel = document.querySelector(".live-panel");
+
+    expect(canvas).toHaveClass("static-mode");
+    expect(primaryPanel?.compareDocumentPosition(livePanel as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "真实后端" }));
+
+    expect(canvas).toHaveClass("live-mode");
+  });
+
   it("checks backend health and renders bounded live service status", async () => {
     const user = userEvent.setup();
     const fetchMock = mockFetchSequence([

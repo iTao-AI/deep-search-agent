@@ -153,6 +153,8 @@ h3 {
 }
 
 .canvas {
+  display: flex;
+  flex-direction: column;
   padding: 22px;
 }
 
@@ -213,6 +215,27 @@ h3 {
   gap: 14px;
   margin-bottom: 16px;
   padding: 16px;
+}
+
+.status-grid {
+  order: 1;
+}
+
+.primary-panel {
+  order: 2;
+}
+
+.static-mode .live-panel {
+  order: 3;
+  margin: 16px 0 0;
+}
+
+.live-mode .live-panel {
+  order: 2;
+}
+
+.live-mode .primary-panel {
+  order: 3;
 }
 
 .mode-switch,
