@@ -71,10 +71,11 @@ bundle, and publication contracts.
 
 ## Deployment Boundary
 
-The repository currently ships a backend-and-CLI release: backend service, CLI Tool Client, tests,
-operator scripts, and documentation. It does not ship a frontend. Future UI
-work should consume the same canonical API and WebSocket contracts rather than
-reintroducing a parallel runtime.
+The repository currently ships a backend-and-CLI release plus a React static
+demo console for operator-facing explanation. The demo console does not add
+backend state or call live APIs in PR1. Future live UI work should consume the
+same canonical API and WebSocket contracts rather than reintroducing a parallel
+runtime.
 
 Delivery is Markdown-only delivery in v0.1.0. The result endpoint returns
 canonical Markdown artifacts and does not generate PDF files.

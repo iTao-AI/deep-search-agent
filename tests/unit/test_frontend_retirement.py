@@ -6,8 +6,9 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_vue_frontend_assets_are_retired():
-    assert not (ROOT / "frontend").exists()
+def test_legacy_vue_frontend_assets_are_retired():
+    assert not (ROOT / "frontend" / "vue.config.js").exists()
+    assert not (ROOT / "frontend" / "src" / "main.js").exists()
     assert not (ROOT / "Dockerfile.frontend").exists()
     assert not (ROOT / "nginx.conf").exists()
 
