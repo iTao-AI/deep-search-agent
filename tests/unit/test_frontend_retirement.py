@@ -20,22 +20,36 @@ def test_compose_is_backend_only():
     assert compose["services"]["backend"]["build"]["dockerfile"] == "Dockerfile.backend"
 
 
-def test_ci_has_no_frontend_job_or_node_build():
+def test_ci_has_frontend_demo_console_job():
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
 
-    assert "retired-ui" not in workflow["jobs"]
-    assert all(
-        job.get("name") != "Frontend Build"
-        for job in workflow["jobs"].values()
-    )
-    serialized = (ROOT / ".github/workflows/ci.yml").read_text()
-    assert "setup-node" not in serialized
-    assert "npm " not in serialized
+    frontend = workflow["jobs"]["frontend"]
+    assert frontend["name"] == "Frontend Demo Console"
+
+    serialized = yaml.safe_dump(frontend, sort_keys=False)
+    assert "actions/setup-node" in serialized
+    assert "frontend/package-lock.json" in serialized
+    assert "npm ci" in serialized
+    assert "npm run test" in serialized
+    assert "npm run lint" in serialized
+    assert "npm run build" in serialized
 
 
-def test_dependabot_no_longer_tracks_frontend_npm():
+def test_dependabot_tracks_frontend_npm():
     config = yaml.safe_load((ROOT / ".github/dependabot.yml").read_text())
 
     updates = config["updates"]
-    assert all(entry.get("package-ecosystem") != "npm" for entry in updates)
-    assert all(entry.get("directory") != "/frontend" for entry in updates)
+    frontend_npm = [
+        entry for entry in updates
+        if entry.get("package-ecosystem") == "npm"
+        and entry.get("directory") == "/frontend"
+    ]
+
+    assert frontend_npm == [
+        {
+            "package-ecosystem": "npm",
+            "directory": "/frontend",
+            "schedule": {"interval": "weekly"},
+            "open-pull-requests-limit": 2,
+        }
+    ]
