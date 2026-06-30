@@ -1,8 +1,14 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("Decision Research Agent demo console", () => {
   it("renders the six required operator screens in navigation", () => {
@@ -57,4 +63,148 @@ describe("Decision Research Agent demo console", () => {
     expect(screen.getByText("decision-brief.md")).toBeInTheDocument();
     expect(screen.getByText(/python tools\/decision_research_agent_tool.py run/)).toBeInTheDocument();
   });
+
+  it("keeps Static Demo as the default and exposes a bounded Live Backend mode", () => {
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: "静态演示" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "真实后端" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Backend base URL")).toHaveValue("http://127.0.0.1:8000");
+    expect(screen.getByText("使用内置静态快照，适合无后端面试演示。")).toBeInTheDocument();
+  });
+
+  it("checks backend health and renders bounded live service status", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetchSequence([
+      jsonResponse({ status: "ok", service: "decision-research-agent" })
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "真实后端" }));
+    await user.click(screen.getByRole("button", { name: "检查后端" }));
+
+    expect(await screen.findByText("后端可用")).toBeInTheDocument();
+    expect(screen.getByText("decision-research-agent")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8000/health", expect.any(Object));
+  });
+
+  it("runs the live golden path and renders the canonical result", async () => {
+    const user = userEvent.setup();
+    mockFetchSequence([
+      jsonResponse({ status: "ok", service: "decision-research-agent" }),
+      jsonResponse({
+        status: "started",
+        thread_id: "demo-ui-thread",
+        run_id: "run_live_001",
+        segment_id: "run_live_001_seg_000"
+      }),
+      jsonResponse({
+        run_id: "run_live_001",
+        execution_status: "completed",
+        delivery_status: "ready"
+      }),
+      jsonResponse({
+        run_id: "run_live_001",
+        execution_status: "completed",
+        delivery_status: "ready",
+        artifact: {
+          artifact_id: "research-report.md",
+          kind: "research_report_markdown",
+          media_type: "text/markdown",
+          content: "# Live Result\nSource-backed result from backend.",
+          content_hash: "abc123"
+        }
+      })
+    ]);
+
+    render(<App liveOptions={{ pollIntervalMs: 1, waitTimeoutMs: 50 }} />);
+
+    await user.click(screen.getByRole("button", { name: "真实后端" }));
+    await user.click(screen.getByRole("button", { name: "检查后端" }));
+    await screen.findByText("后端可用");
+
+    await user.click(screen.getByRole("button", { name: "运行并获取结果" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("run_live_001").length).toBeGreaterThan(0);
+    });
+    expect(await screen.findByText(/Source-backed result from backend/)).toBeInTheDocument();
+    expect(screen.getByText("research-report.md")).toBeInTheDocument();
+  });
+
+  it("normalizes live backend failures without leaking raw exception details", async () => {
+    const user = userEvent.setup();
+    mockFetchSequence([
+      () => Promise.reject(new Error("opaque failure detail"))
+    ]);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "真实后端" }));
+    await user.click(screen.getByRole("button", { name: "检查后端" }));
+
+    expect(await screen.findByText("connection_failed")).toBeInTheDocument();
+    expect(screen.getByText("启动后端或检查 Backend base URL。")).toBeInTheDocument();
+    expect(screen.queryByText(/opaque failure detail/)).not.toBeInTheDocument();
+  });
+
+  it("ignores stale health responses after returning to Static Demo mode", async () => {
+    const user = userEvent.setup();
+    const health = deferred<Response>();
+    vi.stubGlobal("fetch", vi.fn(() => health.promise));
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "真实后端" }));
+    await user.click(screen.getByRole("button", { name: "检查后端" }));
+    await user.click(screen.getByRole("button", { name: "静态演示" }));
+
+    await act(async () => {
+      health.resolve(
+        new Response(JSON.stringify({ status: "ok", service: "decision-research-agent" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200
+        })
+      );
+      await health.promise;
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "静态演示" })).toHaveClass("active");
+    });
+    expect(screen.queryByText("后端可用")).not.toBeInTheDocument();
+  });
 });
+
+function jsonResponse(body: unknown, status = 200) {
+  return () =>
+    Promise.resolve(
+      new Response(JSON.stringify(body), {
+        headers: { "Content-Type": "application/json" },
+        status
+      })
+    );
+}
+
+function mockFetchSequence(steps: Array<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>) {
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const next = steps.shift();
+    if (!next) {
+      return Promise.reject(new Error("unexpected fetch call"));
+    }
+    return next(input, init);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
+}

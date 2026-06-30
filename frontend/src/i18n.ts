@@ -50,7 +50,23 @@ export const copy = {
       artifact: "Artifact",
       boundaries: "边界",
       cli: "CLI 黄金路径",
-      authority: "Authority"
+      authority: "Authority",
+      live: "Live Demo"
+    },
+    live: {
+      staticMode: "静态演示",
+      liveMode: "真实后端",
+      staticDescription: "使用内置静态快照，适合无后端面试演示。",
+      liveDescription: "连接本机后端，执行受控 run -> result 黄金路径。",
+      baseUrl: "Backend base URL",
+      checkHealth: "检查后端",
+      runResult: "运行并获取结果",
+      backendAvailable: "后端可用",
+      noResult: "尚未获取 live result。",
+      status: "Live 状态",
+      fix: "修复建议",
+      resultPreview: "Canonical Result Preview",
+      startBackend: "启动后端或检查 Backend base URL。"
     },
     statements: {
       command:
@@ -96,7 +112,23 @@ export const copy = {
       artifact: "Artifact",
       boundaries: "Boundaries",
       cli: "CLI golden path",
-      authority: "Authority"
+      authority: "Authority",
+      live: "Live Demo"
+    },
+    live: {
+      staticMode: "Static Demo",
+      liveMode: "Live Backend",
+      staticDescription: "Use the bundled static snapshot when the backend is unavailable.",
+      liveDescription: "Connect to a local backend and run the bounded run -> result golden path.",
+      baseUrl: "Backend base URL",
+      checkHealth: "Check backend",
+      runResult: "Run and fetch result",
+      backendAvailable: "Backend available",
+      noResult: "No live result has been fetched yet.",
+      status: "Live status",
+      fix: "Fix",
+      resultPreview: "Canonical Result Preview",
+      startBackend: "Start the backend or verify Backend base URL."
     },
     statements: {
       command:
