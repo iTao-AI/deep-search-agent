@@ -82,6 +82,15 @@ describe("Decision Research Agent demo console", () => {
     expect(screen.getByText(/python tools\/decision_research_agent_tool.py run/)).toBeInTheDocument();
   });
 
+  it("renders the CLI golden path without diff markers", () => {
+    render(<App />);
+
+    const snippet = document.querySelector(".inspector-panel.dark pre");
+
+    expect(snippet).toHaveTextContent('--query "Compare the evidence behind the proposed decision"');
+    expect(snippet?.textContent).not.toMatch(/^\+\s/m);
+  });
+
   it("keeps Static Demo as the default and exposes a bounded Live Backend mode", () => {
     render(<App />);
 
