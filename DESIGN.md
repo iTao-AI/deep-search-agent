@@ -41,6 +41,9 @@ layouts, and message input boxes are not part of the primary interaction model.
 
 - Desktop-first, because the primary use case is a live technical demo.
 - Three-column shell: left navigation, center run canvas, right inspector.
+- Static Demo places the selected screen before Live Backend controls so the
+  1280x720 recording viewport leads with the current research concept. Live
+  Backend mode promotes its controls ahead of the selected screen.
 - The right inspector carries persistent authority notes, CLI golden path, and
   explicit UI boundaries.
 - Mobile only needs to remain readable; it is not the primary experience.

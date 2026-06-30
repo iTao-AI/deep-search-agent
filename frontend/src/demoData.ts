@@ -61,7 +61,7 @@ export const demoRun = {
   resultMarkdown:
     "## Canonical Decision Brief\n\nRecommendation: proceed with a bounded interview demo using static data. Evidence refs: ev_001, ev_002.\n\nDelivery authority: GET /api/runs/{run_id}/result.",
   cliGoldenPath:
-    'python tools/decision_research_agent_tool.py run \\\n+  --query "Compare the evidence behind the proposed decision" \\\n+  --wait \\\n+  --result'
+    'python tools/decision_research_agent_tool.py run \\\n  --query "Compare the evidence behind the proposed decision" \\\n  --wait \\\n  --result'
 };
 
 export const architectureNodes = [

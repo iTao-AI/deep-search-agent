@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { architectureNodes, demoRun } from "./demoData";
 import { copy, type Language, screenEnglishNames, screenKeys, type ScreenKey } from "./i18n";
@@ -25,6 +25,10 @@ export default function App({ liveOptions }: { liveOptions?: LiveRunOptions }) {
   const displayService = liveRun.state.health?.service ?? demoRun.service;
   const displayHealth = liveRun.state.health?.status ?? liveRun.state.status;
   const displayMode = liveRun.state.mode === "static" ? demoRun.mode : "live backend";
+
+  useEffect(() => {
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+  }, [language]);
 
   return (
     <div className="console-shell">
@@ -71,18 +75,13 @@ export default function App({ liveOptions }: { liveOptions?: LiveRunOptions }) {
           </nav>
         </aside>
 
-        <main className="canvas">
+        <main className={`canvas ${liveRun.state.mode}-mode`}>
           <section className="status-grid" aria-label="Run state summary">
             <Metric label={t.labels.service} value={displayService} tone="blue" />
             <Metric label={t.labels.health} value={displayHealth} tone="amber" />
             <Metric label={t.labels.mode} value={displayMode} tone="cyan" />
             <Metric label={t.labels.run} value={displayRunId} tone="green" />
           </section>
-
-          <LiveDemoPanel
-            language={language}
-            liveRun={liveRun}
-          />
 
           <section className="primary-panel">
             <div className="panel-heading">
@@ -101,6 +100,11 @@ export default function App({ liveOptions }: { liveOptions?: LiveRunOptions }) {
             {activeScreen === "result" && <CanonicalResult labels={t.labels} />}
             {activeScreen === "architecture" && <ArchitectureMode labels={t.labels} />}
           </section>
+
+          <LiveDemoPanel
+            language={language}
+            liveRun={liveRun}
+          />
         </main>
 
         <aside className="inspector">
@@ -246,18 +250,25 @@ function CommandCenter({ labels }: { labels: Record<string, string> }) {
   return (
     <div className="command-grid">
       <div className="flow-map">
-        {["OpenClaw", "Codex", "Tool Client", "REST caller"].map((caller) => (
-          <span className="caller" key={caller}>
-            {caller}
-          </span>
-        ))}
-        <span className="arrow">→</span>
-        <span className="node">FastAPI</span>
-        <span className="arrow">→</span>
-        <span className="node">ResearchExecutionService</span>
-        <span className="arrow">→</span>
-        <span className="node">DeepAgentsHarness</span>
-        <span className="node authority">Application DB authority</span>
+        <div className="caller-row">
+          {["OpenClaw", "Codex", "Tool Client", "REST caller"].map((caller) => (
+            <span className="caller" key={caller}>
+              {caller}
+            </span>
+          ))}
+        </div>
+        <span className="flow-connector" aria-hidden="true">↓</span>
+        <div className="execution-path">
+          <span className="node">FastAPI</span>
+          <span className="arrow">→</span>
+          <span className="node">ResearchExecutionService</span>
+          <span className="arrow">→</span>
+          <span className="node">DeepAgentsHarness</span>
+        </div>
+        <div className="authority-row">
+          <span className="flow-connector" aria-hidden="true">↳</span>
+          <span className="node authority">Application DB authority</span>
+        </div>
         <p className="note">
           {labels.authority}: Application DB = business authority; LangSmith = diagnostics only.
         </p>

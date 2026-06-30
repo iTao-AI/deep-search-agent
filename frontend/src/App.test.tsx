@@ -49,6 +49,19 @@ describe("Decision Research Agent demo console", () => {
     expect(screen.queryByText(/read-only operator console/i)).not.toBeInTheDocument();
   });
 
+  it("keeps the document language aligned with the language toggle", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(document.documentElement).toHaveAttribute("lang", "zh-CN");
+
+    await user.click(screen.getByRole("button", { name: "English" }));
+    expect(document.documentElement).toHaveAttribute("lang", "en");
+
+    await user.click(screen.getByRole("button", { name: "中文" }));
+    expect(document.documentElement).toHaveAttribute("lang", "zh-CN");
+  });
+
   it("states that the UI starts runs without owning authority", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -82,6 +95,15 @@ describe("Decision Research Agent demo console", () => {
     expect(screen.getByText(/python tools\/decision_research_agent_tool.py run/)).toBeInTheDocument();
   });
 
+  it("renders the CLI golden path without diff markers", () => {
+    render(<App />);
+
+    const snippet = document.querySelector(".inspector-panel.dark pre");
+
+    expect(snippet).toHaveTextContent('--query "Compare the evidence behind the proposed decision"');
+    expect(snippet?.textContent).not.toMatch(/^\+\s/m);
+  });
+
   it("keeps Static Demo as the default and exposes a bounded Live Backend mode", () => {
     render(<App />);
 
@@ -89,6 +111,25 @@ describe("Decision Research Agent demo console", () => {
     expect(screen.getByRole("button", { name: "真实后端" })).toBeInTheDocument();
     expect(screen.getByLabelText("Backend base URL")).toHaveValue("http://127.0.0.1:8000");
     expect(screen.getByText("使用内置静态快照，适合无后端面试演示。")).toBeInTheDocument();
+  });
+
+  it("prioritizes screen content in Static Demo and live controls in Live Backend mode", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const canvas = document.querySelector(".canvas");
+    const primaryPanel = document.querySelector(".primary-panel");
+    const livePanel = document.querySelector(".live-panel");
+    if (!primaryPanel || !livePanel) {
+      throw new Error("Expected demo console panels to render.");
+    }
+
+    expect(canvas).toHaveClass("static-mode");
+    expect(primaryPanel.compareDocumentPosition(livePanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "真实后端" }));
+
+    expect(canvas).toHaveClass("live-mode");
   });
 
   it("checks backend health and renders bounded live service status", async () => {
