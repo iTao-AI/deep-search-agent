@@ -100,7 +100,7 @@ h3 {
 
 .top-actions button {
   min-width: 72px;
-  min-height: 36px;
+  min-height: 44px;
   border-radius: 6px;
 }
 
@@ -253,7 +253,7 @@ h3 {
 
 .mode-switch button,
 .live-controls button {
-  min-height: 38px;
+  min-height: 44px;
   border: 1px solid #d8d2c4;
   border-radius: 8px;
   background: #f7f5ef;
@@ -284,7 +284,7 @@ h3 {
 }
 
 .live-controls input {
-  min-height: 38px;
+  min-height: 44px;
   width: 100%;
   border: 1px solid #d8d2c4;
   border-radius: 8px;
