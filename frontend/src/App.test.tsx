@@ -120,9 +120,12 @@ describe("Decision Research Agent demo console", () => {
     const canvas = document.querySelector(".canvas");
     const primaryPanel = document.querySelector(".primary-panel");
     const livePanel = document.querySelector(".live-panel");
+    if (!primaryPanel || !livePanel) {
+      throw new Error("Expected demo console panels to render.");
+    }
 
     expect(canvas).toHaveClass("static-mode");
-    expect(primaryPanel?.compareDocumentPosition(livePanel as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(primaryPanel.compareDocumentPosition(livePanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "真实后端" }));
 
