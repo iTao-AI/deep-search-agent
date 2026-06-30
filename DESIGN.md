@@ -3,7 +3,7 @@
 ## Purpose
 
 The React Demo Console is an operator console for Decision Research Agent. It
-is built for stable interview demos of run-scoped execution, EvidenceLedger
+is built for stable technical demos of run-scoped execution, EvidenceLedger
 authority, human review, evidence verification, and canonical result delivery.
 
 It is not a chatbot, public research product, login surface, RBAC surface,
@@ -37,7 +37,7 @@ layouts, and message input boxes are not part of the primary interaction model.
 
 ## Layout Rules
 
-- Desktop-first, because the primary use case is a live interview demo.
+- Desktop-first, because the primary use case is a live technical demo.
 - Three-column shell: left navigation, center run canvas, right inspector.
 - The right inspector carries persistent authority notes, CLI golden path, and
   explicit UI boundaries.
@@ -114,6 +114,9 @@ python tools/decision_research_agent_tool.py run \
 - Static Demo mode uses local demo data only.
 - Live Backend mode may call `/health`, `POST /api/runs`,
   `/api/runs/{run_id}`, and `/api/runs/{run_id}/result`.
+- Live Backend is local-only in the current slice. It uses one explicit CORS
+  origin and a loopback-bound backend with `API_SECRET` unset because the
+  console does not accept or store API credentials.
 - Telemetry, token usage, and WebSocket endpoints are not part of the current
   UI flow.
 - `GET /api/runs/{run_id}/result` remains the canonical result contract.

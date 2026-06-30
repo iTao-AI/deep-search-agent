@@ -11,6 +11,8 @@ Canonical call path: ResearchExecutionService -> AgentHarness -> DeepAgentsHarne
 ```mermaid
 flowchart TD
     Client["Tool Client / REST caller"] --> API["FastAPI API"]
+    Operator["Operator"] --> Console["React demo console"]
+    Console --> API
     API --> Service["ResearchExecutionService"]
     Service --> Harness["DeepAgents harness adapter"]
     Harness --> Framework["LangChain agent framework"]
@@ -76,6 +78,11 @@ console for operator-facing explanation. The demo console keeps a static
 fallback and adds a bounded Live Backend mode that consumes the same canonical
 API/result contracts without adding backend state or reintroducing a parallel
 runtime.
+
+The browser client is not an authentication or deployment boundary. Its current
+Live Backend mode is limited to a loopback-only backend with one explicitly
+allowed CORS origin; authenticated and public deployments remain outside this
+UI slice.
 
 Delivery is Markdown-only delivery in v0.1.0. The result endpoint returns
 canonical Markdown artifacts and does not generate PDF files.

@@ -71,6 +71,20 @@ curl --fail --silent http://127.0.0.1:8000/health
 后续 Tool Client readiness、run 创建、result 获取和故障处理见完整的
 [Getting Started tutorial](docs/getting-started.md)。
 
+## Demo Console
+
+React console 默认进入可重复的 Static Demo 模式：
+
+```bash
+cd frontend
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+打开 `http://127.0.0.1:5173`。可选的 Live Backend 模式要求配置精确的
+CORS origin，并将未启用 `API_SECRET` 的 backend 绑定到 loopback；启用前请阅读
+[Demo Console Guide](docs/demo-console.md)。当前 console 不接收或保存 API 凭据。
+
 ## Tool Client
 
 ```bash
@@ -138,6 +152,7 @@ python tools/decision_research_agent_tool.py doctor
 
 - [Documentation Index](docs/README.md)
 - [Demo Console Design](DESIGN.md)
+- [Demo Console Guide](docs/demo-console.md)
 - [Getting Started](docs/getting-started.md)
 - [Contributing](CONTRIBUTING.md)
 - [Agent Integration](docs/AGENT_INTEGRATION.md)

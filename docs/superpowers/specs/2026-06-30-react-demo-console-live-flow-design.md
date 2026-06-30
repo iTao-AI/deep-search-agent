@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add a bounded Live Demo Mode to the React demo console so an interview operator can prove the UI consumes the real Decision Research Agent backend contract without turning the UI into a new runtime or business authority.
+Add a bounded Live Demo Mode to the React demo console so an operator can prove the UI consumes the real Decision Research Agent backend contract without turning the UI into a new runtime or business authority.
 
 ## Scope
 
@@ -30,6 +30,15 @@ The console exposes a small mode switch:
 - `Live Backend`: user can configure a base URL, verify health, start a bounded demo run, and retrieve the canonical result.
 
 The UI language remains Chinese by default with the existing English toggle. Live mode must explain failures with bounded operator guidance, not raw stack traces.
+
+## Local Security Boundary
+
+The current console does not accept or persist API credentials. Live Backend is
+therefore limited to a backend bound to `127.0.0.1`, with `API_SECRET` unset and
+`DECISION_RESEARCH_AGENT_CORS_ALLOWED_ORIGIN` set to the exact local Vite
+origin. Authenticated, LAN-accessible, and public deployments are outside this
+slice; those environments use the Tool Client or require a separately approved
+authentication design.
 
 ## Architecture
 

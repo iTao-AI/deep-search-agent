@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Implement inline in this session. Do not use subagents for this repository unless the user explicitly authorizes them. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a bounded Live Demo Mode to the React demo console while preserving Static Demo Mode as the reliable interview fallback.
+**Goal:** Add a bounded Live Demo Mode to the React demo console while preserving Static Demo Mode as the reliable demonstration fallback.
 
 **Architecture:** Keep backend calls in a small frontend API client, keep run orchestration in a React hook, and keep `App.tsx` focused on presentation. The frontend consumes the canonical API contract and never becomes business authority.
 
@@ -81,3 +81,12 @@
 - [x] Confirm no backend, API, DB, runtime, Docker, review, verification, LangGraph, DeepAgents, or LangSmith files changed.
 - [x] Confirm no API key, `.env`, local path, raw traceback, or private Career/GStack path is present in the diff.
 - [x] Confirm PR scope remains demo console frontend + docs only.
+
+## Documentation Coverage Follow-Up
+
+- [x] Add `docs/demo-console.md` with copy-pasteable Static Demo and local Live Backend flows.
+- [x] Document exact CORS, loopback binding, and unauthenticated local-demo boundaries.
+- [x] Update `AGENTS.md`, `CONTRIBUTING.md`, `TODOS.md`, `docs/README.md`, `docs/getting-started.md`, `docs/prd.md`, `docs/architecture.md`, and `CHANGELOG.md`.
+- [x] Preserve `docs/releases/v0.1.0.md` as the historical backend-and-CLI release record.
+- [x] Update documentation contract tests to prevent the retired `React deferred` state from returning to current docs.
+- [x] Remove the obsolete canonical-identity rule that rejected valid `cd frontend` commands, with a regression test that still preserves legacy-name checks.

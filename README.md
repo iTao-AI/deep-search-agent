@@ -84,6 +84,21 @@ Expected response:
 Continue with the complete [Getting Started tutorial](docs/getting-started.md)
 for Tool Client readiness, run creation, result retrieval, and troubleshooting.
 
+## Demo Console
+
+The React console starts in deterministic Static Demo mode:
+
+```bash
+cd frontend
+npm ci
+npm run dev -- --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:5173`. The optional Live Backend mode requires an exact
+CORS origin and a loopback-only backend; follow the
+[Demo Console guide](docs/demo-console.md) before enabling it. The current
+console does not accept or store API credentials.
+
 ## Tool Client
 
 ```bash
@@ -168,6 +183,7 @@ python tools/decision_research_agent_tool.py doctor
 
 - [Documentation Index](docs/README.md)
 - [Demo Console Design](DESIGN.md)
+- [Demo Console Guide](docs/demo-console.md)
 - [Getting Started](docs/getting-started.md)
 - [Contributing](CONTRIBUTING.md)
 - [Agent Integration](docs/AGENT_INTEGRATION.md)
