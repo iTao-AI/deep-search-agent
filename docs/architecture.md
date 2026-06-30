@@ -71,10 +71,10 @@ bundle, and publication contracts.
 
 ## Deployment Boundary
 
-The repository currently ships a backend-and-CLI release plus a React static
-demo console for operator-facing explanation. The demo console does not add
-backend state or call live APIs in PR1. Future live UI work should consume the
-same canonical API and WebSocket contracts rather than reintroducing a parallel
+The repository currently ships a backend-and-CLI release plus a React demo
+console for operator-facing explanation. The demo console keeps a static
+fallback and adds a bounded Live Backend mode that consumes the same canonical
+API/result contracts without adding backend state or reintroducing a parallel
 runtime.
 
 Delivery is Markdown-only delivery in v0.1.0. The result endpoint returns

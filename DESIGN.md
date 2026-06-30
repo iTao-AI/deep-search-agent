@@ -17,8 +17,9 @@ multi-tenant console, backend state machine, or result authority.
   references.
 - Human-governed: review, verification, publication, and delivery are
   service-owned states.
-- UI-observed: the UI presents static demo fixtures in PR1 and later consumes
-  public API contracts. It does not create business truth.
+- UI-observed: the UI presents static demo fixtures by default and can consume
+  public run/result API contracts in Live Backend mode. It does not create
+  business truth.
 
 ## Information Architecture
 
@@ -39,7 +40,7 @@ layouts, and message input boxes are not part of the primary interaction model.
 - Desktop-first, because the primary use case is a live interview demo.
 - Three-column shell: left navigation, center run canvas, right inspector.
 - The right inspector carries persistent authority notes, CLI golden path, and
-  explicit PR1 boundaries.
+  explicit UI boundaries.
 - Mobile only needs to remain readable; it is not the primary experience.
 - Cards are used only for repeated state records, metrics, and inspection
   panels. Page sections remain unframed inside the shell.
@@ -83,10 +84,11 @@ Colors represent state, not decoration.
 
 - `RunStatusPill`: stable state code and semantic color.
 - `RunSpine`: lifecycle sequence from creation to delivery.
-- `EvidenceRefChip`: clickable evidence reference in later PRs; static in PR1.
+- `EvidenceRefChip`: evidence reference treatment; clickable drill-down can be
+  added only if it consumes an existing API contract.
 - `AuthorityBadge`: distinguishes Application DB, LangGraph checkpoint,
   LangSmith diagnostics, and canonical result endpoint authority.
-- `BoundaryCallout`: states what PR1 does not do.
+- `BoundaryCallout`: states what the demo console does not do.
 - `CommandSnippet`: shows the CLI golden path:
 
 ```bash
@@ -109,9 +111,11 @@ python tools/decision_research_agent_tool.py run \
 
 ## Data Rules
 
-- PR1 uses local static demo data only.
-- No calls to `/health`, `/api/runs/{run_id}`, `/result`, telemetry, token
-  usage, or WebSocket endpoints are implemented in PR1.
+- Static Demo mode uses local demo data only.
+- Live Backend mode may call `/health`, `POST /api/runs`,
+  `/api/runs/{run_id}`, and `/api/runs/{run_id}/result`.
+- Telemetry, token usage, and WebSocket endpoints are not part of the current
+  UI flow.
 - `GET /api/runs/{run_id}/result` remains the canonical result contract.
 - UI fixtures must not imply that review approval verifies Evidence.
 - `cited` and `verified` remain separate concepts.

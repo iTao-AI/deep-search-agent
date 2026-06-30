@@ -26,11 +26,11 @@
 - Create: `frontend/src/apiClient.ts`
 - Test: `frontend/src/App.test.tsx`
 
-- [ ] Write failing tests that expect health success and failure to render bounded UI states.
-- [ ] Run `cd frontend && npm run test` and verify the tests fail because no live client/UI exists.
-- [ ] Implement `apiClient.ts` with `getHealth`, `startRun`, `getRun`, `getResult`, and `normalizeClientError`.
-- [ ] Run `cd frontend && npm run test` and keep existing static tests passing.
-- [ ] Commit `feat(frontend): add demo console api client`.
+- [x] Write failing tests that expect health success and failure to render bounded UI states.
+- [x] Run `cd frontend && npm run test` and verify the tests fail because no live client/UI exists.
+- [x] Implement `apiClient.ts` with `getHealth`, `startRun`, `getRun`, `getResult`, and `normalizeClientError`.
+- [x] Run `cd frontend && npm run test` and keep existing static tests passing.
+- [x] Commit `feat(frontend): add demo console api client`.
 
 ## Task 2: Live Run State Machine
 
@@ -38,12 +38,12 @@
 - Create: `frontend/src/useLiveRun.ts`
 - Modify: `frontend/src/App.test.tsx`
 
-- [ ] Write failing tests for `start -> poll -> result`, poll timeout, and stale response isolation.
-- [ ] Run `cd frontend && npm run test` and verify the tests fail for missing behavior.
-- [ ] Implement `useLiveRun` with explicit statuses: `static`, `checking`, `ready`, `starting`, `polling`, `result`, `error`.
-- [ ] Use React `useEffect` cleanup/ignore semantics for stale async responses.
-- [ ] Run `cd frontend && npm run test`.
-- [ ] Commit `feat(frontend): orchestrate live demo runs`.
+- [x] Write failing tests for `start -> poll -> result`, poll timeout, and stale response isolation.
+- [x] Run `cd frontend && npm run test` and verify the tests fail for missing behavior.
+- [x] Implement `useLiveRun` with explicit statuses: `static`, `checking`, `ready`, `starting`, `polling`, `result`, `error`.
+- [x] Use stale request versioning equivalent to React cleanup/ignore semantics for async responses.
+- [x] Run `cd frontend && npm run test`.
+- [x] Commit `feat(frontend): orchestrate live demo runs`.
 
 ## Task 3: Console Presentation
 
@@ -53,12 +53,12 @@
 - Modify: `frontend/src/styles.css`
 - Modify: `frontend/src/App.test.tsx`
 
-- [ ] Write failing tests asserting Static Demo is default, Live Backend controls exist, and no chat textbox appears.
-- [ ] Run `cd frontend && npm run test` and verify expected failures.
-- [ ] Add mode switch, base URL input, health button, start button, live state panel, and canonical result preview.
-- [ ] Keep existing six operator screens and Chinese default.
-- [ ] Run `cd frontend && npm run test`.
-- [ ] Commit `feat(frontend): expose live demo console flow`.
+- [x] Write failing tests asserting Static Demo is default, Live Backend controls exist, and no chat textbox appears.
+- [x] Run `cd frontend && npm run test` and verify expected failures.
+- [x] Add mode switch, base URL input, health button, start button, live state panel, and canonical result preview.
+- [x] Keep existing six operator screens and Chinese default.
+- [x] Run `cd frontend && npm run test`.
+- [x] Commit `feat(frontend): expose live demo console flow`.
 
 ## Task 4: Docs And Verification
 
@@ -68,16 +68,16 @@
 - Modify: `docs/superpowers/specs/2026-06-30-react-demo-console-live-flow-design.md`
 - Modify: `docs/superpowers/plans/2026-06-30-react-demo-console-live-flow-implementation.md`
 
-- [ ] Update README docs to say the React demo console supports Static Demo and Live Backend modes.
-- [ ] Run `cd frontend && npm run test`.
-- [ ] Run `cd frontend && npm run lint`.
-- [ ] Run `cd frontend && npm run build`.
-- [ ] Run `python -m pytest tests/unit/test_frontend_retirement.py -q`.
-- [ ] Run `git diff --check`.
-- [ ] Commit `docs(frontend): document live demo console mode`.
+- [x] Update README docs to say the React demo console supports Static Demo and Live Backend modes.
+- [x] Run `cd frontend && npm run test`.
+- [x] Run `cd frontend && npm run lint`.
+- [x] Run `cd frontend && npm run build`.
+- [x] Run `python -m pytest tests/unit/test_frontend_retirement.py -q`.
+- [x] Run `git diff --check`.
+- [x] Commit `docs(frontend): document live demo console mode`.
 
 ## Final Review
 
-- [ ] Confirm no backend, API, DB, runtime, Docker, review, verification, LangGraph, DeepAgents, or LangSmith files changed.
-- [ ] Confirm no API key, `.env`, local path, raw traceback, or private Career/GStack path is present in the diff.
-- [ ] Confirm PR scope remains demo console frontend + docs only.
+- [x] Confirm no backend, API, DB, runtime, Docker, review, verification, LangGraph, DeepAgents, or LangSmith files changed.
+- [x] Confirm no API key, `.env`, local path, raw traceback, or private Career/GStack path is present in the diff.
+- [x] Confirm PR scope remains demo console frontend + docs only.
