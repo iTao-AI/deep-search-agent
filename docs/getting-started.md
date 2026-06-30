@@ -9,7 +9,7 @@ React console in deterministic Static Demo mode.
 - Python 3.11
 - Git
 - Provider credentials for a real research run
-- Node.js `20.19+`, `22.12+`, or `24+` for the optional demo console
+- Node.js `20.19+`, `22.13+`, or `24+` for the optional demo console
 
 Keep credentials in `.env`. Do not pass API keys on the command line or commit
 the environment file.

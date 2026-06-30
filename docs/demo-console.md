@@ -16,7 +16,7 @@ verification decisions, create database authority, or bypass result gates.
 
 ## Prerequisites
 
-- Node.js `20.19+`, `22.12+`, or `24+`
+- Node.js `20.19+`, `22.13+`, or `24+`
 - npm
 - Python 3.11 and provider configuration for Live Backend only
 
